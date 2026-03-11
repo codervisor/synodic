@@ -19,7 +19,7 @@ updated_at: 2026-03-10T02:58:11.281364158Z
 
 ## Overview
 
-Deep-dive reference for the **fractal decomposition** primitive — one of the five AI-native coordination patterns defined in spec 073. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
+Deep-dive reference for the **fractal decomposition** primitive — one of the five AI-native coordination patterns defined in spec 019. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
 
 **Agent property exploited:** Zero fork cost + self-similarity — an agent splits itself into scoped sub-agents recursively, like cell division. Sub-agents inherit full context and specialize. Humans can't clone themselves mid-task with full memory.
 
@@ -159,7 +159,7 @@ The grandchildren complete first and merge back into their parents. Then the 3 c
 
 ## Test
 
-- [ ] Operation lifecycle uses only {fork, observe, merge, prune} — matching spec 073
-- [ ] Config surface fields align with primitives.schema.json (spec 074)
+- [ ] Operation lifecycle uses only {fork, observe, merge, prune} — matching spec 019
+- [ ] Config surface fields align with primitives.schema.json (spec 020)
 - [ ] Scope isolation mechanism is clearly defined
 - [ ] Recursive depth management has hard limits

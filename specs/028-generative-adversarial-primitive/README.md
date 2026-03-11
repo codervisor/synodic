@@ -19,7 +19,7 @@ updated_at: 2026-03-10T02:58:57.811798786Z
 
 ## Overview
 
-Deep-dive reference for the **generative-adversarial coordination** primitive — one of the five AI-native coordination patterns defined in spec 073. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
+Deep-dive reference for the **generative-adversarial coordination** primitive — one of the five AI-native coordination patterns defined in spec 019. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
 
 **Agent property exploited:** No fatigue + lossless critique — agents maintain consistent quality across arbitrarily many review rounds without ego, defensiveness, or cognitive degradation. Human review depth is limited by time and social dynamics.
 
@@ -166,8 +166,8 @@ A generator agent produces a REST API endpoint handler. Round 1 (syntax): critic
 
 ## Test
 
-- [ ] Operation lifecycle uses only {spawn, observe} — matching spec 073
-- [ ] Config surface fields align with primitives.schema.json (spec 074)
+- [ ] Operation lifecycle uses only {spawn, observe} — matching spec 019
+- [ ] Config surface fields align with primitives.schema.json (spec 020)
 - [ ] Anti-pattern (adversarial → adversarial) is documented
 - [ ] Escalation ladder has ≥4 distinct critic modes
 - [ ] Termination conditions are complete (time, quality, round count)

@@ -22,13 +22,13 @@ updated_at: 2026-03-10T00:00:00Z
 
 ## Overview
 
-The coordination model (specs 072–085) defines an ideal abstract layer: 6 operations, 11 primitives, composability rules, and a formal algebra. This spec addresses a practical question: **how well do mainstream AI coding tools actually implement that model today?**
+The coordination model (specs 017–033) defines an ideal abstract layer: 6 operations, 11 primitives, composability rules, and a formal algebra. This spec addresses a practical question: **how well do mainstream AI coding tools actually implement that model today?**
 
 This is a *conformance layer*, not a critique. The goal is to give ClawDen operators a precise map of which operations are native, which can be emulated, and which require ClawDen fleet orchestration to bridge. Without this layer, operators building on top of Claude Code or Codex CLI will independently rediscover the same gaps and write ad-hoc workarounds.
 
 Two tools are assessed:
 
-- **Claude Code** — Anthropic's agentic coding CLI with native subagent spawning, worktree isolation, MCP integration, and skill system. See also spec 086.
+- **Claude Code** — Anthropic's agentic coding CLI with native subagent spawning, worktree isolation, MCP integration, and skill system. See also spec 034.
 - **OpenAI Codex CLI** — OpenAI's experimental multi-agent coding tool with role-based orchestration and MCP server exposure.
 
 ---
@@ -118,7 +118,7 @@ For operations with **Emulated** or **Partial** tier, these patterns bridge the 
 
 ### Emulating `fork` (state-clone)
 
-The spec-073 `fork` operation clones an agent from its current mid-execution state. Claude Code cannot do this — children always start fresh. Canonical emulation:
+The spec-019 `fork` operation clones an agent from its current mid-execution state. Claude Code cannot do this — children always start fresh. Canonical emulation:
 
 ```
 1. Parent agent snapshots its current context as a structured artifact (e.g., context-snapshot.md)
@@ -138,7 +138,7 @@ isolation: "worktree"  # for file-level isolation
 
 ### Emulating `observe` (mid-execution state)
 
-The spec-073 `observe` operation reads an agent's full internal state non-destructively. Claude Code returns only final messages. Canonical emulation:
+The spec-019 `observe` operation reads an agent's full internal state non-destructively. Claude Code returns only final messages. Canonical emulation:
 
 ```
 1. Design subagents to emit structured progress artifacts to disk (progress.json, status.md)
@@ -154,7 +154,7 @@ run_in_background: true enables parent to observe workspace changes while subage
 
 ### Emulating `convergence` (semantic threshold)
 
-The spec-073 `convergence` operation detects semantic similarity across parallel branches at configurable thresholds. Canonical emulation:
+The spec-019 `convergence` operation detects semantic similarity across parallel branches at configurable thresholds. Canonical emulation:
 
 ```
 1. All branches write outputs to canonical artifact paths (output-branch-N.md)
@@ -167,7 +167,7 @@ The spec-073 `convergence` operation detects semantic similarity across parallel
 
 ### Emulating `prune` (mid-execution termination)
 
-The spec-073 `prune` operation terminates agents that are no longer adding value. Claude Code runs subagents to completion. Canonical emulation:
+The spec-019 `prune` operation terminates agents that are no longer adding value. Claude Code runs subagents to completion. Canonical emulation:
 
 ```
 1. Use maxTurns to set an upper bound on each subagent's execution
@@ -180,7 +180,7 @@ The spec-073 `prune` operation terminates agents that are no longer adding value
 
 ### Emulating `merge` (typed strategies)
 
-The spec-073 `merge` operation supports typed strategies: fragment-fusion, winner-take-all, weighted-blend. Claude Code's parent performs NL synthesis implicitly. Canonical emulation:
+The spec-019 `merge` operation supports typed strategies: fragment-fusion, winner-take-all, weighted-blend. Claude Code's parent performs NL synthesis implicitly. Canonical emulation:
 
 ```
 Fragment-fusion:
@@ -200,7 +200,7 @@ Weighted-blend:
 
 ## Where ClawDen Fleet Fills the Gaps
 
-When Claude Code agents run inside a ClawDen fleet (spec 068), the orchestration gaps are resolved at the fleet layer:
+When Claude Code agents run inside a ClawDen fleet (spec 013), the orchestration gaps are resolved at the fleet layer:
 
 | Claude Code Gap | ClawDen Fleet Bridge |
 |----------------|---------------------|
@@ -222,7 +222,7 @@ When Claude Code agents run inside a ClawDen fleet (spec 068), the orchestration
 | Claude Code | ~45% | spawn, hierarchical, pipeline, MCP, skills, evals | fork semantics, prune, typed merge, declarative playbooks, anti-pattern validation |
 | Codex CLI | ~20% | MCP server exposure, basic spawn | fork, observe, prune, all AI-native primitives, persistent memory |
 
-Neither tool implements the formal coordination algebra natively. Both require ClawDen fleet orchestration to achieve full conformance with specs 072–085.
+Neither tool implements the formal coordination algebra natively. Both require ClawDen fleet orchestration to achieve full conformance with specs 017–033.
 
 ---
 
@@ -235,7 +235,7 @@ Neither tool implements the formal coordination algebra natively. Both require C
 - [x] Document canonical emulation patterns for Emulated/Partial operations
 - [x] Document ClawDen fleet bridge table
 - [ ] Validate conformance tier assignments against one live eval run (speculative-swarm-ratelimiter.md)
-- [ ] Update `conformance.schema.json` with `tool_bindings` field (see spec 074 update)
+- [ ] Update `conformance.schema.json` with `tool_bindings` field (see spec 020 update)
 
 ## Test
 
@@ -252,4 +252,4 @@ This spec should be updated whenever Claude Code or Codex CLI release new multi-
 - Claude Code gaining mid-execution streaming → would upgrade `observe` from Partial to Full
 - Either tool adopting declarative playbook format → would add Partial tier for `declarative_playbooks`
 
-The boundary with spec 086 (Claude Code Coordination Implementation): spec 086 defines *how* Claude Code implements each primitive in detail. This spec provides the *conformance tier rating* and *emulation patterns* for operators who need to understand gaps without reading the full implementation spec.
+The boundary with spec 034 (Claude Code Coordination Implementation): spec 034 defines *how* Claude Code implements each primitive in detail. This spec provides the *conformance tier rating* and *emulation patterns* for operators who need to understand gaps without reading the full implementation spec.

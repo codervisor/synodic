@@ -18,11 +18,11 @@ updated_at: 2026-03-10T00:00:00.000000Z
 
 ## Overview
 
-Formalizes the AI-native coordination model (specs 072–084) as a rigorous mathematical theory. Introduces set-theoretic foundations, an algebraic structure over operations and primitives, formal axioms, provable theorems, a cost calculus, and falsifiable experimental predictions.
+Formalizes the AI-native coordination model (specs 017–031) as a rigorous mathematical theory. Introduces set-theoretic foundations, an algebraic structure over operations and primitives, formal axioms, provable theorems, a cost calculus, and falsifiable experimental predictions.
 
 The goal is to elevate the coordination model from engineering specification to **publishable academic theory** — one that can be peer-reviewed, formally verified, and used to derive new results.
 
-This spec is the "math layer" — it does not replace the prose theory (073) or JSON Schema design (074). It provides the formal underpinning that justifies both.
+This spec is the "math layer" — it does not replace the prose theory (019) or JSON Schema design (020). It provides the formal underpinning that justifies both.
 
 ## Design
 
@@ -560,15 +560,15 @@ where $\alpha > 1$ is the super-linear scaling exponent and $n^*$ is the saturat
 
 | Spec | Relationship |
 |------|-------------|
-| 073 (Theory) | This spec formalizes 073's prose into mathematical notation |
-| 074 (Design) | JSON Schemas encode instances of the algebraic objects defined here |
-| 075 (Validation) | Test fixtures validate concrete instances against the axioms |
-| 084 (Artifact Model) | Artifact set $\mathcal{T}$ and its DAG $G_\mathcal{T}$ are formalized here |
+| 019 (Theory) | This spec formalizes 019's prose into mathematical notation |
+| 020 (Design) | JSON Schemas encode instances of the algebraic objects defined here |
+| 021 (Validation) | Test fixtures validate concrete instances against the axioms |
+| 031 (Artifact Model) | Artifact set $\mathcal{T}$ and its DAG $G_\mathcal{T}$ are formalized here |
 
 ## Plan
 
 - [ ] Peer review notation consistency (all symbols used match definitions)
-- [ ] Verify operation words (§3.3) against primitive descriptions in spec 073
+- [ ] Verify operation words (§3.3) against primitive descriptions in spec 019
 - [ ] Validate expressiveness numbers ($\overline{\text{expr}}$ values) against ops-used matrix
 - [ ] Design experiment protocols with concrete agent frameworks
 - [ ] Write companion LaTeX document for academic submission
@@ -577,7 +577,7 @@ where $\alpha > 1$ is the super-linear scaling exponent and $n^*$ is the saturat
 
 - [ ] Every symbol used in theorems is defined in §1
 - [ ] Every theorem's proof sketch references specific axioms
-- [ ] Anti-pattern table (§4.1) maps 1:1 to known anti-patterns in spec 073
+- [ ] Anti-pattern table (§4.1) maps 1:1 to known anti-patterns in spec 019
 - [ ] Cost complexity table (§5.3) covers all 11 primitives (organizational + AI-native)
 - [ ] All 5 experiments have explicit falsification criteria
 - [ ] Each experiment targets a concrete software engineering task
@@ -612,7 +612,7 @@ print(f"OK: avg_expr(B)={avg_b:.1f} > avg_expr(A)={avg_a:.2f}")
 |-----------|---------------------|
 | `expr-separation` | Category B average > Category A average |
 | `symbols-defined` | Every symbol in §3–§8 appears in §1 |
-| `antipattern-coverage` | 3 anti-patterns match spec 073 |
+| `antipattern-coverage` | 3 anti-patterns match spec 019 |
 | `productivity-thresholds` | Each experiment specifies $\Gamma \geq N$ with $N \geq 5$ for single primitives, $N \geq 10$ for compositions |
 
 ## Notes

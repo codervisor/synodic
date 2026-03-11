@@ -30,13 +30,13 @@ The work splits into five layers that build on each other:
 4. **Coordination intelligence** — advanced and AI-native coordination patterns that go beyond simple master-worker.
 5. **Cost optimization** — teacher-student knowledge distillation to reduce fleet operating costs.
 
-Layers 1–3 are single-host by design. Distributed execution (cross-host message relay, remote supervisor) builds on top of spec 062's control channel, reusing the same `AgentEnvelope` protocol and supervisor interface. Layers 4–5 are transport-agnostic and work identically on local and distributed fleets.
+Layers 1–3 are single-host by design. Distributed execution (cross-host message relay, remote supervisor) builds on top of spec 009's control channel, reusing the same `AgentEnvelope` protocol and supervisor interface. Layers 4–5 are transport-agnostic and work identically on local and distributed fleets.
 
 ## Design
 
 This umbrella coordinates two groups spanning the five layers:
 
-### Group D: Execution Foundation — Layers 1–3 (090)
+### Group D: Execution Foundation — Layers 1–3 (003)
 
 The strictly sequential critical path for single-host fleet execution:
 
@@ -46,9 +46,9 @@ The strictly sequential critical path for single-host fleet execution:
 | `005-agent-message-bus-task-orchestration` | 2     | In-process message bus, `AgentEnvelope` protocol, team coordination, task lifecycle engine, result aggregation       |
 | `006-fleet-state-persistence-recovery`     | 3     | SQLite backend for agents/teams/tasks/results/messages/audit, crash recovery, `clawden logs`/`clawden audit`         |
 
-### Group E: Coordination & Optimization — Layers 4–5 (091)
+### Group E: Coordination & Optimization — Layers 4–5 (011)
 
-ClawDen's implementation binding of the abstract coordination model (spec 072), plus cost optimization via Nemosis:
+ClawDen's implementation binding of the abstract coordination model (spec 017), plus cost optimization via Nemosis:
 
 | Child                                      | Layer | Purpose                                                                                                                                                                                                           |
 | ------------------------------------------ | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -63,19 +63,19 @@ Shared architectural rules:
 - JSON-Lines over stdin/stdout is the agent communication wire format.
 - `AgentEnvelope` is the stable message protocol used by both local and (future) remote delivery.
 - The process supervisor owns agent lifecycle; the message bus owns routing; persistence is the durability layer underneath both.
-- Master-worker is the foundational collaboration pattern; advanced and AI-native patterns (067–070) are pluggable coordination strategies on top of the same bus.
-- AI-native primitives (068) extend the coordination trait surface with `spawn`, `merge`, `fork`, `observe`, `convergence`, and `prune` operations that exploit properties unique to AI agents.
-- Nemosis (071) operates as a sidecar that captures traces, distills skills, and informs the scheduler's model selection — reducing fleet cost by 50–90% for repetitive patterns.
+- Master-worker is the foundational collaboration pattern; advanced and AI-native patterns (012–015) are pluggable coordination strategies on top of the same bus.
+- AI-native primitives (013) extend the coordination trait surface with `spawn`, `merge`, `fork`, `observe`, `convergence`, and `prune` operations that exploit properties unique to AI agents.
+- Nemosis (016) operates as a sidecar that captures traces, distills skills, and informs the scheduler's model selection — reducing fleet cost by 50–90% for repetitive patterns.
 
 ## Plan
 
-- [ ] Complete spec 064 to establish agent process management and fleet startup.
-- [ ] Complete spec 065 to add inter-agent messaging and task orchestration on top of the running fleet.
-- [ ] Complete spec 066 to make fleet state persistent and recoverable.
-- [ ] Complete spec 067 to add pluggable organizational coordination patterns.
-- [ ] Complete spec 068 to define AI-native coordination primitives.
-- [ ] Complete specs 069–070 to map primitives to domain and SDD playbooks.
-- [ ] Complete spec 071 to integrate Nemosis for fleet cost optimization via distillation.
+- [ ] Complete spec 004 to establish agent process management and fleet startup.
+- [ ] Complete spec 005 to add inter-agent messaging and task orchestration on top of the running fleet.
+- [ ] Complete spec 006 to make fleet state persistent and recoverable.
+- [ ] Complete spec 012 to add pluggable organizational coordination patterns.
+- [ ] Complete spec 013 to define AI-native coordination primitives.
+- [ ] Complete specs 014–015 to map primitives to domain and SDD playbooks.
+- [ ] Complete spec 016 to integrate Nemosis for fleet cost optimization via distillation.
 
 ## Test
 
@@ -88,19 +88,19 @@ Shared architectural rules:
 
 ## Notes
 
-Implementation order for the foundation is strictly sequential: 064 → 065 → 066. Each layer depends on the previous one.
+Implementation order for the foundation is strictly sequential: 004 → 005 → 006. Each layer depends on the previous one.
 
-The coordination intelligence layer (067–070) builds on the foundation but is internally layered: 067 (org-chart patterns) → 068 (AI-native primitives) → 069 (domain playbooks) → 070 (SDD playbook). Each extends the previous.
+The coordination intelligence layer (012–015) builds on the foundation but is internally layered: 012 (org-chart patterns) → 013 (AI-native primitives) → 014 (domain playbooks) → 015 (SDD playbook). Each extends the previous.
 
-The cost optimization layer (071) depends on the coordination primitives (068–069) and hooks into all three foundation layers: trace capture via the process supervisor (064), message observation via the bus (065), and trace persistence via the SQLite backend (066).
+The cost optimization layer (016) depends on the coordination primitives (013–014) and hooks into all three foundation layers: trace capture via the process supervisor (004), message observation via the bus (005), and trace persistence via the SQLite backend (006).
 
-### Relationship to Spec 072
+### Relationship to Spec 017
 
-**Spec 072 (AI-Native Agent Coordination Model)** defines the abstract, implementation-agnostic coordination model that Layers 4–5 implement. It lives outside this umbrella because the model is portable — other frameworks can implement the same primitives, operations, and playbook compositions independently.
+**Spec 017 (AI-Native Agent Coordination Model)** defines the abstract, implementation-agnostic coordination model that Layers 4–5 implement. It lives outside this umbrella because the model is portable — other frameworks can implement the same primitives, operations, and playbook compositions independently.
 
-This umbrella (054) and its children (067–071) are **ClawDen's implementation binding** of spec 072's abstract model: Rust traits, AgentEnvelope wire format, SQLite persistence, `clawden.yaml` config, and CLI commands. The abstract model (072) is the *what*; this umbrella is the *how*.
+This umbrella (002) and its children (012–016) are **ClawDen's implementation binding** of spec 017's abstract model: Rust traits, AgentEnvelope wire format, SQLite persistence, `clawden.yaml` config, and CLI commands. The abstract model (017) is the *what*; this umbrella is the *how*.
 
 The distributed story connects here:
-- Spec 062 (remote enrollment + control channel) provides the transport for cross-host message relay.
-- Spec 065's `AgentEnvelope` format is the protocol that travels over that transport.
-- A future spec can add a `RemoteMessageBus` backend that routes envelopes through 062's control channel, swapping the tokio channel backend without changing the bus API.
+- Spec 009 (remote enrollment + control channel) provides the transport for cross-host message relay.
+- Spec 005's `AgentEnvelope` format is the protocol that travels over that transport.
+- A future spec can add a `RemoteMessageBus` backend that routes envelopes through 009's control channel, swapping the tokio channel backend without changing the bus API.

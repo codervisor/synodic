@@ -21,9 +21,9 @@ updated_at: 2026-03-09T08:16:40.771740021Z
 
 ## Overview
 
-Spec 072 defines the abstract playbook schema and reference compositions (Explore-Harden-Maintain, Mesh-Fractal-Swarm, etc.) for mapping AI-native primitives to domain workflows. This spec is **ClawDen's implementation** — concrete playbook templates, the `clawden.yaml` playbook config loader, and `clawden fleet playbook` CLI commands.
+Spec 017 defines the abstract playbook schema and reference compositions (Explore-Harden-Maintain, Mesh-Fractal-Swarm, etc.) for mapping AI-native primitives to domain workflows. This spec is **ClawDen's implementation** — concrete playbook templates, the `clawden.yaml` playbook config loader, and `clawden fleet playbook` CLI commands.
 
-Spec 068 defines five coordination primitives (speculative swarm, context mesh, fractal decomposition, generative-adversarial, stigmergic) grounded in what AI agents can do that humans structurally cannot. But primitives alone don't ship value — **applied compositions** do.
+Spec 013 defines five coordination primitives (speculative swarm, context mesh, fractal decomposition, generative-adversarial, stigmergic) grounded in what AI agents can do that humans structurally cannot. But primitives alone don't ship value — **applied compositions** do.
 
 This spec maps AI-native primitives to concrete domain workflows across coding, finance, marketing, research, legal, and ops. Each playbook answers three questions:
 
@@ -307,6 +307,6 @@ The human role in every domain shifts from **executor** to **director**: setting
 
 These playbooks are **templates, not products.** ClawDen provides the primitives and the composition engine; users customize playbooks for their specific domain workflows, agent configurations, and quality thresholds.
 
-For the abstract playbook schema, reference compositions, and composability rules, see **spec 072**. This spec maps those abstractions to concrete ClawDen config and CLI.
+For the abstract playbook schema, reference compositions, and composability rules, see **spec 017**. This spec maps those abstractions to concrete ClawDen config and CLI.
 
-The boundary with spec 068: that spec owns the five AI-native primitives and their implementation. This spec owns the domain-specific compositions and the playbook config schema. A playbook is a recipe; the primitives are the ingredients.
+The boundary with spec 013: that spec owns the five AI-native primitives and their implementation. This spec owns the domain-specific compositions and the playbook config schema. A playbook is a recipe; the primitives are the ingredients.

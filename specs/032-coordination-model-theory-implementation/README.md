@@ -33,10 +33,10 @@ These specs answer "how does the model hold together?" and "how does it apply to
 
 ## Plan
 
-- [ ] Complete 077 (roles & limitations) to scope the model's boundaries
-- [ ] Complete 084 (artifact model) to formalize coordination artifacts
-- [ ] Complete 085 (formal theory) to establish mathematical foundations
-- [ ] Complete 086 (Claude Code mapping) to prove real-world implementation viability
+- [ ] Complete 023 (roles & limitations) to scope the model's boundaries
+- [ ] Complete 031 (artifact model) to formalize coordination artifacts
+- [ ] Complete 033 (formal theory) to establish mathematical foundations
+- [ ] Complete 034 (Claude Code mapping) to prove real-world implementation viability
 
 ## Test
 

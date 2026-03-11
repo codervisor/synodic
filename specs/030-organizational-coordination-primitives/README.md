@@ -19,9 +19,9 @@ updated_at: 2026-03-10T03:02:54.033452670Z
 
 ## Overview
 
-Deep-dive reference for the six **organizational coordination primitives** (Category A) defined in spec 073. These patterns map to coordination structures humans already understand — hierarchy, pipelines, committees, departments, marketplaces, and matrices. They are the starting point for teams transitioning from human-only workflows to agent fleets.
+Deep-dive reference for the six **organizational coordination primitives** (Category A) defined in spec 019. These patterns map to coordination structures humans already understand — hierarchy, pipelines, committees, departments, marketplaces, and matrices. They are the starting point for teams transitioning from human-only workflows to agent fleets.
 
-Category A primitives are **not deprecated** by the AI-native primitives (078–082). Many real workflows are best served by a pipeline or committee. These patterns use only `spawn` and `observe` — they don't exploit agent-specific properties like forking or merging, but they remain the right choice when the problem *is* structured like a human org.
+Category A primitives are **not deprecated** by the AI-native primitives (025–029). Many real workflows are best served by a pipeline or committee. These patterns use only `spawn` and `observe` — they don't exploit agent-specific properties like forking or merging, but they remain the right choice when the problem *is* structured like a human org.
 
 ## Design
 
@@ -414,7 +414,7 @@ fleet:
 
 ### Cross-primitive composition with Category B
 
-Category A primitives compose naturally with AI-native primitives from specs 078–082:
+Category A primitives compose naturally with AI-native primitives from specs 025–029:
 
 | Outer (Category A) → Inner (Category B) | Why it works |
 | --- | --- |
@@ -440,7 +440,7 @@ Category A primitives compose naturally with AI-native primitives from specs 078
 
 ## Test
 
-- [ ] Every primitive uses only {spawn, observe} — matching spec 073 Category A definition
+- [ ] Every primitive uses only {spawn, observe} — matching spec 019 Category A definition
 - [ ] Config surface fields are consistent across all 6 primitives
 - [ ] Each primitive documents when to use and when NOT to use (via key difference callouts)
 - [ ] Cross-category composition table covers all reasonable A→B and B→A pairs

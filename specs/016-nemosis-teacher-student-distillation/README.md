@@ -22,7 +22,7 @@ updated_at: 2026-03-09T09:20:25.854864694Z
 
 ## Overview
 
-Specs 068–069 define coordination primitives and domain playbooks that assume uniformly capable agents — every fork, every swarm member, every adversarial critic runs on the same high-capability model. This works for correctness, but the economics are brutal. A speculative swarm forking 8 GPT-4-class agents for a single code task burns $2–5 per invocation. A stigmergic maintenance fleet running 24/7 with frontier models could cost more than the human team it replaces.
+Specs 013–014 define coordination primitives and domain playbooks that assume uniformly capable agents — every fork, every swarm member, every adversarial critic runs on the same high-capability model. This works for correctness, but the economics are brutal. A speculative swarm forking 8 GPT-4-class agents for a single code task burns $2–5 per invocation. A stigmergic maintenance fleet running 24/7 with frontier models could cost more than the human team it replaces.
 
 [Nemosis](https://github.com/codervisor/nemosis) solves this through **knowledge distillation** — a teacher-student iterative training loop that collapses expert reasoning into lightweight `SKILL.md` artifacts. A high-capability Teacher model (e.g., Claude Opus, GPT-4) executes a task with full multi-turn reasoning. Nemosis captures those execution traces, distills them into a Strict Contract (JSON Schema) + Strategic Context (Markdown Instructions), and produces a `SKILL.md` that enables a cheaper Student model (e.g., GPT-4o-mini, Claude Haiku) to replicate the behavior at a fraction of the cost.
 
@@ -41,7 +41,7 @@ The key insight: **most agent work within a fleet is repetitive pattern executio
 
 ### The Nemosis Workflow Inside ClawDen
 
-1. **Capture** — When a fleet executes a coordination pattern (swarm, adversarial, etc.), the process supervisor (spec 064) captures high-fidelity execution traces from all participating agents.
+1. **Capture** — When a fleet executes a coordination pattern (swarm, adversarial, etc.), the process supervisor (spec 004) captures high-fidelity execution traces from all participating agents.
 2. **Distill** — Nemosis's Rust-based Distiller analyzes the traces and synthesizes a `SKILL.md` per agent role, collapsing multi-turn reasoning chains into declarative skill contracts.
 3. **Osmose** — On subsequent fleet invocations, the scheduler checks the skill registry. If a distilled skill exists for the agent role, it assigns a student model pre-loaded with the `SKILL.md` instead of the frontier teacher.
 4. **Audit** — The teacher model periodically evaluates student outputs against quality thresholds. If quality drifts below tolerance, Nemosis triggers a re-distillation cycle, refining the skill with new traces.
@@ -59,7 +59,7 @@ Nemosis operates as a **sidecar service** within the fleet execution layer, inte
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
 │  │   Process     │  │  Message     │  │    State     │  │
 │  │  Supervisor   │  │    Bus       │  │ Persistence  │  │
-│  │  (spec 064)   │  │  (spec 065)  │  │  (spec 066)  │  │
+│  │  (spec 004)   │  │  (spec 005)  │  │  (spec 006)  │  │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
 │         │                 │                  │          │
 │         ▼                 ▼                  ▼          │
@@ -114,7 +114,7 @@ struct TraceStep {
 }
 ```
 
-Traces are persisted via spec 066's SQLite backend in a `traces` table, linked to the fleet run and agent ID.
+Traces are persisted via spec 006's SQLite backend in a `traces` table, linked to the fleet run and agent ID.
 
 ### Distillation Pipeline
 
@@ -202,7 +202,7 @@ fleet:
 
 ### Scheduler Integration
 
-The fleet scheduler (spec 064's process supervisor + spec 065's task orchestration) gains a **model selection** step:
+The fleet scheduler (spec 004's process supervisor + spec 005's task orchestration) gains a **model selection** step:
 
 1. Before spawning an agent for a coordination primitive, check the skill registry for a matching `(role, primitive)` pair.
 2. If a distilled skill exists with `quality_score >= quality_floor`:
@@ -236,7 +236,7 @@ The fleet scheduler (spec 064's process supervisor + spec 065's task orchestrati
 
 - [ ] Define the `ExecutionTrace` and `TraceStep` data model in `clawden-core`.
 - [ ] Add trace capture hooks to the process supervisor's agent stdout/stdin pipe.
-- [ ] Implement the `traces` table in the SQLite persistence layer (spec 066).
+- [ ] Implement the `traces` table in the SQLite persistence layer (spec 006).
 - [ ] Integrate Nemosis's Rust Distiller as a library dependency or subprocess.
 - [ ] Build the skill registry (SKILL.md storage + quality metadata + model tier mapping).
 - [ ] Implement the memory layer (success/failure/edge-case/drift tracking).
@@ -260,6 +260,6 @@ The fleet scheduler (spec 064's process supervisor + spec 065's task orchestrati
 - Nemosis is at initial-commit stage (`codervisor/nemosis`). Integration depends on its Distiller API stabilizing. The `Distiller` trait in this spec may need to adapt to Nemosis's actual interface.
 - The `SKILL.md` format follows the [AgentSkills.io](https://agentskills.io/) specification, which ClawDen already uses for its own skill infrastructure.
 - This spec intentionally avoids mandating *which* student/teacher models to use — that's a config decision. The architecture is model-agnostic.
-- Relationship to spec 025 (LLM Provider API Key Management): the scheduler's model selection needs access to multiple provider API keys to route between teacher and student tiers.
-- Distributed fleet scenario (spec 062): trace capture works the same way over remote agent control channels — the `AgentEnvelope` protocol already carries agent outputs that include the traces.
-- For the abstract cost optimization model, model-tier abstraction, and per-primitive cost reduction projections, see **spec 072 Part 6**.
+- Relationship to clawden:025 (LLM Provider API Key Management): the scheduler's model selection needs access to multiple provider API keys to route between teacher and student tiers.
+- Distributed fleet scenario (spec 009): trace capture works the same way over remote agent control channels — the `AgentEnvelope` protocol already carries agent outputs that include the traces.
+- For the abstract cost optimization model, model-tier abstraction, and per-primitive cost reduction projections, see **spec 017 Part 6**.

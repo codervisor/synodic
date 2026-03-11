@@ -19,7 +19,7 @@ updated_at: 2026-03-10T02:56:47.909918906Z
 
 ## Overview
 
-Deep-dive reference for the **speculative swarm** primitive — one of the five AI-native coordination patterns defined in spec 073. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
+Deep-dive reference for the **speculative swarm** primitive — one of the five AI-native coordination patterns defined in spec 019. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
 
 **Agent property exploited:** Zero fork cost + speculative parallelism — agents can execute N mutually exclusive strategies simultaneously, which humans cannot.
 
@@ -139,7 +139,7 @@ At checkpoint 1, branch 3 (greedy) discovers an edge case. This insight is cross
 
 ## Test
 
-- [ ] Operation lifecycle uses only {fork, observe, convergence, prune, merge} — matching spec 073
-- [ ] Config surface fields align with primitives.schema.json (spec 074)
+- [ ] Operation lifecycle uses only {fork, observe, convergence, prune, merge} — matching spec 019
+- [ ] Config surface fields align with primitives.schema.json (spec 020)
 - [ ] Anti-pattern (swarm → swarm) is documented
 - [ ] Every merge strategy has a "when to use" rationale

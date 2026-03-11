@@ -19,7 +19,7 @@ updated_at: 2026-03-09T14:19:37.774477Z
 
 ## Overview
 
-Validates the schemas from spec 074 with deterministic test fixtures, audits cross-schema consistency, and packages the skill for distribution. This is the "prove it works and ship it" layer.
+Validates the schemas from spec 020 with deterministic test fixtures, audits cross-schema consistency, and packages the skill for distribution. This is the "prove it works and ship it" layer.
 
 ```mermaid
 flowchart LR

@@ -21,13 +21,13 @@ This umbrella spec produces a **machine-validatable specification** for AI agent
 
 The deliverable is an **Agent Skill** (`coordination-model/`) containing JSON Schema files that define the model. The schemas are the specification — not prose, not code, not a wire protocol. Any runtime in any language can validate its playbooks and conformance declarations against them.
 
-The ClawDen implementation of this model lives in specs 067–071 under the 054 umbrella. Other frameworks can implement independently by validating against the same schemas.
+The ClawDen implementation of this model lives in specs 012–016 under the 002 umbrella. Other frameworks can implement independently by validating against the same schemas.
 
 ## Design
 
 This umbrella coordinates three groups, each containing multiple child specs:
 
-### Group A: Core Specification Pipeline (087)
+### Group A: Core Specification Pipeline (018)
 
 The critical path — sequential from theory through validation:
 
@@ -37,9 +37,9 @@ The critical path — sequential from theory through validation:
 | `020-coordination-model-design`                  | JSON Schema artifacts: operations, primitives, playbook, conformance schemas. SKILL.md agent guidance. validate.py script.                            |
 | `021-coordination-model-validation-distribution` | Test fixtures, schema cross-consistency audit, `.skill` packaging, schema URL repository.                                                             |
 
-### Group B: Primitive Deep Dives (088)
+### Group B: Primitive Deep Dives (024)
 
-Per-primitive analysis and reference material — parallelizable once theory (073) is complete:
+Per-primitive analysis and reference material — parallelizable once theory (019) is complete:
 
 | Child                                            | Purpose                                                                                                                                               |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ Per-primitive analysis and reference material — parallelizable once theory (07
 | `029-stigmergic-coordination-primitive`          | Deep dive: pheromone markers, debounce requirement, O(artifacts) cost model, emergent workflow for the stigmergic primitive.                          |
 | `030-organizational-coordination-primitives`     | Deep dive: all 6 Category A primitives (hierarchical, pipeline, committee, departmental, marketplace, matrix) — config, failure modes, cross-category composition. |
 
-### Group C: Formal Theory & Implementation Mapping (089)
+### Group C: Formal Theory & Implementation Mapping (032)
 
 Cross-cutting foundations and concrete implementation binding:
 
@@ -60,32 +60,32 @@ Cross-cutting foundations and concrete implementation binding:
 | `023-coordination-model-roles-limitations`       | Dual roles (knowledge navigation vs action orchestration), out-of-scope boundaries, scaling limits & mitigations.                                     |
 | `031-coordination-artifact-model`                | Formal artifact definition: properties, kinds, versioning, fragment model, lifecycle state machine, per-primitive artifact roles, addressing schemes.              |
 | `033-coordination-model-formal-theory`           | Mathematical formalization: set-theoretic foundations, coordination algebra, axioms (costless cloning, lossless observation, fatigue invariance), composability theorems, cost calculus, falsifiable experimental predictions. |
-| `034-claude-code-coordination-implementation`    | Mapping spec 073 operations and primitives to Claude Code's agentic runtime — operation fidelity, subagent orchestration patterns, ClawDen integration points, cost model mapping.                                          |
+| `034-claude-code-coordination-implementation`    | Mapping spec 019 operations and primitives to Claude Code's agentic runtime — operation fidelity, subagent orchestration patterns, ClawDen integration points, cost model mapping.                                          |
 
-Implementation order: Group A is sequential (073 → 074 → 075). Groups B and C can proceed in parallel once 073 is complete.
+Implementation order: Group A is sequential (019 → 020 → 021). Groups B and C can proceed in parallel once 019 is complete.
 
 ```mermaid
 flowchart LR
-    subgraph A["087 — Core Pipeline"]
-        T["073<br>Theory"] --> D["074<br>Design"]
-        D --> V["075<br>Validation"]
+    subgraph A["018 — Core Pipeline"]
+        T["019<br>Theory"] --> D["020<br>Design"]
+        D --> V["021<br>Validation"]
     end
 
-    subgraph B["088 — Primitive Deep Dives"]
-        VR["076 Visual Ref"]
-        SS["078 Spec. Swarm"]
-        CM["079 Context Mesh"]
-        FD["080 Fractal Decomp."]
-        GA["081 Gen.-Adversarial"]
-        ST["082 Stigmergic"]
-        OP["083 Org. Primitives"]
+    subgraph B["024 — Primitive Deep Dives"]
+        VR["022 Visual Ref"]
+        SS["025 Spec. Swarm"]
+        CM["026 Context Mesh"]
+        FD["027 Fractal Decomp."]
+        GA["028 Gen.-Adversarial"]
+        ST["029 Stigmergic"]
+        OP["030 Org. Primitives"]
     end
 
-    subgraph C["089 — Formal Theory & Impl."]
-        RL["077 Roles & Limits"]
-        AR["084 Artifacts"]
-        FT["085 Formal Theory"]
-        CC["086 Claude Code"]
+    subgraph C["032 — Formal Theory & Impl."]
+        RL["023 Roles & Limits"]
+        AR["031 Artifacts"]
+        FT["033 Formal Theory"]
+        CC["034 Claude Code"]
     end
 
     T --> B
@@ -98,9 +98,9 @@ flowchart LR
 
 ## Plan
 
-- [ ] Complete spec 073 to establish the conceptual model
-- [ ] Complete spec 074 to encode the model as JSON Schema + agent skill
-- [ ] Complete spec 075 to validate schemas with fixtures and distribute
+- [ ] Complete spec 019 to establish the conceptual model
+- [ ] Complete spec 020 to encode the model as JSON Schema + agent skill
+- [ ] Complete spec 021 to validate schemas with fixtures and distribute
 
 ## Test
 
@@ -129,4 +129,4 @@ print('OK: primitive enums match')
 
 The schemas are intentionally free of programming language, wire format, storage backend, and LLM provider references. The `$id` URLs are placeholders until the schema repo ships.
 
-The ClawDen implementation (specs 067–071) translates this abstract model into concrete Rust traits, AgentEnvelope wire protocol, SQLite persistence, and `clawden.yaml` configuration.
+The ClawDen implementation (specs 012–016) translates this abstract model into concrete Rust traits, AgentEnvelope wire protocol, SQLite persistence, and `clawden.yaml` configuration.

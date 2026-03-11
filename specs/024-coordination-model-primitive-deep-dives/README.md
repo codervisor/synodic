@@ -19,7 +19,7 @@ updated_at: 2026-03-10T08:41:52.765819229Z
 
 Group spec for all per-primitive analysis and reference material under the coordination model.
 
-Collects deep dives for the 5 AI-native primitives, the 6 organizational primitives, and the visual reference diagram spec. Each child is independently workable once the core theory (073) is complete.
+Collects deep dives for the 5 AI-native primitives, the 6 organizational primitives, and the visual reference diagram spec. Each child is independently workable once the core theory (019) is complete.
 
 ## Design
 
@@ -35,9 +35,9 @@ Collects deep dives for the 5 AI-native primitives, the 6 organizational primiti
 
 ## Plan
 
-- [ ] Complete 076 (visual reference) to establish diagrammatic language
-- [ ] Complete 078–082 (AI-native primitives) — parallelizable
-- [ ] Complete 083 (organizational primitives)
+- [ ] Complete 022 (visual reference) to establish diagrammatic language
+- [ ] Complete 025–029 (AI-native primitives) — parallelizable
+- [ ] Complete 030 (organizational primitives)
 
 ## Test
 

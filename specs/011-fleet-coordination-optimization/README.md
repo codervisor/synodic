@@ -18,9 +18,9 @@ updated_at: 2026-03-10T08:42:36.537863469Z
 
 ## Overview
 
-Group spec for Layers 4–5 of the fleet execution layer — coordination intelligence and cost optimization. These specs implement ClawDen's binding of the abstract coordination model (spec 072) as concrete Rust traits, wire protocol, and CLI commands.
+Group spec for Layers 4–5 of the fleet execution layer — coordination intelligence and cost optimization. These specs implement ClawDen's binding of the abstract coordination model (spec 017) as concrete Rust traits, wire protocol, and CLI commands.
 
-Layer 5 (Nemosis/071) is grouped here because it depends on the coordination primitives (068–069) and shares the same priority tier. All children depend on the execution foundation (090) being complete.
+Layer 5 (Nemosis/016) is grouped here because it depends on the coordination primitives (013–014) and shares the same priority tier. All children depend on the execution foundation (003) being complete.
 
 ## Design
 
@@ -32,14 +32,14 @@ Layer 5 (Nemosis/071) is grouped here because it depends on the coordination pri
 | `015-sdd-ai-native-playbook` | 4 | Spec-driven development playbook — exploration, hardening, living graph maintenance |
 | `016-nemosis-teacher-student-distillation` | 5 | Teacher-student knowledge distillation for fleet cost optimization |
 
-Implementation is layered: 067 → 068 → 069/070 → 071.
+Implementation is layered: 012 → 013 → 014/015 → 016.
 
 ## Plan
 
-- [ ] Complete 067 (org-chart patterns) as coordination foundation
-- [ ] Complete 068 (AI-native primitives) extending the coordination surface
-- [ ] Complete 069–070 (domain + SDD playbooks) applying primitives
-- [ ] Complete 071 (Nemosis) for cost optimization via distillation
+- [ ] Complete 012 (org-chart patterns) as coordination foundation
+- [ ] Complete 013 (AI-native primitives) extending the coordination surface
+- [ ] Complete 014–015 (domain + SDD playbooks) applying primitives
+- [ ] Complete 016 (Nemosis) for cost optimization via distillation
 
 ## Test
 

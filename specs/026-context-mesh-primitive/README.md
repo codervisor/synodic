@@ -19,7 +19,7 @@ updated_at: 2026-03-10T02:57:26.571575993Z
 
 ## Overview
 
-Deep-dive reference for the **context mesh** primitive — one of the five AI-native coordination patterns defined in spec 073. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
+Deep-dive reference for the **context mesh** primitive — one of the five AI-native coordination patterns defined in spec 019. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
 
 **Agent property exploited:** Lossless context transfer — agents can share full internal state without information loss. Humans lose information at every handoff.
 
@@ -140,7 +140,7 @@ Three agents work on a system design. The researcher publishes `findings.auth.oa
 
 ## Test
 
-- [ ] Operation lifecycle uses only {spawn, observe, merge} — matching spec 073
-- [ ] Config surface fields align with primitives.schema.json (spec 074)
+- [ ] Operation lifecycle uses only {spawn, observe, merge} — matching spec 019
+- [ ] Config surface fields align with primitives.schema.json (spec 020)
 - [ ] Conflict resolution strategies are exhaustive
 - [ ] Gap detection and spawn behavior is clearly specified

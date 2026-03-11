@@ -107,7 +107,7 @@
         },
         "tool_bindings": {
           "type": "object",
-          "description": "Optional: maps coordination model operations to native constructs in a specific AI coding tool. Used for tool-layer conformance documentation (see spec 092).",
+          "description": "Optional: maps coordination model operations to native constructs in a specific AI coding tool. Used for tool-layer conformance documentation (see spec 035).",
           "properties": {
             "tool_name": {
               "type": "string",
@@ -165,7 +165,7 @@
         },
         "emulation_pattern": {
           "type": "string",
-          "description": "For emulated tier: brief description of the canonical workaround. See spec 092 for full patterns."
+          "description": "For emulated tier: brief description of the canonical workaround. See spec 035 for full patterns."
         }
       },
       "required": ["tier"]

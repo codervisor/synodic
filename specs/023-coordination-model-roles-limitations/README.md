@@ -19,7 +19,7 @@ updated_at: 2026-03-09T15:00:03.956379Z
 
 Defines what the coordination model **can do**, what it **cannot do**, and where it breaks under scale. Separates the two distinct roles the model serves — knowledge navigation and action orchestration — so implementers know which role applies to a given problem and where the boundaries are.
 
-This spec exists because roles and limitations are architectural constraints that precede design (074) and validation (075). Getting them wrong means building schemas for use cases the model doesn't actually support.
+This spec exists because roles and limitations are architectural constraints that precede design (020) and validation (021). Getting them wrong means building schemas for use cases the model doesn't actually support.
 
 ## Design
 
@@ -118,7 +118,7 @@ flowchart TD
 | **Context window** | Loaded specs exceed model context | Lazy loading: load summaries (Overview section only) first, expand on demand |
 | **Stale edges** | Dependency points to archived/superseded spec | Staleness audit: `validate` flags edges to non-active specs |
 | **Primitive fan-out** | Swarm/fractal spawns >16 agents | Hard cap per primitive instance; configurable per cost tier |
-| **Composition depth** | >3 nesting levels of primitives | Structural limit: compositions deeper than 3 are anti-patterns (see 073) |
+| **Composition depth** | >3 nesting levels of primitives | Structural limit: compositions deeper than 3 are anti-patterns (see 019) |
 | **Cost runaway** | Total fleet cost exceeds budget | Circuit breaker: halt spawning when cumulative cost hits threshold |
 
 ### Role selection heuristic
@@ -150,4 +150,4 @@ When an agent encounters the coordination model, it should determine which role 
 
 ## Notes
 
-This spec intentionally avoids prescribing *how* mitigations are implemented — depth limiting could be a graph traversal parameter, a CLI flag, or a schema constraint. That decision belongs in 074 (design) and the implementing runtime.
+This spec intentionally avoids prescribing *how* mitigations are implemented — depth limiting could be a graph traversal parameter, a CLI flag, or a schema constraint. That decision belongs in 020 (design) and the implementing runtime.

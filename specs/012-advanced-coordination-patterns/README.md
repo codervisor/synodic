@@ -19,13 +19,13 @@ updated_at: 2026-03-09T06:10:00.624611698Z
 
 ## Overview
 
-Spec 072 defines six organizational coordination patterns (hierarchical, pipeline, committee, departmental, marketplace, matrix) as implementation-agnostic algorithms. This spec is **ClawDen's implementation** of those patterns — the Rust trait bindings, `AgentEnvelope` protocol integration, `clawden.yaml` config schema, and CLI commands.
+Spec 017 defines six organizational coordination patterns (hierarchical, pipeline, committee, departmental, marketplace, matrix) as implementation-agnostic algorithms. This spec is **ClawDen's implementation** of those patterns — the Rust trait bindings, `AgentEnvelope` protocol integration, `clawden.yaml` config schema, and CLI commands.
 
-Spec 065 establishes master-worker as the foundational coordination pattern. This spec extends it with the full organizational pattern taxonomy from spec 072, implemented as pluggable `CoordinationPattern` trait objects on top of the same `AgentEnvelope` protocol and `MessageBus`.
+Spec 005 establishes master-worker as the foundational coordination pattern. This spec extends it with the full organizational pattern taxonomy from spec 017, implemented as pluggable `CoordinationPattern` trait objects on top of the same `AgentEnvelope` protocol and `MessageBus`.
 
-Child spec `013-ai-native-coordination-primitives` extends these with ClawDen implementations of AI-native primitives (also defined abstractly in spec 072).
+Child spec `013-ai-native-coordination-primitives` extends these with ClawDen implementations of AI-native primitives (also defined abstractly in spec 017).
 
-For the abstract pattern definitions, rationale, and invariants, see **spec 072**. This spec focuses on concrete implementation.
+For the abstract pattern definitions, rationale, and invariants, see **spec 017**. This spec focuses on concrete implementation.
 
 ## Design
 
@@ -112,7 +112,7 @@ fleet:
 
 ### Pattern 3: Committee (Peer Consensus)
 
-Equal-rank agents deliberate collectively. Unlike blind majority-vote (spec 065), agents see each other's responses and can iterate.
+Equal-rank agents deliberate collectively. Unlike blind majority-vote (spec 005), agents see each other's responses and can iterate.
 
 - Rounds-based: each round, all committee members submit a response.
 - After each round, all responses are broadcast to all members.
@@ -189,7 +189,7 @@ Agents belong to multiple teams simultaneously with dynamic role switching.
 ## Plan
 
 - [ ] Define `CoordinationPattern` trait and `CoordinationAction` enum.
-- [ ] Refactor spec 065's master-worker logic to implement `CoordinationPattern`.
+- [ ] Refactor spec 005's master-worker logic to implement `CoordinationPattern`.
 - [ ] Implement hierarchical delegation with `parent_task_id` and depth limiting.
 - [ ] Implement pipeline coordination with stage sequencing and conditional branching.
 - [ ] Implement committee consensus with round-based deliberation.
@@ -199,11 +199,11 @@ Agents belong to multiple teams simultaneously with dynamic role switching.
 - [ ] Extend `clawden.yaml` fleet config to support all organizational pattern types.
 - [ ] Implement pattern composability — sub-patterns within pipeline stages and nested coordination.
 - [ ] Add `clawden fleet patterns` command to list and describe available patterns.
-- [ ] Design trait extension points for AI-native patterns (spec 068) from day one.
+- [ ] Design trait extension points for AI-native patterns (spec 013) from day one.
 
 ## Test
 
-- [ ] Master-worker from spec 065 works identically when expressed as a `CoordinationPattern`.
+- [ ] Master-worker from spec 005 works identically when expressed as a `CoordinationPattern`.
 - [ ] Hierarchical: 3-level tree delegates and aggregates correctly; depth limit enforced.
 - [ ] Pipeline: 4-stage pipeline passes results sequentially; conditional branch skips a stage.
 - [ ] Committee: 3 agents reach quorum after 2 rounds of deliberation.

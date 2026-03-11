@@ -19,7 +19,7 @@ updated_at: 2026-03-10T02:59:48.402685401Z
 
 ## Overview
 
-Deep-dive reference for the **stigmergic coordination** primitive — one of the five AI-native coordination patterns defined in spec 073. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
+Deep-dive reference for the **stigmergic coordination** primitive — one of the five AI-native coordination patterns defined in spec 019. This spec provides the complete operation lifecycle, configuration surface, composability guidance, failure modes, and worked examples for implementers and agents selecting coordination strategies.
 
 **Agent property exploited:** Environment as communication — agents can continuously monitor a shared artifact space and react in real-time to every change. Human stigmergy (leaving notes on a whiteboard) is lossy and slow; agent stigmergy is precise and instant.
 
@@ -186,8 +186,8 @@ No coordinator orchestrated this. The pipeline emerged from watch patterns and r
 
 ## Test
 
-- [ ] Operation lifecycle uses only {observe, spawn} — matching spec 073
-- [ ] Config surface fields align with primitives.schema.json (spec 074)
+- [ ] Operation lifecycle uses only {observe, spawn} — matching spec 019
+- [ ] Config surface fields align with primitives.schema.json (spec 020)
 - [ ] Debounce is documented as structurally required
 - [ ] Reaction storm anti-pattern is documented with mitigation
 - [ ] Coordination cost O(artifacts) is justified

@@ -19,7 +19,7 @@ updated_at: 2026-03-09T14:50:13.395487Z
 
 Visual reference for all 11 coordination primitives — 5 AI-native (Category B) and 6 organizational (Category A). Each primitive shows the agent flow, operations used, and key structural insight.
 
-This spec is a reference companion to spec 073 (theory). No implementation, no schemas — just diagrams.
+This spec is a reference companion to spec 019 (theory). No implementation, no schemas — just diagrams.
 
 ## Design
 
@@ -233,4 +233,4 @@ flowchart TD
 ## Test
 
 - [ ] Every diagram renders correctly in Mermaid
-- [ ] Every primitive from spec 073 is represented
+- [ ] Every primitive from spec 019 is represented

@@ -68,4 +68,4 @@ The design assumption is explicit: local fleets are the fast dev and POC path, w
 
 ## Notes
 
-This spec should build directly on the primitives from spec 061. If the local identity model changes, this spec should reuse it rather than layering a separate remote-only model on top.
+This spec should build directly on the primitives from spec 008. If the local identity model changes, this spec should reuse it rather than layering a separate remote-only model on top.

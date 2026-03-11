@@ -19,7 +19,7 @@ updated_at: 2026-03-09T14:19:03.969915Z
 
 ## Overview
 
-Translates the abstract model (spec 073) into machine-validatable JSON Schema artifacts and a distributable Agent Skill. This is the "how it's specified" layer.
+Translates the abstract model (spec 019) into machine-validatable JSON Schema artifacts and a distributable Agent Skill. This is the "how it's specified" layer.
 
 ### Deliverable: Agent Skill
 
@@ -39,7 +39,7 @@ All schemas follow JSON Schema Draft 2020-12. The `$id` fields point to `https:/
 
 ```mermaid
 flowchart TD
-    THEORY["Spec 073<br>Theory"] -->|"defines"| OPS["operations.schema.json<br>6 operations"]
+    THEORY["Spec 019<br>Theory"] -->|"defines"| OPS["operations.schema.json<br>6 operations"]
     THEORY -->|"defines"| PRIMS["primitives.schema.json<br>11 primitives"]
     OPS -->|"referenced by"| PB["playbook.schema.json<br>stages + budgets"]
     PRIMS -->|"enum shared with"| PB
@@ -82,7 +82,7 @@ Python script that validates YAML/JSON files against the schemas, checks budget 
 
 ## Tool Binding Notes
 
-The JSON Schema artifacts in this spec define the *ideal* coordination model. When targeting a specific AI coding tool, playbook authors must understand which fields have native bindings and which require emulation. See spec 092 for the full conformance tier table.
+The JSON Schema artifacts in this spec define the *ideal* coordination model. When targeting a specific AI coding tool, playbook authors must understand which fields have native bindings and which require emulation. See spec 035 for the full conformance tier table.
 
 ### Claude Code Bindings
 

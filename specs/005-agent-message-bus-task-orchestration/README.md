@@ -19,7 +19,7 @@ updated_at: 2026-03-09T06:02:09.173804710Z
 
 ## Overview
 
-With agents running and pipes attached (spec 064), this spec adds the collaboration layer: the message bus that routes communication between agents, and the task lifecycle engine that coordinates master-worker workflows.
+With agents running and pipes attached (spec 004), this spec adds the collaboration layer: the message bus that routes communication between agents, and the task lifecycle engine that coordinates master-worker workflows.
 
 This is where "multiple isolated agents" becomes "a team that works together on tasks."
 
@@ -75,4 +75,4 @@ Teams group agents with a leader and workers. The leader can delegate tasks, the
 
 ## Notes
 
-The message bus is single-host (in-process tokio channels) in this spec. Cross-host message relay will build on top of spec 062's control channel — the bus interface stays the same, only the transport backend changes. This is why the `AgentEnvelope` format matters: it's the stable protocol that local and remote delivery both use.
+The message bus is single-host (in-process tokio channels) in this spec. Cross-host message relay will build on top of spec 009's control channel — the bus interface stays the same, only the transport backend changes. This is why the `AgentEnvelope` format matters: it's the stable protocol that local and remote delivery both use.

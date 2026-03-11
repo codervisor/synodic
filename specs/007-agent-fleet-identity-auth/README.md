@@ -49,9 +49,9 @@ Shared architectural rules across all children:
 
 ## Plan
 
-- [ ] Complete spec 061 to establish local identity, scope, and secret-isolation primitives.
-- [ ] Complete spec 062 to extend those primitives to remote nodes and production topology.
-- [ ] Complete spec 063 to secure human/operator access and make auth decisions observable.
+- [ ] Complete spec 008 to establish local identity, scope, and secret-isolation primitives.
+- [ ] Complete spec 009 to extend those primitives to remote nodes and production topology.
+- [ ] Complete spec 010 to secure human/operator access and make auth decisions observable.
 - [ ] Reconcile any cross-cutting config or schema changes at the umbrella level once child designs stabilize.
 
 ## Test

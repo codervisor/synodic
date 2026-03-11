@@ -19,7 +19,7 @@ updated_at: 2026-03-10T03:30:00.643157233Z
 
 ## Overview
 
-Every coordination primitive produces, consumes, or reacts to **artifacts**. Yet the term "artifact" appears dozens of times across specs 073–083 without a formal definition. This spec fills that gap — defining what an artifact *is* in the coordination model, how it flows through operations, what properties it carries, and how different primitives interact with it.
+Every coordination primitive produces, consumes, or reacts to **artifacts**. Yet the term "artifact" appears dozens of times across specs 019–030 without a formal definition. This spec fills that gap — defining what an artifact *is* in the coordination model, how it flows through operations, what properties it carries, and how different primitives interact with it.
 
 An artifact is not just "the output of an agent." It's the **unit of observable, addressable, versionable state** that coordination primitives operate on. Understanding artifacts is essential because:
 
@@ -120,7 +120,7 @@ flowchart TD
     style ART fill:#1b4965,color:#fff
 ```
 
-#### In speculative swarm (spec 078)
+#### In speculative swarm (spec 025)
 - **Input artifact:** Forked to N branches, each receiving a copy
 - **Branch artifacts:** Divergent outputs produced by each strategy
 - **Fragments:** Sub-units of branch artifacts that can be individually scored and selected
@@ -128,35 +128,35 @@ flowchart TD
 
 Artifacts must be **fragment-decomposable** for fragment-fusion to work. This means the artifact has internal structure (sections, functions, paragraphs) that can be independently evaluated. Atomic artifacts (a single number, a binary blob) should use winner-take-all merge instead.
 
-#### In context mesh (spec 079)
+#### In context mesh (spec 026)
 - **Knowledge claim:** An artifact that asserts a fact, design decision, or finding
 - **Gap:** The absence of an expected artifact — detected via dependency edges
 - **Filled node:** An artifact that resolves a gap, triggering reactive propagation
 
 In the mesh, artifacts are the DAG nodes. Their `metadata` carries confidence scores and dependency lists. The artifact's `id` is its hierarchical key (e.g., `findings.auth.tokens`).
 
-#### In fractal decomposition (spec 080)
+#### In fractal decomposition (spec 027)
 - **Parent artifact:** The original work product being decomposed
 - **Scoped child artifacts:** Portions of the parent's scope, each writable only by its assigned child agent
 - **Reunified artifact:** The merged result of all children's scoped contributions
 
 Scope isolation is enforced at the artifact level: `artifact.scope` must match the child agent's declared scope for writes to be accepted.
 
-#### In generative-adversarial (spec 081)
+#### In generative-adversarial (spec 028)
 - **Versioned artifact:** The generator produces artifact v1, critic attacks it, generator produces v2, etc.
 - **Each version is a complete artifact** — not a patch or diff. The critic observes the full artifact each round.
 - **Test artifacts:** The critic may produce test cases (themselves artifacts) that become part of the quality evidence.
 
 The artifact's `version` and `parent_version` form a linear chain: v1 → v2 → … → vN.
 
-#### In stigmergic coordination (spec 082)
+#### In stigmergic coordination (spec 029)
 - **Watched artifact:** An artifact matching an agent's watch pattern — changes trigger observation
 - **Reactive artifact:** A new artifact produced in response to observing a change
 - **Marker-tagged artifact:** An artifact with pheromone markers (needs-review, needs-fix, approved) in its `metadata`
 
 Stigmergic artifacts are the communication channel itself. Agents never send messages — they write artifacts and observe other agents' artifacts.
 
-#### In organizational primitives (spec 083)
+#### In organizational primitives (spec 030)
 - **Delegated artifact:** Manager assigns artifact production to a worker (hierarchical)
 - **Stage artifact:** Output of one pipeline stage, input to the next
 - **Voted artifact:** Candidate artifacts that peers evaluate (committee)
@@ -251,7 +251,7 @@ stateDiagram-v2
 
 ### Relationship between artifacts and operations
 
-Every operation in the model (spec 073) interacts with artifacts:
+Every operation in the model (spec 019) interacts with artifacts:
 
 | Operation | Artifact role |
 | --- | --- |
@@ -278,8 +278,8 @@ This is a key clarification: **observe reads artifacts, not agent internals.** A
 
 ## Test
 
-- [ ] Every primitive (078–083) has its artifact interaction pattern documented
+- [ ] Every primitive (025–030) has its artifact interaction pattern documented
 - [ ] Artifact properties cover all fields referenced across sibling specs
 - [ ] Fragment model supports all three merge strategies (fragment-fusion, winner-take-all, weighted-blend)
 - [ ] Artifact addressing works for all five contexts (file, mesh, stigmergic, fractal, swarm)
-- [ ] The observe-reads-artifacts clarification is consistent with spec 073's operation signatures
+- [ ] The observe-reads-artifacts clarification is consistent with spec 019's operation signatures

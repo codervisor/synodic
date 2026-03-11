@@ -21,17 +21,17 @@ updated_at: 2026-03-10T07:57:53.330456038Z
 
 ## Overview
 
-Defines how **Claude Code** (Anthropic's agentic coding tool) implements the coordination model from spec 072/073. Where spec 068 maps the theory to ClawDen's Rust runtime, this spec maps it to Claude Code's native orchestration capabilities: subagent spawning, tool-use parallelism, session management, and multi-file editing workflows.
+Defines how **Claude Code** (Anthropic's agentic coding tool) implements the coordination model from spec 017/019. Where spec 013 maps the theory to ClawDen's Rust runtime, this spec maps it to Claude Code's native orchestration capabilities: subagent spawning, tool-use parallelism, session management, and multi-file editing workflows.
 
-Claude Code already exhibits several coordination primitives implicitly — this spec makes those patterns explicit, identifies which spec-072 operations map cleanly, which require adaptation, and which represent gaps that ClawDen must bridge when orchestrating Claude Code agents in a fleet.
+Claude Code already exhibits several coordination primitives implicitly — this spec makes those patterns explicit, identifies which spec-017 operations map cleanly, which require adaptation, and which represent gaps that ClawDen must bridge when orchestrating Claude Code agents in a fleet.
 
 ## Design
 
 ### Operation Mapping
 
-The six abstract operations from spec 073 map to Claude Code capabilities as follows:
+The six abstract operations from spec 019 map to Claude Code capabilities as follows:
 
-| Operation     | Spec 073 Signature                            | Claude Code Mapping                                                                                             | Fidelity |
+| Operation     | Spec 019 Signature                            | Claude Code Mapping                                                                                             | Fidelity |
 | ------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------- |
 | `spawn`       | `(template, context) → agent_id`              | `runSubagent(prompt, agentName)` — creates a stateless child agent with full prompt context                      | High     |
 | `fork`        | `(agent_id, variants) → [agent_id]`           | Multiple parallel `runSubagent` calls with variant prompts — each gets independent context but shared workspace  | Medium   |
@@ -83,7 +83,7 @@ Claude Code operates under constraints that differ from a custom Rust runtime:
 
 #### Category A: Organizational Primitives (Full Support)
 
-Claude Code naturally supports all six organizational primitives from spec 073:
+Claude Code naturally supports all six organizational primitives from spec 019:
 
 | Primitive    | Claude Code Implementation                                                                                    |
 | ------------ | ------------------------------------------------------------------------------------------------------------- |
@@ -106,7 +106,7 @@ Claude Code cannot run agents in true parallel, but can simulate swarm behavior 
 4. No mid-execution cross-pollination (constraint: stateless subagents)
 5. No convergence-based pruning (all branches run to completion)
 
-The sequential execution eliminates the cost advantage of early pruning but preserves the diversity-and-fusion benefit. For latency-sensitive scenarios, ClawDen fleet orchestration (spec 068) should be used instead.
+The sequential execution eliminates the cost advantage of early pruning but preserves the diversity-and-fusion benefit. For latency-sensitive scenarios, ClawDen fleet orchestration (spec 013) should be used instead.
 
 ```mermaid
 flowchart TD
@@ -164,7 +164,7 @@ Claude Code's workspace is a natural pheromone surface, but without event-driven
 - Agents can observe markers via grep/search
 - No automatic triggering — the parent must poll or explicitly dispatch
 
-For true stigmergic coordination, ClawDen's fleet layer (spec 068) provides the reactive artifact-watch mechanism that Claude Code alone cannot.
+For true stigmergic coordination, ClawDen's fleet layer (spec 013) provides the reactive artifact-watch mechanism that Claude Code alone cannot.
 
 ### ClawDen Integration Points
 
@@ -203,9 +203,9 @@ flowchart TD
 
 ### Cost Model Mapping
 
-Spec 073's three-tier cost model maps to Claude Code as follows:
+Spec 019's three-tier cost model maps to Claude Code as follows:
 
-| Tier     | Spec 073 Role            | Claude Code Equivalent                                                  |
+| Tier     | Spec 019 Role            | Claude Code Equivalent                                                  |
 | -------- | ------------------------ | ----------------------------------------------------------------------- |
 | Frontier | Novel reasoning, teacher | Claude Opus — complex architecture, design decisions, novel problem solving |
 | Mid-tier | Balanced                 | Claude Sonnet — standard implementation, code review, test writing      |
@@ -227,7 +227,7 @@ ClawDen's `clawden.yaml` can specify model tier per agent role, enabling automat
 
 ## Plan
 
-- [ ] Validate operation mapping against spec 073 formal definitions
+- [ ] Validate operation mapping against spec 019 formal definitions
 - [ ] Define `clawden.yaml` schema extensions for Claude Code agent configuration
 - [ ] Implement fractal decomposition orchestration in ClawDen CLI
 - [ ] Implement generative-adversarial loop orchestration
@@ -237,11 +237,11 @@ ClawDen's `clawden.yaml` can specify model tier per agent role, enabling automat
 
 ## Test
 
-- [ ] Each spec 073 operation has a documented Claude Code mapping or explicit gap declaration
+- [ ] Each spec 019 operation has a documented Claude Code mapping or explicit gap declaration
 - [ ] All 11 primitives have implementation strategies or ClawDen-bridge documentation
 - [ ] Coding task table covers the 7 most common agentic coding workflows
 - [ ] Cost model tiers map to specific Claude model variants
-- [ ] Anti-pattern compositions from spec 073 are validated in Claude Code context
+- [ ] Anti-pattern compositions from spec 019 are validated in Claude Code context
 
 ```bash
 # Verify all 6 operations are mapped
@@ -265,4 +265,4 @@ print('OK: all 6 operations mapped')
 
 This spec intentionally focuses on what Claude Code can do **today** with its current `runSubagent` architecture. As Claude Code gains native parallel execution, persistent agent identity, or streaming observation capabilities, the fidelity ratings in the operation mapping table should be updated.
 
-The boundary with spec 068: that spec owns the ClawDen Rust trait implementation of the coordination model. This spec owns the mapping of that model to Claude Code's agent runtime. When ClawDen manages Claude Code agents in a fleet, both specs apply — 068 provides the orchestration layer, this spec defines how each Claude Code agent executes its assigned primitive internally.
+The boundary with spec 013: that spec owns the ClawDen Rust trait implementation of the coordination model. This spec owns the mapping of that model to Claude Code's agent runtime. When ClawDen manages Claude Code agents in a fleet, both specs apply — 013 provides the orchestration layer, this spec defines how each Claude Code agent executes its assigned primitive internally.

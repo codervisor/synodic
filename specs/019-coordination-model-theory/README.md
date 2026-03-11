@@ -18,9 +18,9 @@ updated_at: 2026-03-09T14:18:34.389296Z
 
 Defines the conceptual foundation of the AI-native coordination model: **why** AI agent coordination differs from human org-chart patterns, the six abstract operations, eleven coordination primitives, composability rules, anti-patterns, and the cost optimization model.
 
-This is the "what and why" layer — no schemas, no code, no fixtures. Those live in sibling specs 074 (design) and 075 (validation & distribution).
+This is the "what and why" layer — no schemas, no code, no fixtures. Those live in sibling specs 020 (design) and 021 (validation & distribution).
 
-For visual diagrams of all 11 primitives showing agent flow and operations used, see spec 076 (coordination primitives visual reference).
+For visual diagrams of all 11 primitives showing agent flow and operations used, see spec 022 (coordination primitives visual reference).
 
 ## Design
 

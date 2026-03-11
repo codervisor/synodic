@@ -20,7 +20,7 @@ updated_at: 2026-03-09T06:02:09.191794098Z
 
 Without persistence, a ClawDen restart loses all fleet state: agent registrations, in‑flight tasks, partial results, and audit history. This spec replaces the in-memory `HashMap`s with a SQLite backend so that fleets survive crashes and restarts.
 
-This is what makes the fleet production-grade on a single host. Combined with spec 062's distributed auth, it provides the foundation for durable multi-host orchestration.
+This is what makes the fleet production-grade on a single host. Combined with spec 009's distributed auth, it provides the foundation for durable multi-host orchestration.
 
 ## Design
 

@@ -20,7 +20,7 @@ updated_at: 2026-03-09T06:25:01.610088324Z
 
 ## Overview
 
-Spec 072 defines five AI-native coordination primitives (speculative swarm, context mesh, fractal decomposition, generative-adversarial, stigmergic) as implementation-agnostic algorithms, grounded in agent properties that have no human analogue. See spec 072 for the abstract model, the industrial-revolution analysis motivating the second-wave thesis, and the formal operation semantics (spawn/fork/merge/observe/convergence/prune).
+Spec 017 defines five AI-native coordination primitives (speculative swarm, context mesh, fractal decomposition, generative-adversarial, stigmergic) as implementation-agnostic algorithms, grounded in agent properties that have no human analogue. See spec 017 for the abstract model, the industrial-revolution analysis motivating the second-wave thesis, and the formal operation semantics (spawn/fork/merge/observe/convergence/prune).
 
 This spec is **ClawDen's implementation** of those primitives — the `AINativeCoordination` Rust trait, `AgentEnvelope`-based message bus integration, `clawden.yaml` config schema, budget enforcement, and composability validation.
 
@@ -28,7 +28,7 @@ This spec is **ClawDen's implementation** of those primitives — the `AINativeC
 
 ### ClawDen Trait Surface
 
-The spec 067 `CoordinationPattern` trait assumes fixed agent rosters and message-based coordination. ClawDen extends it with `AINativeCoordination` to implement the six abstract operations from spec 072:
+The spec 012 `CoordinationPattern` trait assumes fixed agent rosters and message-based coordination. ClawDen extends it with `AINativeCoordination` to implement the six abstract operations from spec 017:
 
 ```rust
 trait AINativeCoordination: CoordinationPattern {
@@ -218,7 +218,7 @@ fleet:
 
 ## Claude Code Implementation Notes
 
-This section documents how each AI-native primitive can be implemented using Claude Code's native agent system. For conformance tier definitions and the full gap analysis, see spec 092.
+This section documents how each AI-native primitive can be implemented using Claude Code's native agent system. For conformance tier definitions and the full gap analysis, see spec 035.
 
 ### Primitive 1: Speculative Swarm — Claude Code
 
@@ -256,7 +256,7 @@ for i, strategy in enumerate(strategies):
 synthesize(outputs, strategy="select best fragment per sub-problem section")
 ```
 
-**When to use ClawDen fleet instead:** For latency-sensitive tasks or large N (>4 branches), use spec 068's `AINativeCoordination::fork()` through the ClawDen fleet layer, which achieves true parallelism.
+**When to use ClawDen fleet instead:** For latency-sensitive tasks or large N (>4 branches), use spec 013's `AINativeCoordination::fork()` through the ClawDen fleet layer, which achieves true parallelism.
 
 ---
 
@@ -392,22 +392,22 @@ while not_done:
     sleep(reaction_debounce)  # e.g., 5s
 ```
 
-**For true reactive stigmergy:** Use ClawDen's fleet layer (spec 068), which provides the file-watch mechanism that triggers Claude Code agents on artifact changes without parent polling.
+**For true reactive stigmergy:** Use ClawDen's fleet layer (spec 013), which provides the file-watch mechanism that triggers Claude Code agents on artifact changes without parent polling.
 
 ---
 
 ### Composability
 
-These primitives compose per the rules defined in spec 072 Part 4. ClawDen enforces composability at config parse time — anti-patterns (swarm-in-swarm, adversarial-in-adversarial, stigmergic without debounce) are rejected with actionable error messages.
+These primitives compose per the rules defined in spec 017 Part 4. ClawDen enforces composability at config parse time — anti-patterns (swarm-in-swarm, adversarial-in-adversarial, stigmergic without debounce) are rejected with actionable error messages.
 
-The `CoordinationPattern` trait from spec 067 remains the extension point — AI-native patterns implement a richer surface area.
+The `CoordinationPattern` trait from spec 012 remains the extension point — AI-native patterns implement a richer surface area.
 
 ## Notes
 
-For the abstract primitive algorithms, composability rules, and the industrial-revolution analysis motivating this design, see **spec 072**.
+For the abstract primitive algorithms, composability rules, and the industrial-revolution analysis motivating this design, see **spec 017**.
 
-This spec deliberately does not cover distributed execution of AI-native patterns. Running a speculative swarm across multiple hosts requires spec 062's remote control channel. That's a future extension — get the single-host primitives right first.
+This spec deliberately does not cover distributed execution of AI-native patterns. Running a speculative swarm across multiple hosts requires spec 009's remote control channel. That's a future extension — get the single-host primitives right first.
 
-The boundary with spec 067: that spec owns the `CoordinationPattern` trait and organizational patterns (hierarchy, pipeline, committee, departmental, marketplace, matrix). This spec owns the `AINativeCoordination` extension and the five AI-native primitive implementations. Both share the same `AgentEnvelope` protocol and `MessageBus` from spec 065.
+The boundary with spec 012: that spec owns the `CoordinationPattern` trait and organizational patterns (hierarchy, pipeline, committee, departmental, marketplace, matrix). This spec owns the `AINativeCoordination` extension and the five AI-native primitive implementations. Both share the same `AgentEnvelope` protocol and `MessageBus` from spec 005.
 
-The boundary with spec 067 Phase 1: that spec owns the `CoordinationPattern` trait and organizational patterns (hierarchy, pipeline, committee, departmental, marketplace, matrix). This spec owns the `AINativeCoordination` extension and the five AI-native primitives. Both share the same `AgentEnvelope` protocol and `MessageBus` from spec 065.
+The boundary with spec 012 Phase 1: that spec owns the `CoordinationPattern` trait and organizational patterns (hierarchy, pipeline, committee, departmental, marketplace, matrix). This spec owns the `AINativeCoordination` extension and the five AI-native primitives. Both share the same `AgentEnvelope` protocol and `MessageBus` from spec 005.

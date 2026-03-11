@@ -22,15 +22,15 @@ updated_at: 2026-03-09T17:06:00Z
 
 ## Overview
 
-Spec 069 maps AI-native coordination primitives to six domains (coding, finance, marketing, research, legal, devops). Every one of those playbooks *assumes specs already exist* — the coding playbook starts with "given a spec, fork 4 agents." But who writes the specs? How are they scoped, decomposed, validated, and kept alive as implementation diverges?
+Spec 014 maps AI-native coordination primitives to six domains (coding, finance, marketing, research, legal, devops). Every one of those playbooks *assumes specs already exist* — the coding playbook starts with "given a spec, fork 4 agents." But who writes the specs? How are they scoped, decomposed, validated, and kept alive as implementation diverges?
 
 Spec-driven development (SDD) is itself a domain — and arguably the highest-leverage one to apply AI-native primitives to, because **every other playbook's quality is bounded by spec quality.** A speculative swarm executing against a vague spec produces vague implementations. An adversarial hardening loop testing against an incomplete spec misses the requirements that were never written down.
 
-This spec defines playbooks for the SDD lifecycle as practiced with [LeanSpec](https://github.com/codervisor/lean-spec) — the lightweight, AI-native spec management framework. LeanSpec provides the substrate (spec storage, relationships, validation, MCP integration); this playbook defines how agent fleets *operate on that substrate* using the primitives from spec 068.
+This spec defines playbooks for the SDD lifecycle as practiced with [LeanSpec](https://github.com/codervisor/lean-spec) — the lightweight, AI-native spec management framework. LeanSpec provides the substrate (spec storage, relationships, validation, MCP integration); this playbook defines how agent fleets *operate on that substrate* using the primitives from spec 013.
 
 ### Why SDD Is a Distinct Domain
 
-SDD looks like "just writing documents" from the outside. From the inside, it involves activities with fundamentally different coordination needs than any domain in spec 069:
+SDD looks like "just writing documents" from the outside. From the inside, it involves activities with fundamentally different coordination needs than any domain in spec 014:
 
 | SDD activity                                                        | Why it's hard                                                                  | Why current practice is limited                                                    |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
@@ -207,7 +207,7 @@ fleet:
 
 When a spec exceeds complexity or token thresholds, it fractal-splits:
 
-1. **Self-analysis.** The parent agent analyzes its spec and identifies orthogonal concerns: identity vs. authorization vs. audit vs. enrollment (as spec 060 did for fleet identity).
+1. **Self-analysis.** The parent agent analyzes its spec and identifies orthogonal concerns: identity vs. authorization vs. audit vs. enrollment (as spec 007 did for fleet identity).
 
 2. **Context-preserving split.** The parent forks itself N times. Each child inherits the *full parent spec context* (including motivation, constraints, cross-references) but receives a scoping constraint: "you are responsible only for the identity concern." This is fundamentally different from a human architect writing a brief for a subordinate — the children ARE the parent, with zero information loss.
 
@@ -264,7 +264,7 @@ Feature idea
          │
          ▼
 ┌─────────────────────┐
-│  Implementation      │  (other domain playbooks from spec 069)
+│  Implementation      │  (other domain playbooks from spec 014)
 │  Coding / Testing    │
 └────────┬────────────┘
          │
@@ -319,7 +319,7 @@ The MCP integration means playbooks operate on the same spec substrate that huma
 
 ## Claude Code Imperative Playbook Examples
 
-The declarative YAML playbooks above describe the *ideal* coordination model. This section provides concrete, runnable equivalents using Claude Code's `Agent` tool system for operators who are not yet using ClawDen fleet orchestration. For conformance tier ratings of each primitive in Claude Code, see spec 092.
+The declarative YAML playbooks above describe the *ideal* coordination model. This section provides concrete, runnable equivalents using Claude Code's `Agent` tool system for operators who are not yet using ClawDen fleet orchestration. For conformance tier ratings of each primitive in Claude Code, see spec 035.
 
 ### Playbook 1: Spec Exploration — Imperative (Claude Code)
 
@@ -539,7 +539,7 @@ Agent("Reunification validator",
 - [ ] Spec decomposition: a 3500-token spec fractal-splits into 3 sub-specs, each under 2000 tokens; `depends_on` relationships are auto-generated between siblings; reunification validates collective exhaustiveness.
 - [ ] Spec hardening round escalation: round 1 finds 3 ambiguities; round 2 finds 2 uncovered edge cases; round 3 finds 1 cross-spec contradiction; round 4 (feasibility) finds no issues; round 5 confirms scope is appropriate; terminates.
 - [ ] Cross-spec consistency: adversarial critic detects that spec A says "max 10 agents" while spec B says "unbounded fleet size"; flags contradiction with citations to both specs.
-- [ ] Staleness detection: code change to `src/auth.rs` triggers staleness-detector; spec 060 (fleet identity) is tagged with `needs-update` marker; draft revision reflects the code delta.
+- [ ] Staleness detection: code change to `src/auth.rs` triggers staleness-detector; spec 007 (fleet identity) is tagged with `needs-update` marker; draft revision reflects the code delta.
 - [ ] Token watchdog: spec grows to 2400 tokens via manual edit; token-watchdog proposes fractal split into 2 sub-specs with auto-numbered directories.
 - [ ] Relationship updater: new spec 071 is created; relationship-updater scans existing specs, proposes `related: [007-agent-fleet-identity-auth]` based on content similarity.
 - [ ] Status synchronizer: all tests for spec 042 pass in CI + PR merged; status-synchronizer proposes `status: complete` update.
@@ -550,12 +550,12 @@ Agent("Reunification validator",
 
 ## Notes
 
-This is a **meta-playbook** — it produces the specs that other playbooks consume. The quality ceiling of every domain playbook in spec 069 is set by the quality of specs entering them. Investing in AI-native SDD is a force multiplier across all other fleet operations.
+This is a **meta-playbook** — it produces the specs that other playbooks consume. The quality ceiling of every domain playbook in spec 014 is set by the quality of specs entering them. Investing in AI-native SDD is a force multiplier across all other fleet operations.
 
-The boundary with spec 069: that spec owns the domain playbook schema and the six domain playbooks (coding, finance, marketing, research, legal, devops). This spec owns the SDD-specific playbooks that operate on the spec layer itself. The composed lifecycle here *feeds into* spec 069's coding playbook — once specs are explored, hardened, and decomposed, they become inputs to the coding swarm.
+The boundary with spec 014: that spec owns the domain playbook schema and the six domain playbooks (coding, finance, marketing, research, legal, devops). This spec owns the SDD-specific playbooks that operate on the spec layer itself. The composed lifecycle here *feeds into* spec 014's coding playbook — once specs are explored, hardened, and decomposed, they become inputs to the coding swarm.
 
-The boundary with spec 068: that spec owns the five AI-native primitives and their implementation. This spec composes those primitives into SDD-specific configurations but does not extend the primitive trait surface.
+The boundary with spec 013: that spec owns the five AI-native primitives and their implementation. This spec composes those primitives into SDD-specific configurations but does not extend the primitive trait surface.
 
-For the abstract coordination model, primitive definitions, and composability rules, see **spec 072**. This spec applies those abstractions to the SDD domain using LeanSpec as the spec substrate.
+For the abstract coordination model, primitive definitions, and composability rules, see **spec 017**. This spec applies those abstractions to the SDD domain using LeanSpec as the spec substrate.
 
 LeanSpec integration is via MCP tools, not direct library coupling. ClawDen playbooks invoke `@leanspec/mcp` the same way a human developer's AI assistant would — through the standard tool protocol. This keeps LeanSpec and ClawDen independently evolvable.
