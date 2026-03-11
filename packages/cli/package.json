@@ -1,0 +1,17 @@
+{
+  "name": "@codervisor/synodic",
+  "version": "0.1.0",
+  "description": "AI-native agent orchestration — the Docker Compose for AI agents",
+  "license": "MIT",
+  "bin": {
+    "synodic": "bin.js"
+  },
+  "files": [
+    "bin.js"
+  ],
+  "optionalDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codervisor/synodic"
+  }
+}
