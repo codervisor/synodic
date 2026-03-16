@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -15,8 +16,10 @@ const MAX_REWORK: u32 = 3;
 pub async fn run_pipeline(item: &mut WorkItem, repo_root: &Path) -> Result<()> {
     loop {
         let station_id = item.station;
-        let outcome = process_station(item, repo_root)
-            .await
+        let start = Instant::now();
+        let result = process_station(item, repo_root).await;
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let outcome = result
             .with_context(|| format!("Station {} failed", station_id))?;
 
         // Record the transition.
@@ -31,6 +34,7 @@ pub async fn run_pipeline(item: &mut WorkItem, repo_root: &Path) -> Result<()> {
             outcome: outcome.clone(),
             timestamp: Utc::now(),
             tokens_used: 0, // already tracked in item.metrics
+            duration_ms,
         };
         item.history.push(transition);
 
