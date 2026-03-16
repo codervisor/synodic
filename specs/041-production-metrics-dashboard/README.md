@@ -1,5 +1,5 @@
 ---
-status: planned
+status: deferred
 created: 2026-03-11
 priority: high
 tags:
