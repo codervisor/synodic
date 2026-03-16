@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synodic.dev/schemas/factory-manifest.json",
+  "title": "Factory Work Manifest",
+  "description": "Tracks a single factory run: BUILD → INSPECT cycles, metrics, and final status.",
+  "type": "object",
+  "required": ["id", "spec", "status", "branch", "attempts"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^factory-[0-9]+$",
+      "description": "Unique work ID (factory-{unix-timestamp})"
+    },
+    "spec": {
+      "type": "string",
+      "description": "Path to the spec that was implemented"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["building", "inspecting", "approved", "escalated", "failed"],
+      "description": "Current status of the factory run"
+    },
+    "branch": {
+      "type": "string",
+      "description": "Git branch where the implementation lives"
+    },
+    "pr_url": {
+      "type": "string",
+      "description": "URL of the created PR (only present if approved)"
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/attempt"
+      },
+      "maxItems": 3,
+      "description": "History of BUILD → INSPECT cycles"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    }
+  },
+  "$defs": {
+    "attempt": {
+      "type": "object",
+      "required": ["attempt", "build"],
+      "properties": {
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "build": {
+          "$ref": "#/$defs/build_report"
+        },
+        "inspect": {
+          "$ref": "#/$defs/inspect_verdict"
+        }
+      }
+    },
+    "build_report": {
+      "type": "object",
+      "required": ["files_changed", "tests"],
+      "properties": {
+        "files_changed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of files modified by the builder"
+        },
+        "tests": {
+          "type": "string",
+          "enum": ["pass", "fail", "skipped"],
+          "description": "Test result from the build"
+        },
+        "commit": {
+          "type": "string",
+          "description": "Short SHA of the build commit"
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch name from the worktree"
+        }
+      }
+    },
+    "inspect_verdict": {
+      "type": "object",
+      "required": ["verdict"],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["approve", "rework"],
+          "description": "Inspector decision"
+        },
+        "items": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific rework items (only present when verdict is rework)"
+        },
+        "summary": {
+          "type": "string",
+          "description": "One-line summary of the review"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "cycle_time_seconds": {
+          "type": "number",
+          "description": "Wall-clock seconds from invocation to completion"
+        },
+        "total_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "first_pass_yield": {
+          "type": "boolean",
+          "description": "True if INSPECT approved on the first attempt"
+        }
+      }
+    }
+  }
+}
