@@ -97,3 +97,53 @@ pub async fn load_manifest(artifacts_dir: &Path) -> Result<WorkItem> {
         serde_json::from_str(&json).context("Failed to parse manifest")?;
     Ok(item)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use syn_types::{StationId, WorkMetrics};
+
+    fn make_test_item(artifacts_dir: PathBuf) -> WorkItem {
+        WorkItem {
+            id: "test-123".to_string(),
+            spec_path: PathBuf::from("specs/test"),
+            station: StationId::Build,
+            attempt: 1,
+            branch: "factory/test".to_string(),
+            artifacts_dir,
+            history: vec![],
+            started_at: Utc::now(),
+            metrics: WorkMetrics::default(),
+            rework_feedback: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_save_and_load_manifest_round_trip() {
+        let temp_dir = std::env::temp_dir().join(format!("syn-engine-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let item = make_test_item(temp_dir.clone());
+        save_manifest(&item).await.unwrap();
+        let loaded = load_manifest(&temp_dir).await.unwrap();
+
+        assert_eq!(loaded.id, item.id);
+        assert_eq!(loaded.spec_path, item.spec_path);
+        assert_eq!(loaded.station, item.station);
+        assert_eq!(loaded.attempt, item.attempt);
+        assert_eq!(loaded.branch, item.branch);
+        assert_eq!(loaded.artifacts_dir, item.artifacts_dir);
+        assert_eq!(loaded.rework_feedback, item.rework_feedback);
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_load_manifest_nonexistent_path() {
+        let nonexistent = PathBuf::from("/tmp/syn-engine-nonexistent-dir-that-does-not-exist");
+        let result = load_manifest(&nonexistent).await;
+        assert!(result.is_err());
+    }
+}
