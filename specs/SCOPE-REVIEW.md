@@ -33,7 +33,7 @@ The gaps that remain are narrow but real:
    No concept of "this unit must pass BUILD → INSPECT → HARDEN in order."
 2. **Adversarial review by design** — `/simplify` reviews within the same
    context. The builder's blind spots leak through. True adversarial review
-   requires a separate agent with no builder context.
+   requires a separate subagent with its own context and no builder bias.
 3. **Spec-to-PR pipeline** — No "give me a spec, produce a PR" one-shot
    workflow with structured verdict protocol.
 4. **Cross-session metrics** — Each session tracks its own tokens, but no
@@ -41,22 +41,49 @@ The gaps that remain are narrow but real:
 5. **Structured rework protocol** — No APPROVE/REWORK verdict parsing with
    specific rework items routed back to the builder.
 
+### Why Subagents Are the Right Primitive
+
+General-purpose subagents have **all tools** (Read, Write, Edit, Bash, Grep,
+Glob) and run in their **own context window**. This makes them ideal for both
+BUILD and INSPECT:
+
+| | Subagent | `claude -p` subprocess |
+|---|---|---|
+| Context isolation | Own window (clean, no builder bias) | Fully separate process |
+| File changes | Direct or worktree-isolated | Separate worktree |
+| Tool access | All tools (general-purpose) | All tools |
+| Cost | Lower (results summarized back) | Higher (full independent session) |
+| Coordination | Returns results to parent naturally | Must parse stdout JSON |
+| Resumable | Yes (agent ID) | Must manage session IDs manually |
+| Git operations | Full (branch, commit, push) | Full |
+| Limitation | Cannot spawn sub-subagents | Cannot nest either |
+
+The no-nesting constraint is not a problem: BUILD (implement + test + commit)
+and INSPECT (review diff against spec) are each single focused tasks that
+don't need further delegation.
+
 ## Decision: Skill-First Approach
 
 **Synodic becomes a skill package, not a standalone binary.**
 
-The Rust codebase and Node.js wrapper are unnecessary — Claude Code already has
-subprocess management, worktree isolation, parallel agents, and structured output.
-Synodic's value is the **workflow definition**, not the runtime.
+The Rust codebase and Node.js wrapper are unnecessary — Claude Code's built-in
+subagents provide all the orchestration primitives needed. General-purpose
+subagents have full tool access (Read, Write, Edit, Bash) and run in isolated
+context windows. Synodic's value is the **workflow definition**, not the runtime.
 
-A skill composes existing Claude Code primitives:
+A skill orchestrates subagents as pipeline stations:
 
-1. Read a spec (skill context)
-2. Create a branch and implement (Claude Code's core loop)
-3. Spawn reviewer via `claude -p --output-format json` (adversarial review)
-4. Parse structured verdict and route rework (skill protocol)
+1. Read the target spec (skill context)
+2. Spawn **BUILD subagent** (`isolation: worktree`) — implements code, runs
+   tests, commits to feature branch
+3. Spawn **INSPECT subagent** (fresh context) — reviews diff against spec
+   with no builder bias, returns structured verdict
+4. Parse verdict: APPROVE → PR, REWORK → re-invoke BUILD with feedback
 5. Record metrics to JSON manifest (file I/O)
-6. Create PR via `gh` (native CLI)
+6. On APPROVE: create PR via `gh`
+
+No `claude -p` subprocess spawning needed. No JSON stdout parsing. The main
+conversation is just an orchestration loop over subagent calls.
 
 For parallel execution, compose with `/batch` or Agent Teams rather than
 reimplementing subprocess management.
@@ -65,9 +92,9 @@ reimplementing subprocess management.
 
 | Before | After |
 |--------|-------|
-| Rust binary orchestrating Claude Code | Claude Code skill composing built-in primitives |
+| Rust binary orchestrating Claude Code | Skill orchestrating built-in subagents |
 | npm platform packages for distribution | `npx skills add` for distribution |
-| Custom message bus, state persistence | Agent Teams mailbox + file manifests |
+| Custom message bus, state persistence | Subagent results + file manifests |
 | 43 specs across 5 architectural layers | Skills + minimal supporting specs |
 
 ## Revised Core Thesis
@@ -86,13 +113,34 @@ reimplementing subprocess management.
 /factory run specs/038-factory-mvp/README.md
 ```
 
+The skill orchestrates two subagents:
+
+```
+Main conversation (orchestrator)
+  │
+  ├─→ BUILD subagent (general-purpose, isolation: worktree)
+  │     • Reads spec, implements code
+  │     • Runs tests, fixes failures
+  │     • Commits to factory/{work-id} branch
+  │     • Returns: files changed, test results, tokens used
+  │
+  ├─→ INSPECT subagent (general-purpose, fresh context)
+  │     • Reads diff + spec only (no builder context = adversarial)
+  │     • Reviews correctness, security, completeness
+  │     • Returns: VERDICT: APPROVE or VERDICT: REWORK + items
+  │
+  └─→ Orchestration loop
+        • If REWORK: re-invoke BUILD with rework items (max 3 loops)
+        • If APPROVE: record metrics, create PR via gh
+```
+
 The skill:
 1. Reads the target spec
-2. Creates a feature branch (`factory/{work-id}`)
-3. Implements the spec (BUILD — Claude Code does this natively)
-4. Spawns a second `claude` instance in review mode (INSPECT)
+2. Spawns BUILD subagent in worktree (`isolation: worktree`)
+3. BUILD implements, tests, commits to `factory/{work-id}` branch
+4. Spawns INSPECT subagent with fresh context (diff + spec only)
 5. Parses verdict: APPROVE or REWORK with specific items
-6. If REWORK: applies feedback, re-runs review (max 3 loops)
+6. If REWORK: re-invokes BUILD with feedback (max 3 loops)
 7. Records metrics: cycle time, tokens, rework count, first-pass yield
 8. On APPROVE: creates PR via `gh`
 
@@ -128,9 +176,9 @@ No custom parallel execution needed — Claude Code already has this.
 
 ### Phase 3 — Cost Routing (if Phase 2 validates)
 
-- Use `--model haiku` for simple BUILD tasks, `--model opus` for INSPECT
+- Use `model: haiku` on BUILD subagent for simple tasks, `model: opus` for INSPECT
 - Measure cost-per-spec vs quality tradeoff
-- Leverage `--max-budget-usd` for per-task cost caps
+- Use `maxTurns` to cap per-task cost
 
 ---
 
@@ -226,24 +274,21 @@ synodic/
 
 ---
 
-## Claude Code Orchestration Features (March 2026 Reference)
+## Claude Code Primitives Used (March 2026 Reference)
 
-Key CLI flags for factory skill implementation:
+### Subagent capabilities (production-stable)
 
-| Flag | Purpose |
-|------|---------|
-| `-p` / `--print` | Non-interactive mode (scriptable) |
-| `--output-format json` | Structured output with metadata |
-| `--json-schema '{...}'` | Schema-validated structured output |
-| `--model sonnet\|opus\|haiku` | Per-instance model selection |
-| `--max-turns N` | Limit agent iterations |
-| `--max-budget-usd N` | Cost cap per session |
-| `--allowedTools "..."` | Tool whitelist per instance |
-| `-w branch` | Worktree isolation |
-| `--append-system-prompt` | Inject reviewer/builder role |
-| `-r session-id` | Resume specific session |
+| Feature | Detail |
+|---------|--------|
+| Tool access | General-purpose: ALL tools (Read, Write, Edit, Bash, Grep, Glob) |
+| Context | Own isolated context window (no parent bleed) |
+| Worktree isolation | `isolation: "worktree"` for git-isolated file changes |
+| Resumable | Agent ID returned, can resume with full context |
+| Model override | `model: sonnet\|opus\|haiku` per subagent |
+| Turn limits | `maxTurns: N` to cap iterations |
+| Custom agents | `.claude/agents/` with tool allowlists and system prompts |
 
-Key built-in skills to compose with:
+### Built-in skills to compose with
 
 | Skill | What It Does |
 |-------|-------------|
@@ -251,20 +296,28 @@ Key built-in skills to compose with:
 | `/simplify` | 3-agent parallel code review |
 | `/loop` | Recurring execution on interval |
 
-Agent Teams (experimental, `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`):
-- Lead + N teammates with shared task list
-- Mailbox for direct inter-agent messaging
-- Each teammate has independent context
+### CLI flags (for Phase 2+ parallel execution)
+
+| Flag | Purpose |
+|------|---------|
+| `-p` / `--print` | Non-interactive mode (scriptable) |
+| `--output-format json` | Structured output with metadata |
+| `--model` | Per-instance model selection |
+| `--max-turns N` | Limit agent iterations |
+| `--max-budget-usd N` | Cost cap per session |
 
 ## Risks
 
 **Skill-first risks:**
-- Skills cannot spawn subagents directly — must use Bash to invoke `claude -p`
-- Agent Teams is experimental — API may change
-- Skill format may not support complex control flow (conditional rework routing)
+- Subagent cannot spawn sub-subagents (no nesting) — BUILD and INSPECT
+  must each be self-contained single tasks
+- Skill control flow relies on the main conversation parsing subagent
+  results and making routing decisions
+- Worktree cleanup if BUILD subagent fails mid-implementation
 
 **Mitigations:**
-- `claude -p --output-format json` is production-stable for scripted orchestration
-- If Agent Teams changes, fall back to direct `claude -p` subprocess spawning
+- BUILD and INSPECT are naturally self-contained (no nesting needed)
+- Main conversation orchestration loop is simple: spawn → parse → route
+- Worktree isolation handles cleanup automatically on no changes
+- Fall back to `claude -p` subprocess if subagent limitations emerge
 - Keep archived specs as reference if we need to escalate complexity later
-- Thin shell script wrapper is always a fallback — still not a Rust platform
