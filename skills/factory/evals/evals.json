@@ -74,6 +74,67 @@
         "Each run uses a different branch (factory/{work-id-1} vs factory/{work-id-2})",
         "Each run has its own manifest directory"
       ]
+    },
+    {
+      "id": "bugfix-truncate-panic",
+      "name": "Bugfix: truncate() panics on multi-byte UTF-8",
+      "description": "Fix a real bug where string slicing at byte offset panics on multi-byte characters. Requires reading existing Rust code, fixing the bug, adding unit tests, and passing cargo test/clippy.",
+      "prompt_file": "prompts/bugfix-truncate-panic.md",
+      "tags": ["rust", "bugfix", "compiler-verified"],
+      "assertions": [
+        "truncate() no longer uses direct byte slicing (&s[..max])",
+        "Fix uses char-boundary-safe truncation (floor_char_boundary, char_indices, or equivalent)",
+        "At least 5 unit tests exist covering ASCII, multi-byte, empty, and exact-length cases",
+        "cargo test --workspace passes",
+        "cargo clippy --workspace has no warnings",
+        "Function signature is unchanged"
+      ]
+    },
+    {
+      "id": "add-engine-tests",
+      "name": "Add unit tests to syn-engine",
+      "description": "Add meaningful unit tests to parse_claude_output and manifest save/load round-trip. Requires understanding private function access, constructing complex types, and passing cargo test.",
+      "prompt_file": "prompts/add-engine-tests.md",
+      "tags": ["rust", "testing", "compiler-verified"],
+      "assertions": [
+        "agent.rs has #[cfg(test)] mod tests with at least 5 test functions",
+        "conveyor.rs has #[cfg(test)] mod tests with at least 2 test functions",
+        "cargo test --workspace passes with 0 failures",
+        "cargo clippy --workspace has no warnings",
+        "Tests assert meaningful behavior (not just assert!(true))"
+      ]
+    },
+    {
+      "id": "refactor-git-module",
+      "name": "Refactor: Extract git helpers into dedicated module",
+      "description": "Move git() from agent.rs to a new git.rs module. Pure refactor across 4 Rust files — must not break compilation or change any logic.",
+      "prompt_file": "prompts/refactor-git-module.md",
+      "tags": ["rust", "refactoring", "compiler-verified"],
+      "assertions": [
+        "crates/syn-engine/src/git.rs exists with git() function",
+        "agent.rs no longer defines git()",
+        "station.rs imports from crate::git, not crate::agent",
+        "lib.rs has pub mod git",
+        "cargo build --workspace succeeds",
+        "cargo test --workspace passes",
+        "cargo clippy --workspace has no warnings",
+        "No logic changes — only import paths moved"
+      ]
+    },
+    {
+      "id": "manifest-schema-validator",
+      "name": "Add manifest.json schema validator script",
+      "description": "Create a TypeScript script that validates factory manifests against the JSON Schema. Cross-language eval requiring npm dependency installation, TypeScript, and precise exit codes.",
+      "prompt_file": "prompts/manifest-schema-validator.md",
+      "tags": ["node", "typescript", "cross-language"],
+      "assertions": [
+        "scripts/validate-manifest.ts exists and is valid TypeScript",
+        "ajv is in devDependencies in root package.json",
+        "Valid fixture passes validation (exit 0)",
+        "Invalid fixture fails validation (exit 1) with printed errors",
+        "No-args invocation exits 2 with usage message",
+        "Script reads schema from skills/factory/references/manifest.schema.json"
+      ]
     }
   ]
 }
