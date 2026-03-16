@@ -1,6 +1,9 @@
 name: "Copilot Setup Steps"
 
-on: repository_dispatch
+# Disabled
+on:
+  repository_dispatch:
+    types: [disabled]
 
 jobs:
   copilot-setup-steps:

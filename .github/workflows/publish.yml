@@ -2,13 +2,14 @@ name: Publish
 
 on:
   release:
-    types: [published]
-  workflow_dispatch:
-    inputs:
-      dry-run:
-        description: 'Dry run (skip actual publishing)'
-        type: boolean
-        default: false
+    types: [never]
+  # workflow_dispatch disabled
+  # workflow_dispatch:
+  #   inputs:
+  #     dry-run:
+  #       description: 'Dry run (skip actual publishing)'
+  #       type: boolean
+  #       default: false
 
 env:
   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
