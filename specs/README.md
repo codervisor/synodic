@@ -10,4 +10,5 @@ Spec-driven development for Synodic. Each spec is a numbered directory containin
 | `planned` | Designed, ready for implementation |
 | `in-progress` | Currently being implemented |
 | `complete` | Implemented and verified |
+| `deferred` | Valid but postponed until MVP validates |
 | `archived` | Superseded or abandoned |
