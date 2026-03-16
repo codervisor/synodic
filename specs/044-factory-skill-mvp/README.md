@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-16
 priority: critical
 tags:
@@ -15,7 +15,7 @@ depends_on: []
 
 # Factory Skill MVP
 
-> **Status**: planned · **Priority**: critical · **Created**: 2026-03-16
+> **Status**: in-progress · **Priority**: critical · **Created**: 2026-03-16
 
 ## Overview
 
@@ -164,15 +164,15 @@ skills/factory/
 
 ## Plan
 
-- [ ] Create `skills/factory/SKILL.md` with skill definition and orchestration prompt
-- [ ] Define `manifest.schema.json` for work item tracking
-- [ ] Implement BUILD subagent prompt (spec reading, implementation, test, commit)
-- [ ] Implement INSPECT subagent prompt (diff review, verdict protocol)
-- [ ] Implement orchestration loop (spawn, parse verdict, rework routing, max 3 cycles)
-- [ ] Implement manifest writing (`.factory/{work-id}/manifest.json` after each cycle)
-- [ ] Implement PR creation on APPROVE (`gh pr create`)
-- [ ] Create sample spec fixture for testing
-- [ ] Create behavioral evals verifying end-to-end flow
+- [x] Create `skills/factory/SKILL.md` with skill definition and orchestration prompt
+- [x] Define `manifest.schema.json` for work item tracking
+- [x] Implement BUILD subagent prompt (spec reading, implementation, test, commit)
+- [x] Implement INSPECT subagent prompt (diff review, verdict protocol)
+- [x] Implement orchestration loop (spawn, parse verdict, rework routing, max 3 cycles)
+- [x] Implement manifest writing (`.factory/{work-id}/manifest.json` after each cycle)
+- [x] Implement PR creation on APPROVE (`gh pr create`)
+- [x] Create sample spec fixture for testing
+- [x] Create behavioral evals verifying end-to-end flow
 
 ## Test
 
