@@ -225,6 +225,59 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {
-        format!("{}... (truncated)", &s[..max])
+        let boundary = s.floor_char_boundary(max);
+        format!("{}... (truncated)", &s[..boundary])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_ascii_shorter_than_max() {
+        let result = truncate("hello", 10);
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn truncate_ascii_longer_than_max() {
+        let result = truncate("hello world", 5);
+        assert_eq!(result, "hello... (truncated)");
+    }
+
+    #[test]
+    fn truncate_multibyte_boundary_inside_char() {
+        // 'é' is 2 bytes in UTF-8. "café" is 5 bytes: c(1) a(1) f(1) é(2).
+        // Truncating at max=4 falls inside 'é', should round down to 3.
+        let result = truncate("café", 4);
+        assert_eq!(result, "caf... (truncated)");
+    }
+
+    #[test]
+    fn truncate_empty_string() {
+        let result = truncate("", 10);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn truncate_exact_max_length() {
+        let result = truncate("hello", 5);
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn truncate_multibyte_on_boundary() {
+        // "café" is 5 bytes. max=5 means no truncation.
+        let result = truncate("café", 5);
+        assert_eq!(result, "café");
+    }
+
+    #[test]
+    fn truncate_all_multibyte() {
+        // Each '🦀' is 4 bytes. "🦀🦀" is 8 bytes.
+        // max=5 falls inside second crab, rounds down to 4.
+        let result = truncate("🦀🦀", 5);
+        assert_eq!(result, "🦀... (truncated)");
     }
 }
