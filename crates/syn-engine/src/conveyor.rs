@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use syn_types::{StationOutcome, StationTransition, WorkItem};
+use syn_types::{validate_transition, StationOutcome, StationTransition, WorkItem};
 
 use crate::station::process_station;
 
@@ -18,6 +18,11 @@ pub async fn run_pipeline(item: &mut WorkItem, repo_root: &Path) -> Result<()> {
         let outcome = process_station(item, repo_root)
             .await
             .with_context(|| format!("Station {} failed", station_id))?;
+
+        // Validate the transition before recording it.
+        if let Err(msg) = validate_transition(&station_id, &outcome, item.attempt) {
+            anyhow::bail!(msg);
+        }
 
         // Record the transition.
         let transition = StationTransition {
