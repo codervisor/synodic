@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: archived
 created: 2026-03-06
 priority: high
 tags:
