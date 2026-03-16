@@ -11,6 +11,7 @@
     "sync-versions": "tsx scripts/sync-versions.ts"
   },
   "devDependencies": {
+    "ajv": "^8.18.0",
     "glob": "^13.0.6",
     "tsx": "^4.19.0",
     "turbo": "^2.4.0",
