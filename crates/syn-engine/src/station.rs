@@ -4,7 +4,8 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use syn_types::{BuildReport, ReviewReport, StationId, StationOutcome, WorkItem};
 
-use crate::agent::{git, ClaudeAgent};
+use crate::agent::ClaudeAgent;
+use crate::git::git;
 
 /// Process a work item at its current station.
 pub async fn process_station(item: &mut WorkItem, repo_root: &Path) -> Result<StationOutcome> {
