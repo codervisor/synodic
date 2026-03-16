@@ -6,116 +6,214 @@ Synodic has 43 specs (~8,140 lines of design) and ~4 commits of implementation.
 The spec-to-code ratio is unsustainable. We need to trim scope, archive premature
 specs, and focus on proving the core thesis before designing the cathedral.
 
-## Core Thesis to Validate
+## Key Insight: Claude Code + Skills Already Covers 80%
 
-> A BUILD → INSPECT pipeline that spawns Claude Code, reviews the output, and
-> loops on rework actually produces better results than a single agent run.
+Before deciding what to build, we asked: **is an AI coding tool like Claude Code
+with proper skills setup enough to enable factory-style coding delivery?**
 
-Until this is proven with real tasks, everything else is speculative.
+The answer is mostly yes:
+
+| Factory Capability | Claude Code + Skills | Needs Orchestration? |
+|--------------------|---------------------|---------------------|
+| Read spec, write code | Built-in | No |
+| Run tests, fix failures | Built-in (iterates naturally) | No |
+| Quality gates (lint, type-check) | Pre-commit hooks, CI | No |
+| Multi-step workflows | Skills define sequences | No |
+| Self-review | `/simplify` skill exists | Weak — self-review has blind spots |
+| **Independent review** | **Needs second agent** | **Yes** |
+| **Parallel execution** | **One instance = one thread** | **Yes** |
+| **Cost-aware routing** | **Can't mix models in-session** | **Yes** |
+| **Continuous operation** | **Sessions end** | **Yes — but this is infra, not orchestration** |
+
+The real gaps are narrow: adversarial review, parallelism, and cost routing.
+These don't require a platform — they require a skill that can spawn a second
+Claude Code instance.
+
+## Decision: Skill-First Approach
+
+**Synodic becomes a skill package, not a standalone binary.**
+
+The Rust codebase (`crates/syn-cli`, `syn-engine`, `syn-types`) and the Node.js
+platform wrapper (`packages/cli`) are unnecessary overhead. A skill can instruct
+Claude Code to:
+
+1. Read a spec (skill context)
+2. Create a branch and implement (Claude Code's core job)
+3. Spawn a separate `claude` process for independent review (shell command)
+4. Parse the review verdict and loop on rework (skill logic)
+5. Record metrics to a JSON manifest (file I/O)
+6. Create a PR (gh CLI)
+
+**What changes:**
+
+| Before | After |
+|--------|-------|
+| Rust binary orchestrating Claude Code | Claude Code skill orchestrating Claude Code |
+| npm platform packages for distribution | `npx skills add` for distribution |
+| Custom message bus, state persistence | File-based manifests, git branches |
+| 43 specs across 5 architectural layers | Skills + minimal supporting specs |
+
+## Revised Core Thesis
+
+> A Claude Code skill that implements BUILD → INSPECT with adversarial review
+> (separate agent instance) produces measurably better results than a single
+> agent run, with acceptable overhead.
+
+## What to Build
+
+### Phase 1 — Factory Skill (the MVP)
+
+**One skill: `factory`**
+
+```
+/factory run specs/038-factory-mvp/README.md
+```
+
+The skill:
+1. Reads the target spec
+2. Creates a feature branch (`factory/{work-id}`)
+3. Implements the spec (BUILD — Claude Code does this natively)
+4. Spawns a second `claude` instance in review mode (INSPECT)
+5. Parses verdict: APPROVE or REWORK with specific items
+6. If REWORK: applies feedback, re-runs review (max 3 loops)
+7. Records metrics: cycle time, tokens, rework count, first-pass yield
+8. On APPROVE: creates PR via `gh`
+
+**Skill structure:**
+```
+skills/factory/
+├── SKILL.md              # Skill definition (AgentSkills.io format)
+├── references/
+│   └── manifest.schema.json   # Work manifest schema
+├── fixtures/
+│   └── sample-spec/           # Test spec for validation
+└── evals/
+    ├── evals.json             # Behavioral evals
+    └── prompts/               # Eval prompts
+```
+
+**Exit criteria:**
+- Skill runs end-to-end on a real spec
+- Independent review catches deliberate bugs
+- Rework loop fires and fixes issues
+- Metrics are recorded to `.factory/{work-id}/manifest.json`
+- At least 3 real specs processed successfully
+
+### Phase 2 — Parallel Execution (if Phase 1 validates)
+
+**Extend the skill to handle multiple specs concurrently:**
+- Accept a list of specs or a directory
+- Spawn independent `claude` instances per spec
+- Aggregate metrics across the batch
+- Report throughput (specs/hour)
+
+### Phase 3 — Cost Routing (if Phase 2 validates)
+
+- Route simple tasks to cheaper models (Haiku for boilerplate, Opus for design)
+- Measure cost-per-spec vs quality tradeoff
 
 ---
 
-## Proposed Tiers
+## Spec Disposition
 
-### Tier 1 — KEEP (Ship Now)
+### KEEP (Rewrite for skill-first)
 
-These specs define the immediate work. Goal: working end-to-end pipeline.
+| # | Spec | Action |
+|---|------|--------|
+| 037 | Coding Factory Vision | Rewrite as skill-first vision. Trim to phases 1-2. |
+| 038 | Factory MVP | Rewrite as skill spec, not Rust binary spec. |
 
-| # | Spec | Rationale |
-|---|------|-----------|
-| 037 | Coding Factory Vision | North star. Trim to phases 0-1 only. |
-| 038 | Factory MVP — First Car | **THE milestone.** Two-station pipeline that works. |
-
-**Exit criteria for Tier 1:**
-- `synodic run specs/038-...` produces a real git branch with working code
-- INSPECT station catches deliberate bugs and triggers rework
-- Rework loop cap (3 attempts) is enforced
-- Metrics (cycle time, tokens, first-pass yield) are recorded
-- At least 3 real specs are run through the pipeline successfully
-
-### Tier 2 — DEFER (After MVP Proves Out)
-
-These specs are valuable but premature. Move to `status: deferred`.
+### DEFER (After skill MVP validates)
 
 | # | Spec | Why Defer |
 |---|------|-----------|
-| 001 | Agent Workspace Persistence | Useful but not needed for MVP validation |
-| 002 | Agent Fleet Execution Layer | Multi-agent comes after single-pipeline works |
-| 003 | Fleet Execution Foundation | Same — fleet implies multiple agents |
-| 004 | Fleet Process Supervisor | MVP can use simple subprocess management |
-| 005 | Agent Message Bus | No bus needed for two-station pipeline |
-| 006 | Fleet State Persistence | File-based manifest is sufficient for now |
-| 036 | Competitive Analysis | Already written, useful context, no action needed |
-| 039 | Assembly Line Abstraction | Premature abstraction — extract after MVP patterns emerge |
-| 040 | Factory Quality System | Design quality gates after basic pipeline works |
-| 041 | Production Metrics Dashboard | Collect metrics first, dashboard later |
+| 001 | Workspace Persistence | Useful for cross-session memory, not needed for MVP |
+| 036 | Competitive Analysis | Reference material, no action needed |
+| 039 | Assembly Line Abstraction | Extract patterns from working skill, don't pre-design |
+| 040 | Quality System | After basic pipeline works |
+| 041 | Metrics Dashboard | After metrics are being collected |
 
-### Tier 3 — ARCHIVE (Premature / Over-engineered)
+### ARCHIVE (No longer relevant to skill-first approach)
 
-These specs should be archived. They represent design for problems that don't
-exist yet and may never exist in their current form.
+**All 36 remaining specs.** The entire fleet execution layer (002-010), coordination
+theory (011-035), and advanced factory features (042-043) were designed for a
+platform architecture that we're not building.
 
-| # | Spec | Why Archive |
-|---|------|-------------|
-| 007-010 | Auth & RBAC (4 specs) | Identity, secrets, RBAC — zero users, zero fleet, zero need |
-| 011 | Fleet Coordination & Optimization | Group spec for unvalidated patterns |
-| 012 | Advanced Coordination Patterns | Patterns without implementations to pattern-match against |
-| 013 | AI-Native Coordination Primitives | Theoretical framework, no grounding in practice |
-| 014 | Domain Playbooks | Playbooks for a system that doesn't run yet |
-| 015 | SDD AI-Native Playbook | Same |
-| 016 | Nemosis Teacher-Student Distillation | Optimization before product-market fit |
-| 017-021 | Coordination Model (5 specs) | Core pipeline, theory, design, validation — all theoretical |
-| 022 | Visual Reference | Diagrams for unbuilt primitives |
-| 023 | Roles & Limitations | Constraints on unbuilt system |
-| 024-030 | Primitive Deep Dives (7 specs) | Speculative swarm, context mesh, fractal decomposition, etc. — none implemented |
-| 031 | Coordination Artifacts | Lifecycle for artifacts that don't exist |
-| 032-033 | Formal Theory (2 specs) | Mathematical proofs for unvalidated concepts |
-| 034 | Claude Code Implementation Mapping | Mapping to unbuilt coordination model |
-| 035 | Tool Capability Conformance | Conformance layer for single-tool MVP |
-| 042 | Continuous Improvement Loop | A/B testing a pipeline that doesn't ship yet |
-| 043 | Factory Supply Chain | Context caching for a single-station flow |
+| Range | Category | Count |
+|-------|----------|-------|
+| 002-006 | Fleet Execution | 5 |
+| 007-010 | Auth & RBAC | 4 |
+| 011-035 | Coordination Theory & Primitives | 25 |
+| 042-043 | Advanced Factory | 2 |
+| **Total** | | **36** |
 
-**That's 31 specs to archive.** They aren't deleted — they're preserved as
-future reference if/when the project reaches a stage where they become relevant.
+The existing `coordination-model` skill (in spec 017) can remain as a standalone
+skill if its concepts prove useful — but it's not a prerequisite for the factory
+skill.
+
+### DELETE (Dead infrastructure)
+
+With the skill-first approach, the following become unnecessary:
+
+| Path | Why |
+|------|-----|
+| `crates/` | Rust binary no longer needed |
+| `packages/cli/` | npm platform wrapper no longer needed |
+| `scripts/` | Publishing scripts for binary distribution |
+| `.github/workflows/publish.yml` | Binary publishing pipeline |
+| `publish.config.ts` | Forge publishing config |
+| `Cargo.toml`, `Cargo.lock` | Rust workspace |
+
+**Keep:** `.github/workflows/ci.yml` (adapt for skill validation), `.lean-spec/`,
+`AGENTS.md`, `package.json` (simplify).
 
 ---
 
-## Resulting Scope
+## Resulting Project Shape
 
-| Tier | Specs | Action |
-|------|-------|--------|
-| Keep | 2 | Ship: 037, 038 |
-| Defer | 10 | Revisit after MVP: 001-006, 036, 039-041 |
-| Archive | 31 | Set status to `archived` |
+```
+synodic/
+├── skills/
+│   └── factory/
+│       ├── SKILL.md
+│       ├── references/
+│       ├── fixtures/
+│       └── evals/
+├── specs/
+│   ├── 037-coding-factory-vision/    # Rewritten
+│   ├── 038-factory-mvp/              # Rewritten
+│   └── (archived specs remain)
+├── .github/workflows/ci.yml          # Skill validation
+├── .lean-spec/
+├── AGENTS.md
+├── README.md                          # Rewritten
+└── package.json                       # Simplified
+```
 
-**From 43 active specs → 2 active + 10 deferred.**
+**From: Rust+Node.js hybrid platform with 43 specs**
+**To: One skill with 2 active specs and behavioral evals**
 
 ---
 
 ## Recommended Next Steps
 
-1. **Update spec statuses** — Batch-update frontmatter to reflect tiers
-2. **Trim spec 037** — Remove phases 2-4 detail, keep as concise north star
-3. **Implement spec 038** — The only spec that matters right now:
-   - Get `synodic run` working end-to-end
-   - Write real tests
-   - Run the pipeline on itself (dog-food)
-4. **Delete dead dependency references** — Specs reference `clawden:*` deps that no longer exist
-5. **Validate thesis** — Run 3-5 real tasks through the pipeline, measure results
-6. **Decide on fleet** — Only after single-pipeline value is proven, revisit Tier 2 specs
+1. **Write the `factory` SKILL.md** — Define the skill in AgentSkills.io format
+2. **Create manifest schema** — JSON schema for work item tracking
+3. **Build evals** — Behavioral evals that verify the skill works end-to-end
+4. **Test on real specs** — Run the skill on 3-5 existing specs in this repo
+5. **Measure** — Compare factory-produced code vs single-agent code on same tasks
+6. **Decide on Rust cleanup** — Remove or archive the binary infrastructure
 
 ---
 
-## Risks of NOT Trimming
+## Risks
 
-- **Analysis paralysis**: More specs → more "prerequisites" → nothing ships
-- **Premature abstraction**: Building coordination primitives before knowing what coordination is needed
-- **Competitive loss**: Composio `ao` and others are shipping while we're specifying
-- **Motivation drain**: 43 planned specs with 0 complete is demoralizing
+**Skill-first risks:**
+- Claude Code skills may lack the control flow needed for multi-step orchestration
+- Spawning a second `claude` instance from within a skill may have limitations
+- Skill format may not support the complexity of factory workflows
 
-## Risks of Trimming
-
-- **Lost context**: Archived specs contain real thinking that may need to be redone
-- **Scope creep later**: Without specs, future work may lack direction
-
-**Mitigation**: Archived specs stay in the repo. They're reference material, not roadmap items.
+**Mitigations:**
+- Test skill capabilities early (Phase 1 is the validation)
+- If skills hit a wall, a thin shell script orchestrator is the fallback — still not a Rust platform
+- Keep archived specs as reference if we need to escalate complexity later
