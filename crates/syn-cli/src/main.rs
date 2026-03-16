@@ -99,7 +99,7 @@ async fn cmd_run(spec_path: PathBuf) -> Result<()> {
     save_manifest(&item).await?;
 
     // Switch back to main branch (best-effort).
-    let _ = syn_engine::agent::git(&repo_root, &["checkout", "main"]).await;
+    let _ = syn_engine::git::git(&repo_root, &["checkout", "main"]).await;
 
     match result {
         Ok(()) => {
