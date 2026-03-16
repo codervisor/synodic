@@ -135,6 +135,67 @@
         "No-args invocation exits 2 with usage message",
         "Script reads schema from skills/factory/references/manifest.schema.json"
       ]
+    },
+    {
+      "id": "transition-guard",
+      "name": "Enforce legal state transitions with exhaustive guard",
+      "description": "Add validate_transition() to syn-types enforcing a precise transition table, wire it into the conveyor. Cross-crate change with conditional Escalate logic (only legal when attempt >= 3) and exhaustive test coverage of both legal and illegal transitions.",
+      "prompt_file": "prompts/transition-guard.md",
+      "tags": ["rust", "state-machine", "cross-crate", "hard"],
+      "assertions": [
+        "validate_transition(from, outcome, attempt) exists in syn-types with correct signature",
+        "All 6 legal transitions return Ok(())",
+        "Build → Approved returns Err (only Inspect can approve)",
+        "Inspect → Pass{..} returns Err (Inspect doesn't produce Pass)",
+        "Rework{back_to: Inspect} returns Err from any station",
+        "Escalate returns Err when attempt < 3 (premature escalation)",
+        "Escalate returns Ok when attempt >= 3",
+        "run_pipeline calls validate_transition BEFORE recording history",
+        "At least 10 test functions in syn-types",
+        "cargo test --workspace passes",
+        "cargo clippy --workspace has no warnings",
+        "No existing enum variants or function signatures changed"
+      ]
+    },
+    {
+      "id": "add-duration-tracking",
+      "name": "Track per-station duration in history",
+      "description": "Add duration_ms field to StationTransition with serde(default) for backward compat, use Instant (not chrono) for measurement, capture duration even on process_station error. Multi-file change with serialization trap.",
+      "prompt_file": "prompts/add-duration-tracking.md",
+      "tags": ["rust", "serialization", "multi-file", "hard"],
+      "assertions": [
+        "StationTransition has pub duration_ms: u64 field",
+        "duration_ms has #[serde(default)] attribute",
+        "Conveyor uses std::time::Instant for timing (not chrono)",
+        "Duration captured before ? operator on process_station result",
+        "Backward-compat deserialization test: JSON without duration_ms deserializes with duration_ms=0",
+        "Round-trip serialization test with duration_ms value",
+        "All existing StationTransition construction sites updated",
+        "cargo test --workspace passes",
+        "cargo clippy --workspace has no warnings",
+        "No new crate dependencies added"
+      ]
+    },
+    {
+      "id": "idempotent-resume",
+      "name": "Idempotent pipeline resume from last checkpoint",
+      "description": "Add resume logic to run_pipeline that inspects history.last() and skips completed work. 5-way case analysis (empty/Pass/Rework/Approved/Escalate) with rework feedback preservation and attempt counter trap.",
+      "prompt_file": "prompts/idempotent-resume.md",
+      "tags": ["rust", "pipeline", "edge-cases", "hard"],
+      "assertions": [
+        "Resume logic at top of run_pipeline, before the loop",
+        "Empty history: no change, enters loop normally",
+        "Pass{next}: item.station set to next station",
+        "Rework{back_to, feedback}: station set to back_to AND rework_feedback set to Some(feedback)",
+        "Approved: returns Ok(()) immediately without entering loop",
+        "Escalate: returns Err without entering loop",
+        "Attempt counter NOT incremented during resume",
+        "At least 6 test functions covering all cases",
+        "cargo test --workspace passes",
+        "cargo clippy --workspace has no warnings",
+        "run_pipeline signature unchanged",
+        "No type definitions modified"
+      ]
     }
   ]
 }
