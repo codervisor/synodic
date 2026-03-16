@@ -143,163 +143,6 @@ A factory is measured, not felt. The core metrics:
 
 ---
 
-## Gap Analysis — Where We Are vs Where We Need to Be
-
-### What Synodic HAS Built (the Blueprints)
-
-Synodic has 36 specs defining a sophisticated architecture:
-
-- **Coordination Intelligence** — 6 abstract operations, 11 primitives (5 AI-native), composable playbooks. This is the theoretical foundation for the factory's "machines." *(specs 012-035)*
-- **Execution Substrate Design** — Process supervisor, message bus, state persistence. The factory floor blueprint. *(specs 004-006)*
-- **Auth & Identity Design** — Agent identity, scoped secrets, RBAC. The factory security system. *(specs 007-010)*
-- **Cost Optimization Strategy** — Nemosis teacher-student distillation. The efficiency program. *(spec 016)*
-- **Competitive Intelligence** — Deep analysis of Composio `ao` (the nearest competitor). *(spec 036)*
-- **Six Domain Playbooks** — Coding, finance, marketing, research, legal, devops. *(spec 014)*
-
-**Assessment:** Synodic has designed the engines, transmissions, and assembly tooling. High-quality, thorough work.
-
-### What's MISSING (the Gaps)
-
-The gaps fall into six categories, ordered by criticality:
-
----
-
-#### GAP 1: No Running Factory (Critical) → **spec 038**
-**Current state:** 36 specs, 0 lines of shipped code.
-**Ford equivalent:** Having detailed blueprints for every machine, conveyor belt, and station — but an empty factory floor.
-
-**What's needed:**
-- [ ] Minimum viable Station 3 (BUILD) — one agent, one task, produce one PR
-- [ ] Minimum viable Station 4 (INSPECT) — one agent reviews the PR
-- [ ] Minimum viable conveyor belt — task flows from build → inspect without human intervention
-- [ ] Minimum viable metrics — measure cycle time and first-pass yield for even this two-station line
-
-**Why this is gap #1:** A factory that produces one car proves the concept. A factory with no cars is a museum of unbuilt machines.
-
----
-
-#### GAP 2: No Assembly Line Abstraction (High) → **spec 039**
-**Current state:** Coordination primitives (swarm, mesh, adversarial, etc.) are defined but there's no "Station" or "Pipeline" as first-class concepts.
-**Ford equivalent:** Having designed various power tools and machines but not the conveyor belt system that connects them into a production line.
-
-**What's needed:**
-- [ ] **Station** abstraction — defines input type, output type, quality gate, staffing (which agent types), SLA
-- [ ] **Line** abstraction — ordered sequence of stations with routing rules (pass, rework, reject)
-- [ ] **Conveyor** abstraction — automatic movement of work items between stations
-- [ ] **WIP limits** — Kanban-style constraints preventing any station from being overwhelmed
-- [ ] **Back-pressure** — when downstream stations are full, upstream stations slow down
-
----
-
-#### GAP 3: No Quality System (High) → **spec 040**
-**Current state:** Generative-adversarial pattern exists as a coordination primitive, but there's no integrated quality pipeline.
-**Ford equivalent:** Having designed a precision measuring tool but not a quality department, not inspection stations on the line, not a process for rejecting defective parts.
-
-**What's needed:**
-- [ ] **Quality gates** as first-class pipeline elements (not just coordination patterns)
-- [ ] **Rework routing** — rejected items go back to the right station, not to the end of the queue
-- [ ] **Defect tracking** — what failed, at which station, root cause classification
-- [ ] **Escape analysis** — when defects reach production, trace back to which gate missed them
-- [ ] **Andon cord** — any agent can halt the line when it detects a systemic issue
-
----
-
-#### GAP 4: No Production Metrics (High) → **spec 041**
-**Current state:** No observability layer for the factory itself. Individual agent health is spec'd (spec 004), but factory-level metrics are absent.
-**Ford equivalent:** Having a foreman who can check if a worker is alive, but no one measuring how many cars roll off the line per hour or what the defect rate is.
-
-**What's needed:**
-- [ ] **Throughput tracking** — units per time period, by station and end-to-end
-- [ ] **Cycle time tracking** — per station and end-to-end, with percentile distributions
-- [ ] **Cost accounting** — token usage, API calls, compute time, per station and per unit
-- [ ] **Bottleneck detection** — automatically identify the constraint station (Theory of Constraints)
-- [ ] **Efficiency dashboard** — real-time factory floor view (not just agent health)
-
----
-
-#### GAP 5: No Continuous Improvement Loop (Medium) → **spec 042**
-**Current state:** Nemosis handles cost optimization (cheaper models for repetitive work), but there's no mechanism for the factory to improve its own process.
-**Ford equivalent:** Having a plan to buy cheaper steel, but no system for workers to suggest line improvements, no A/B testing of station configurations, no process engineering department.
-
-**What's needed:**
-- [ ] **A/B testing of coordination strategies** — try different primitives at the same station, measure which produces better output
-- [ ] **Retrospective automation** — after each unit, agents analyze what slowed them down
-- [ ] **Pattern library** — successful coordination configurations are captured and reused
-- [ ] **Skill accumulation** — agents learn station-specific skills over time (beyond Nemosis cost optimization)
-- [ ] **Process evolution** — the line layout itself changes based on production data
-
----
-
-#### GAP 6: No Supply Chain (Medium) → **spec 043**
-**Current state:** Agents are assumed to have everything they need. No concept of "just-in-time" delivery of context, dependencies, or pre-computed artifacts.
-**Ford equivalent:** Having designed the assembly line but not the supply chain that delivers parts to each station exactly when needed.
-
-**What's needed:**
-- [ ] **Context delivery** — each station receives exactly the context it needs, no more (context windows are expensive)
-- [ ] **Artifact cache** — pre-computed intermediate results (test fixtures, type stubs, API mocks) stored for reuse
-- [ ] **Dependency resolution** — external dependencies (APIs, libraries, services) are resolved before work reaches BUILD
-- [ ] **Prefetch** — predictively prepare context and artifacts for downstream stations
-
----
-
-## Priority Roadmap — Building the Factory
-
-### Phase 0: First Car Off the Line (MVP)
-**Goal:** Prove that coordinated agents can ship one PR, end to end.
-**Stations:** BUILD → INSPECT (two-station line)
-**Agents:** Claude Code only
-**Metrics:** Cycle time, pass/fail
-**Deliverable:** A working `synodic run <spec>` that produces a reviewed PR
-
-### Phase 1: Three-Station Line
-**Goal:** Add DESIGN station upstream. Speculative swarm explores approaches before BUILD.
-**Stations:** DESIGN → BUILD → INSPECT
-**Agents:** Claude Code + one additional (Codex CLI or Copilot CLI)
-**Metrics:** + throughput, first-pass yield
-**Deliverable:** `synodic pipeline <spec>` runs the three-station flow
-
-### Phase 2: Full Seven-Station Line
-**Goal:** Complete the production line from INTAKE to MAINTAIN.
-**Stations:** All seven
-**Agents:** Heterogeneous fleet
-**Metrics:** Full dashboard
-**Deliverable:** `synodic factory start` — continuous production mode
-
-### Phase 3: Self-Improving Factory
-**Goal:** The factory optimizes itself.
-**Capabilities:** A/B testing, retrospectives, pattern library, skill accumulation
-**Metric target:** Measurable improvement in throughput and defect rate over each month
-**Deliverable:** Autonomous process evolution with human oversight
-
-### Phase 4: Factory Network
-**Goal:** Multiple factories, each specialized for a domain (coding, research, devops), sharing coordination patterns and agent skills.
-**Deliverable:** `synodic network` — federated factory management
-
----
-
-## Reframing the Current Specs Through the Factory Lens
-
-Every existing spec maps to a factory component:
-
-| Factory Component | Current Specs | Gap |
-|---|---|---|
-| **Factory floor** (execution) | 004, 005, 006 | No code; needs MVP |
-| **Machines** (coordination primitives) | 012, 013, 025-030 | Well-designed; need to be installable at stations |
-| **Conveyor belt** (task flow) | 005 (message bus) | Exists as messaging; needs pipeline/station abstraction |
-| **Quality department** (inspection) | 028 (generative-adversarial) | One pattern; needs full quality system |
-| **Security** (auth) | 007-010 | Well-designed; pre-production concern |
-| **Efficiency program** (cost) | 016 (Nemosis) | Addresses model cost; doesn't address process cost |
-| **Standard work** (playbooks) | 014, 015 | Domain playbooks exist; need station-level work instructions |
-| **Parts supply** (context/artifacts) | 001 (workspace persistence) | Git-backed memory; no JIT context delivery |
-| **Blueprints** (specs) | LeanSpec, 015 | Spec framework exists; INTAKE station wraps it |
-| **Time studies** (metrics) | 041 (production metrics) | Spec'd |
-| **Process engineering** (self-improvement) | 042 (continuous improvement) | Spec'd |
-| **Station abstraction** | 039 (assembly line abstraction) | Spec'd |
-| **Assembly line abstraction** | 039 (assembly line abstraction) | Spec'd |
-| **Rework routing** | 040 (factory quality system) | Spec'd |
-
----
-
 ## The One-Line Test
 
 If we can't explain it in one line to a factory worker, the abstraction is wrong:
@@ -327,3 +170,11 @@ Docker Compose for AI agents    →  The factory floor
 ```
 
 **"Docker Compose for AI agents" is how we build the floor. "The Coding Factory" is what we build on it.**
+
+---
+
+## Implementation
+
+The MVP (spec 044) proves the core two-station pipeline (BUILD → INSPECT) as a
+Claude Code skill. See [044-factory-skill-mvp](../044-factory-skill-mvp/README.md)
+for the implementation spec.
