@@ -13,6 +13,26 @@ const MAX_REWORK: u32 = 3;
 ///
 /// Returns the final work item on success (approved), or an error on escalation/failure.
 pub async fn run_pipeline(item: &mut WorkItem, repo_root: &Path) -> Result<()> {
+    // Resume logic: inspect history to determine where to pick up.
+    if let Some(last) = item.history.last() {
+        match &last.outcome {
+            StationOutcome::Pass { next } => {
+                item.station = *next;
+            }
+            StationOutcome::Rework { back_to, feedback } => {
+                item.station = *back_to;
+                item.rework_feedback = Some(feedback.clone());
+            }
+            StationOutcome::Approved => {
+                eprintln!("Pipeline already approved, nothing to resume.");
+                return Ok(());
+            }
+            StationOutcome::Escalate { .. } => {
+                anyhow::bail!("Pipeline was previously escalated, cannot resume.");
+            }
+        }
+    }
+
     loop {
         let station_id = item.station;
         let outcome = process_station(item, repo_root)
@@ -96,4 +116,123 @@ pub async fn load_manifest(artifacts_dir: &Path) -> Result<WorkItem> {
     let item: WorkItem =
         serde_json::from_str(&json).context("Failed to parse manifest")?;
     Ok(item)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use std::path::PathBuf;
+    use syn_types::{StationId, StationOutcome, StationTransition, WorkItem, WorkMetrics};
+
+    fn make_item(history: Vec<StationTransition>, station: StationId, attempt: u32) -> WorkItem {
+        WorkItem {
+            id: "test-001".to_string(),
+            spec_path: PathBuf::from("specs/test"),
+            station,
+            attempt,
+            branch: "factory/test-001".to_string(),
+            artifacts_dir: PathBuf::from("/tmp/syn-test-artifacts"),
+            history,
+            started_at: Utc::now(),
+            metrics: WorkMetrics::default(),
+            rework_feedback: None,
+        }
+    }
+
+    fn make_transition(outcome: StationOutcome, from: StationId) -> StationTransition {
+        StationTransition {
+            from,
+            to: match &outcome {
+                StationOutcome::Pass { next } => Some(*next),
+                StationOutcome::Rework { back_to, .. } => Some(*back_to),
+                _ => None,
+            },
+            outcome,
+            timestamp: Utc::now(),
+            tokens_used: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn resume_empty_history_station_unchanged() {
+        let mut item = make_item(vec![], StationId::Build, 1);
+        // run_pipeline will fail in the loop (no real repo), but station should stay Build
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err()); // expected: process_station fails
+        assert_eq!(item.station, StationId::Build);
+    }
+
+    #[tokio::test]
+    async fn resume_after_pass_sets_station_to_next() {
+        let history = vec![make_transition(
+            StationOutcome::Pass {
+                next: StationId::Inspect,
+            },
+            StationId::Build,
+        )];
+        let mut item = make_item(history, StationId::Build, 1);
+        // run_pipeline will fail in the loop, but station should be set to Inspect
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err());
+        assert_eq!(item.station, StationId::Inspect);
+    }
+
+    #[tokio::test]
+    async fn resume_after_rework_sets_station_and_feedback() {
+        let history = vec![make_transition(
+            StationOutcome::Rework {
+                back_to: StationId::Build,
+                feedback: "fix X".to_string(),
+            },
+            StationId::Inspect,
+        )];
+        let mut item = make_item(history, StationId::Inspect, 2);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err());
+        assert_eq!(item.station, StationId::Build);
+        assert_eq!(item.rework_feedback, Some("fix X".to_string()));
+    }
+
+    #[tokio::test]
+    async fn resume_after_approved_returns_ok() {
+        let history = vec![make_transition(StationOutcome::Approved, StationId::Inspect)];
+        let mut item = make_item(history, StationId::Inspect, 1);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn resume_after_escalate_returns_err() {
+        let history = vec![make_transition(
+            StationOutcome::Escalate {
+                reason: "too many reworks".to_string(),
+            },
+            StationId::Inspect,
+        )];
+        let mut item = make_item(history, StationId::Inspect, 3);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("previously escalated"),
+            "Expected escalation error, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn resume_after_rework_does_not_increment_attempt() {
+        let history = vec![make_transition(
+            StationOutcome::Rework {
+                back_to: StationId::Build,
+                feedback: "fix Y".to_string(),
+            },
+            StationId::Inspect,
+        )];
+        let mut item = make_item(history, StationId::Inspect, 2);
+        let _result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        // attempt should still be 2 — resume logic must NOT increment it
+        assert_eq!(item.attempt, 2);
+    }
 }
