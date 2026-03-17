@@ -1,17 +1,18 @@
 mod cmd;
+mod eval;
+mod harness;
 mod util;
 
 use clap::Parser;
-use cmd::{eval::EvalCmd, harness::HarnessCmd};
 
 /// Synodic governance CLI — harness + eval
 #[derive(Parser)]
 #[command(name = "synodic", version, about)]
 enum Cli {
     /// Governance wrapper for agent commands
-    Harness(HarnessCmd),
+    Harness(cmd::harness::HarnessCmd),
     /// Benchmark evaluation runner
-    Eval(EvalCmd),
+    Eval(cmd::eval::EvalCmd),
 }
 
 fn main() -> anyhow::Result<()> {
