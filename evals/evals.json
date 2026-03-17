@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "synodic-benchmark-evals",
+  "description": "Benchmark task registry for e2e evaluation. Each task can be run through any skill (fractal, factory, baseline) via: ./evals/run.sh <alias> --skill <name>",
+  "evals": [
+    {
+      "id": "swebench-pro-scikit-learn-25747",
+      "name": "SWE-bench Pro: scikit-learn #25747 (multi-file, ML pipeline)",
+      "description": "SWE-bench Pro task requiring multi-file changes in scikit-learn. Tests orchestration on ML library internals spanning estimator, validation, and pipeline modules.",
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
+      "source": {
+        "benchmark": "SWE-bench Pro",
+        "instance_id": "scikit-learn__scikit-learn-25747",
+        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "split": "pro"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "alias": "swe:scikit-learn-25747",
+        "setup": "setup/swebench.sh",
+        "score": "score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (bug correctly fixed)",
+        "All P2P tests pass (no regressions)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "swebench-pro-flask-5063",
+      "name": "SWE-bench Pro: Flask #5063 (routing + error handling)",
+      "description": "SWE-bench Pro task in Flask involving routing and error handling changes across multiple modules.",
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
+      "source": {
+        "benchmark": "SWE-bench Pro",
+        "instance_id": "pallets__flask-5063",
+        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "split": "pro"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "alias": "swe:flask-5063",
+        "setup": "setup/swebench.sh",
+        "score": "score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (bug correctly fixed)",
+        "All P2P tests pass (no regressions)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "swebench-pro-django-16379",
+      "name": "SWE-bench Pro: Django #16379 (multi-file bug fix)",
+      "description": "SWE-bench Pro task requiring multi-file changes in Django. SOTA: 23.1% (Claude Opus 4.1).",
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
+      "source": {
+        "benchmark": "SWE-bench Pro",
+        "instance_id": "django__django-16379",
+        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "split": "pro"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "alias": "swe:django-16379",
+        "setup": "setup/swebench.sh",
+        "score": "score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (bug correctly fixed)",
+        "All P2P tests pass (no regressions)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "swebench-verified-sample",
+      "name": "SWE-bench Verified: Control group (baseline comparison)",
+      "description": "SWE-bench Verified task as a control group. SOTA is 80.9% — orchestration should NOT hurt performance on simpler tasks.",
+      "tags": ["swebench", "e2e", "code", "pytest", "control"],
+      "source": {
+        "benchmark": "SWE-bench Verified",
+        "dataset": "princeton-nlp/SWE-bench_Verified",
+        "split": "verified"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "setup": "setup/swebench.sh",
+        "score": "score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "Simple tasks detected as LEAF (no unnecessary decomposition)",
+        "Overhead of skill does not cause regressions",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "featurebench-mlflow-tracing",
+      "name": "FeatureBench: MLflow Tracing System (15 files, 42k chars)",
+      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Implement distributed tracing with 6 subsystems spanning 15 files.",
+      "prompt_file": "tasks/featurebench/mlflow-tracing.md",
+      "tags": ["featurebench", "real-world", "large"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "assertions": [
+        "6 top-level children with non-overlapping scopes",
+        "At least 2 children further decomposed (depth >= 2)",
+        "Shared Span/Trace types defined once, referenced across children",
+        "Reunification identifies and resolves shared type interfaces"
+      ]
+    },
+    {
+      "id": "featurebench-mlflow-tracing-e2e",
+      "name": "FeatureBench E2E: MLflow Tracing (code output + pytest)",
+      "description": "End-to-end evaluation: implement the MLflow tracing feature with code output, then score via FeatureBench F2P + P2P pytest.",
+      "prompt_file": "tasks/featurebench/mlflow-tracing-e2e.md",
+      "tags": ["featurebench", "e2e", "code", "pytest"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "alias": "fb:mlflow-tracing",
+        "setup": "setup/featurebench.sh",
+        "score": "score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "huggingface_hub", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (feature correctly implemented)",
+        "All P2P tests pass (no regressions introduced)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "featurebench-sympy-nullspace",
+      "name": "FeatureBench: SymPy Matrix Operations (18 files, 20k chars)",
+      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Matrix representation system with format conversion, nullspace, factorization across 18 files.",
+      "prompt_file": "tasks/featurebench/sympy-nullspace.md",
+      "tags": ["featurebench", "real-world", "mathematical"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "assertions": [
+        "Matrix types (DDM, SDM, DFM) defined once and shared across children",
+        "Domain constraints isolated as separate sub-spec",
+        "Each child has explicit scope boundaries",
+        "Reunification verifies consistent matrix type interfaces"
+      ]
+    },
+    {
+      "id": "featurebench-sympy-nullspace-e2e",
+      "name": "FeatureBench E2E: SymPy Nullspace (code output + pytest)",
+      "description": "End-to-end evaluation: implement SymPy matrix operations with code output, then score via FeatureBench F2P + P2P pytest.",
+      "prompt_file": "tasks/featurebench/sympy-nullspace.md",
+      "tags": ["featurebench", "e2e", "code", "pytest", "mathematical"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "alias": "fb:sympy-nullspace",
+        "setup": "setup/featurebench.sh",
+        "score": "score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "huggingface_hub", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (matrix operations correctly implemented)",
+        "All P2P tests pass (no regressions in existing SymPy)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "featurebench-seaborn-regression",
+      "name": "FeatureBench: Seaborn Regression Plotting (5 files, 30k chars)",
+      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Medium-complexity task implementing statistical regression plotting.",
+      "prompt_file": "tasks/featurebench/seaborn-regression.md",
+      "tags": ["featurebench", "real-world", "python", "statistics"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "alias": "fb:seaborn-regr",
+        "setup": "setup/featurebench.sh",
+        "score": "score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "huggingface_hub", "datasets"]
+      },
+      "assertions": [
+        "Implementation creates regression.py with statistical computation",
+        "All F2P tests pass",
+        "All P2P tests pass (no regressions)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "devbench-project-build",
+      "name": "DevBench: Full project from PRD (build + acceptance)",
+      "description": "DevBench evaluation: build an entire project from a Product Requirements Document. SOTA: <40%.",
+      "tags": ["devbench", "e2e", "code", "build-from-scratch"],
+      "source": {
+        "benchmark": "DevBench",
+        "dataset": "open-compass/DevBench",
+        "split": "full"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "setup": "setup/devbench.sh",
+        "score": "score-devbench.sh",
+        "requires": ["git", "python3"]
+      },
+      "assertions": [
+        "Project builds successfully",
+        "All acceptance tests pass",
+        "Score report shows resolved: true"
+      ]
+    }
+  ]
+}

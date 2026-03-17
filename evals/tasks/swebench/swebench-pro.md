@@ -1,7 +1,7 @@
 # Eval: SWE-bench Pro — Primary Benchmark (Fractal + Factory)
 
 > **Status**: Primary benchmark for all Synodic skill evaluations.
-> See [docs/BENCHMARKS.md](../../../../docs/BENCHMARKS.md) for the full strategy.
+> See [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) for the full strategy.
 
 ## Source
 
@@ -67,17 +67,20 @@ Verified.
 ## Running
 
 ```bash
-# Setup testbed
-./skills/fractal/evals/e2e/setup-swebench.sh <instance-id> --split pro
-
 # Full e2e with fractal decomposition
-./skills/fractal/evals/e2e/run.sh swe:<instance-id> --split pro
+./evals/run.sh swe:<instance-id> --split pro --skill fractal
+
+# Same task with factory
+./evals/run.sh swe:<instance-id> --split pro --skill factory
+
+# Baseline (no skill)
+./evals/run.sh swe:<instance-id> --split pro --skill baseline
 
 # Dry run
-./skills/fractal/evals/e2e/run.sh swe:<instance-id> --split pro --dry-run
+./evals/run.sh swe:<instance-id> --split pro --dry-run
 
-# Score
-./skills/fractal/evals/e2e/score.sh <instance-id> --testbed-dir /tmp/swebench-testbed/<instance-id>
+# Score only
+./evals/score.sh <instance-id> --testbed-dir /tmp/swebench-testbed/<instance-id>
 ```
 
 ### Curated eval instances
@@ -129,5 +132,5 @@ but SWE-bench Pro supersedes it as the primary evaluation signal because:
 4. More diverse task types (not just feature additions)
 5. Stricter test validation
 
-See [docs/BENCHMARKS.md](../../../../docs/BENCHMARKS.md) for the full benchmark
+See [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) for the full benchmark
 hierarchy and evaluation priorities.

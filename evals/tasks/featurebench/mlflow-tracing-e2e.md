@@ -23,7 +23,7 @@ Key differences:
 
 Run testbed setup first:
 ```bash
-./skills/fractal/evals/e2e/setup-testbed.sh mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1
+./evals/run.sh fb:mlflow-tracing --skill fractal --dry-run
 ```
 
 ## Prompt
@@ -78,12 +78,12 @@ mlflow/utils/databricks_tracing_utils.py
 ## Scoring
 
 ```bash
-./skills/fractal/evals/e2e/score.sh mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1
+./evals/score.sh mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1
 ```
 
 Or run everything:
 ```bash
-./skills/fractal/evals/e2e/run.sh mlflow-tracing
+./evals/run.sh fb:mlflow-tracing --skill fractal
 ```
 
 ## Grading

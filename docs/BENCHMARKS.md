@@ -100,38 +100,41 @@ projects from specs — but the dataset is too small for reliable metrics.
 ### Running SWE-bench Pro evals
 
 ```bash
-# Setup testbed for a specific instance
-./skills/fractal/evals/e2e/setup-swebench.sh <instance-id> --split pro
-
 # Run with fractal decomposition
-./skills/fractal/evals/e2e/run.sh swe:<instance-id> --split pro
+./evals/run.sh swe:<instance-id> --split pro --skill fractal
 
-# Score
-./skills/fractal/evals/e2e/score.sh <instance-id> --testbed-dir /tmp/swebench-testbed/<instance-id>
+# Same task with factory
+./evals/run.sh swe:<instance-id> --split pro --skill factory
+
+# Baseline (no skill)
+./evals/run.sh swe:<instance-id> --split pro --skill baseline
+
+# Score only
+./evals/score.sh <instance-id> --testbed-dir /tmp/swebench-testbed/<instance-id>
 
 # Dry run
-./skills/fractal/evals/e2e/run.sh swe:<instance-id> --split pro --dry-run
+./evals/run.sh swe:<instance-id> --split pro --dry-run
 ```
 
 ### Running FeatureBench evals
 
 ```bash
-# Setup testbed
-./skills/fractal/evals/e2e/setup-testbed.sh <instance-id>
+# Run with any skill
+./evals/run.sh fb:<alias> --skill fractal
+./evals/run.sh fb:<alias> --skill factory
 
-# Run + score
-./skills/fractal/evals/e2e/run.sh <alias>
-./skills/fractal/evals/e2e/score.sh <instance-id>
+# Score only
+./evals/score.sh <instance-id>
 ```
 
 ### Running DevBench evals
 
 ```bash
 # Run DevBench project
-./skills/fractal/evals/e2e/run.sh dev:<project-name>
+./evals/run.sh dev:<project-name> --skill fractal
 
-# Score
-./skills/fractal/evals/e2e/score-devbench.sh <project-name>
+# Score only
+./evals/score-devbench.sh <project-name>
 ```
 
 ### Scoring protocol

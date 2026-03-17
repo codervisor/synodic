@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# setup-devbench.sh — Prepare a DevBench testbed for e2e evaluation
+# devbench.sh — Prepare a DevBench testbed for e2e evaluation
 #
-# Usage: ./setup-devbench.sh <project-name> [--testbed-dir <path>]
+# Usage: ./devbench.sh <project-name> [--testbed-dir <path>] [--skill <name>]
 #
 # DevBench is fundamentally different from SWE-bench/FeatureBench:
 #   - Instead of fixing bugs or implementing features in existing repos,
@@ -12,7 +12,7 @@
 #   1. Clones the DevBench repo and extracts the target project
 #   2. Prepares the PRD and acceptance test criteria
 #   3. Creates a scaffold directory for the agent to build in
-#   4. Writes the agent prompt
+#   4. Writes the agent prompt (skill-specific)
 #
 # Prerequisites:
 #   - git, python3
@@ -22,13 +22,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # --- Argument parsing ---
-PROJECT_NAME="${1:?Usage: setup-devbench.sh <project-name> [--testbed-dir <path>]}"
+PROJECT_NAME="${1:?Usage: devbench.sh <project-name> [--testbed-dir <path>] [--skill <name>]}"
 shift
 
 TESTBED_DIR=""
+SKILL="fractal"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --testbed-dir) TESTBED_DIR="$2"; shift 2 ;;
+    --skill) SKILL="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -39,6 +41,7 @@ fi
 
 echo "=== DevBench Testbed Setup ==="
 echo "Project:  $PROJECT_NAME"
+echo "Skill:    $SKILL"
 echo "Testbed:  $TESTBED_DIR"
 echo ""
 
@@ -90,13 +93,6 @@ echo ""
 # --- Step 2: Extract PRD and test criteria ---
 echo "[2/4] Extracting PRD and acceptance criteria..."
 
-# DevBench projects have standard structure:
-#   PRD.md          — Product Requirements Document
-#   UML_class.md    — Class diagram (optional)
-#   UML_sequence.md — Sequence diagram (optional)
-#   Architecture.md — Architecture design (optional)
-#   acceptance_tests/ — Test scripts
-
 PRD_FILE=""
 for candidate in \
   "$TASK_DATA_DIR/project_data/PRD.md" \
@@ -109,7 +105,6 @@ for candidate in \
 done
 
 if [[ -z "$PRD_FILE" ]]; then
-  # Try to find any markdown file that looks like a PRD
   PRD_FILE=$(find "$TASK_DATA_DIR/project_data" -maxdepth 2 -name "*.md" -print -quit 2>/dev/null || true)
 fi
 
@@ -170,17 +165,13 @@ REPO_DIR="${TESTBED_DIR}/repo"
 mkdir -p "$REPO_DIR"
 cd "$REPO_DIR"
 
-# Initialize git repo for the agent to work in
 if [[ ! -d ".git" ]]; then
   git init
   git commit --allow-empty -m "Initial empty commit for DevBench: $PROJECT_NAME"
 fi
 
-# Copy reference implementation structure (if DevBench provides one) as a hint
-# but NOT the implementation itself
 REF_DIR="$TASK_DATA_DIR/project_data/ground_truth"
 if [[ -d "$REF_DIR" ]]; then
-  # Only copy the directory structure, not file contents
   cd "$REF_DIR"
   find . -type d -exec mkdir -p "$REPO_DIR/{}" \; 2>/dev/null || true
   cd "$REPO_DIR"
@@ -192,11 +183,14 @@ fi
 echo ""
 
 # --- Step 4: Write agent prompt ---
-echo "[4/4] Generating agent prompt..."
+echo "[4/4] Generating agent prompt (skill: $SKILL)..."
 
 PROMPT_FILE="${TASK_DATA_DIR}/agent_prompt.md"
 
-cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# Skill-specific prompt header
+case "$SKILL" in
+  fractal)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
 # DevBench E2E Evaluation — Fractal Decomposition
 
 You have the fractal decomposition skill loaded.
@@ -217,6 +211,55 @@ This is NOT a bug fix or feature addition — you are building from scratch.
 ## Product Requirements Document
 
 PROMPT_HEADER
+    ;;
+  factory)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# DevBench E2E Evaluation — Factory Skill
+
+You have the factory skill loaded.
+
+## Instructions
+
+You are building a complete project from a Product Requirements Document (PRD).
+
+1. Read the PRD below carefully.
+2. Create a spec from the PRD, then run `/factory run` on it.
+3. All code must be written to the repo directory.
+4. The project must compile/run and pass acceptance tests.
+
+## Product Requirements Document
+
+PROMPT_HEADER
+    ;;
+  baseline)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# DevBench E2E Evaluation — Baseline (No Skill)
+
+## Instructions
+
+You are building a complete project from a Product Requirements Document (PRD).
+
+1. Read the PRD below carefully.
+2. Implement the project directly.
+3. The project must compile/run and pass acceptance tests.
+
+## Product Requirements Document
+
+PROMPT_HEADER
+    ;;
+  *)
+    cat > "$PROMPT_FILE" << PROMPT_HEADER
+# DevBench E2E Evaluation — ${SKILL}
+
+## Instructions
+
+Build the project described in the PRD below.
+
+## Product Requirements Document
+
+PROMPT_HEADER
+    ;;
+esac
 
 cat "$TASK_DATA_DIR/prd.md" >> "$PROMPT_FILE"
 
@@ -230,7 +273,10 @@ for doc in Architecture.md architecture.md UML_class.md UML_sequence.md; do
   fi
 done
 
-cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+# Skill-specific config footer
+case "$SKILL" in
+  fractal)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
 
 ## Configuration
 
@@ -243,6 +289,34 @@ Benchmark: DevBench
 
 Follow the full orchestration protocol from SKILL.md.
 PROMPT_FOOTER
+    ;;
+  factory)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+
+## Configuration
+
+\`\`\`
+Language: ${LANGUAGE}
+Repo root: ${REPO_DIR}
+Benchmark: DevBench
+\`\`\`
+
+Follow the full orchestration protocol from SKILL.md.
+PROMPT_FOOTER
+    ;;
+  *)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+
+## Configuration
+
+\`\`\`
+Language: ${LANGUAGE}
+Repo root: ${REPO_DIR}
+Benchmark: DevBench
+\`\`\`
+PROMPT_FOOTER
+    ;;
+esac
 
 echo "  Agent prompt written to: $PROMPT_FILE"
 echo ""
@@ -251,6 +325,7 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Benchmark:        DevBench"
+echo "Skill:            $SKILL"
 echo "Project:          $PROJECT_NAME ($LANGUAGE)"
 echo "Testbed:          $TESTBED_DIR"
 echo "Repo:             $REPO_DIR"
@@ -258,6 +333,6 @@ echo "PRD:              $(wc -c < "$TASK_DATA_DIR/prd.md") chars"
 echo "Agent prompt:     $PROMPT_FILE"
 echo ""
 echo "Next steps:"
-echo "  1. Feed the agent prompt to Claude Code with the fractal skill"
-echo "  2. Run scoring: ./score-devbench.sh ${PROJECT_NAME} --testbed-dir ${TESTBED_DIR}"
+echo "  1. Feed the agent prompt to Claude Code with the $SKILL skill"
+echo "  2. Run scoring: $(dirname "$SCRIPT_DIR")/score-devbench.sh ${PROJECT_NAME} --testbed-dir ${TESTBED_DIR}"
 echo ""
