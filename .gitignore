@@ -26,6 +26,8 @@ Thumbs.db
 
 # Project
 /.factory
+!/.factory/governance.jsonl
+!/.factory/rules/
 /.fractal
 /.claude
 Cargo.lock
