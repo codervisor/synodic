@@ -1,0 +1,50 @@
+{
+  "instance_id": "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1",
+  "benchmark": "FeatureBench",
+  "skill": "fractal",
+  "timestamp": "2026-03-17T08:30:00Z",
+  "resolved": true,
+  "f2p": {
+    "total": 70,
+    "passed": 70,
+    "skipped": 0,
+    "failed": 0,
+    "all_pass": true,
+    "test_files": ["sympy/polys/matrices/tests/test_nullspace.py"]
+  },
+  "p2p": {
+    "total": 16,
+    "passed": 16,
+    "skipped": 0,
+    "failed": 0,
+    "all_pass": true,
+    "test_files": [
+      "sympy/series/tests/test_kauers.py",
+      "sympy/codegen/tests/test_cxxnodes.py",
+      "sympy/parsing/tests/test_mathematica.py",
+      "sympy/matrices/expressions/tests/test_inverse.py",
+      "sympy/simplify/tests/test_rewrite.py"
+    ]
+  },
+  "files_modified": [
+    "sympy/external/pythonmpq.py",
+    "sympy/polys/compatibility.py",
+    "sympy/polys/densebasic.py",
+    "sympy/polys/densetools.py",
+    "sympy/polys/domains/domain.py",
+    "sympy/polys/euclidtools.py",
+    "sympy/polys/factortools.py",
+    "sympy/polys/matrices/ddm.py",
+    "sympy/polys/matrices/dense.py",
+    "sympy/polys/matrices/domainmatrix.py",
+    "sympy/polys/matrices/domainscalar.py",
+    "sympy/polys/matrices/linsolve.py",
+    "sympy/polys/matrices/rref.py",
+    "sympy/polys/matrices/sdm.py",
+    "sympy/polys/numberfields/modules.py",
+    "sympy/polys/polyclasses.py",
+    "sympy/polys/rootisolation.py",
+    "sympy/polys/sqfreetools.py"
+  ],
+  "notes": "All 70 F2P tests passed. All 16 P2P tests passed with no regressions."
+}
