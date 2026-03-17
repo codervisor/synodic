@@ -114,11 +114,49 @@ def aggregate(records: list[dict]) -> dict:
 
     candidates.sort(key=lambda c: c["total_occurrences"], reverse=True)
 
+    # Trend analysis: split records into halves, compare category frequency
+    trend = {}
+    if len(records) >= 4:
+        mid = len(records) // 2
+        early_cats = Counter()
+        late_cats = Counter()
+        for rec in records[:mid]:
+            for item in rec.get("rework_items", []):
+                early_cats[item.get("category", "?")] += 1
+            for flag in rec.get("decompose_flags", []):
+                early_cats[flag.get("category", "?")] += 1
+            for conflict in rec.get("reunify_conflicts", []):
+                early_cats[conflict.get("category", "?")] += 1
+        for rec in records[mid:]:
+            for item in rec.get("rework_items", []):
+                late_cats[item.get("category", "?")] += 1
+            for flag in rec.get("decompose_flags", []):
+                late_cats[flag.get("category", "?")] += 1
+            for conflict in rec.get("reunify_conflicts", []):
+                late_cats[conflict.get("category", "?")] += 1
+
+        all_cats = set(early_cats) | set(late_cats)
+        for cat in all_cats:
+            e = early_cats.get(cat, 0) / max(mid, 1)
+            l = late_cats.get(cat, 0) / max(len(records) - mid, 1)
+            if l < e - 0.1:
+                direction = "declining"
+            elif l > e + 0.1:
+                direction = "rising"
+            else:
+                direction = "stable"
+            trend[cat] = {
+                "early_rate": round(e, 3),
+                "late_rate": round(l, 3),
+                "direction": direction,
+            }
+
     return {
         "total_runs": total_runs,
         "status_distribution": dict(status_counts),
         "category_frequency": dict(category_counts.most_common()),
         "crystallization_candidates": candidates,
+        "category_trends": trend,
     }
 
 
@@ -155,6 +193,20 @@ def main():
     else:
         print("\nNo crystallization candidates yet (need ≥3 occurrences).",
               file=sys.stderr)
+
+    if report.get("category_trends"):
+        rising = [c for c, t in report["category_trends"].items() if t["direction"] == "rising"]
+        declining = [c for c, t in report["category_trends"].items() if t["direction"] == "declining"]
+        if rising:
+            print(f"\n  Rising categories (getting worse): {', '.join(rising)}",
+                  file=sys.stderr)
+        if declining:
+            print(f"  Declining categories (improving): {', '.join(declining)}",
+                  file=sys.stderr)
+
+    # Suggest running harness eval for deeper analysis
+    print("\nFor full harness scoring, run: python3 evaluate_harness.py",
+          file=sys.stderr)
 
 
 if __name__ == "__main__":
