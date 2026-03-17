@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "fractal-skill-evals",
+  "description": "Behavioral evals for the fractal decomposition skill",
+  "evals": [
+    {
+      "id": "e2e-design-decomposition",
+      "name": "End-to-end design decomposition",
+      "description": "Fractal decompose on a system design task produces a tree of sub-specs and a unified design document",
+      "prompt_file": "prompts/e2e-design-decomposition.md",
+      "assertions": [
+        "A .fractal/{work-id}/ directory is created with manifest.json",
+        "root.md contains the original task",
+        "tree/ contains at least 3 child directories with spec.md files",
+        "At least one child is further decomposed (depth >= 2)",
+        "All leaf nodes have result.md files after solve phase",
+        "Non-leaf nodes have result.md after reunification",
+        "output.md exists with the final merged result",
+        "manifest.json shows status: complete with tree metrics"
+      ]
+    },
+    {
+      "id": "leaf-detection",
+      "name": "Simple tasks detected as leaves without splitting",
+      "description": "A task that is already atomic should be detected as a LEAF and solved directly without unnecessary decomposition",
+      "prompt_file": "prompts/leaf-detection.md",
+      "assertions": [
+        "DECOMPOSE VERDICT is LEAF with a reason",
+        "No child directories created under tree/",
+        "The task is solved directly",
+        "manifest.json shows tree_depth: 1 and leaf_nodes: 1"
+      ]
+    },
+    {
+      "id": "budget-enforcement",
+      "name": "Node budget caps total tree size",
+      "description": "When max_total_nodes would be exceeded, remaining nodes are forced to become leaves",
+      "prompt_file": "prompts/budget-enforcement.md",
+      "assertions": [
+        "Total nodes in the tree does not exceed max_total_nodes",
+        "At least one node that could have been split was forced to LEAF",
+        "manifest.json records the budget limit was hit",
+        "All forced leaves still get solved"
+      ]
+    },
+    {
+      "id": "parallel-solve",
+      "name": "Leaf nodes solved in parallel",
+      "description": "When solve_mode is parallel, all independent leaf nodes are spawned as concurrent subagents",
+      "prompt_file": "prompts/parallel-solve.md",
+      "assertions": [
+        "Multiple Agent tool calls appear in the same message for leaf solving",
+        "Each solve subagent receives correct scope and boundaries",
+        "Sibling specs are included as read-only context",
+        "All SOLVE REPORTs are collected and recorded"
+      ]
+    },
+    {
+      "id": "scope-isolation",
+      "name": "Sibling scopes do not overlap",
+      "description": "Each child sub-spec has explicit boundaries and does not encroach on sibling scopes",
+      "prompt_file": "prompts/scope-isolation.md",
+      "assertions": [
+        "Each child spec.md has a 'boundaries' section listing what it does NOT handle",
+        "No two siblings claim the same responsibility",
+        "Solve results stay within declared scope",
+        "Reunification step identifies any scope leakage"
+      ]
+    },
+    {
+      "id": "code-decomposition",
+      "name": "Code task decomposed and implemented",
+      "description": "A coding task is decomposed into sub-specs, each solved in an isolated worktree, then code merged via reunification",
+      "prompt_file": "prompts/code-decomposition.md",
+      "tags": ["code", "worktree"],
+      "assertions": [
+        "SOLVE subagents run with isolation: worktree",
+        "Each leaf commits with fractal({slug}): prefix",
+        "REUNIFY integrates code from all leaves",
+        "Final code compiles/passes tests",
+        "output.md references all files changed"
+      ]
+    },
+    {
+      "id": "reunification-conflict",
+      "name": "Reunification detects and resolves interface conflicts",
+      "description": "When sibling solutions have mismatched interfaces, the reunify step detects and resolves them",
+      "prompt_file": "prompts/reunification-conflict.md",
+      "assertions": [
+        "REUNIFY REPORT shows CONFLICTS field with at least one conflict",
+        "RESOLUTION field explains how each conflict was resolved",
+        "Merged result is internally consistent",
+        "STATUS is MERGED (not CONFLICT) after resolution"
+      ]
+    },
+    {
+      "id": "featurebench-mlflow-tracing",
+      "name": "FeatureBench: MLflow Tracing System (15 files, 42k chars)",
+      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Implement distributed tracing with 6 subsystems spanning 15 files. Tests orthogonal decomposition, shared type contracts, and cross-cutting concern handling.",
+      "prompt_file": "prompts/featurebench/mlflow-tracing.md",
+      "tags": ["featurebench", "real-world", "large"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "assertions": [
+        "6 top-level children with non-overlapping scopes",
+        "At least 2 children further decomposed (depth >= 2)",
+        "Shared Span/Trace types defined once, referenced across children",
+        "Thread-safety scoped to memory-management, not spread everywhere",
+        "Reunification identifies and resolves shared type interfaces",
+        "Cross-cutting concerns (error handling, backward compat) handled during reunification"
+      ]
+    },
+    {
+      "id": "featurebench-sympy-nullspace",
+      "name": "FeatureBench: SymPy Matrix Operations (18 files, 20k chars)",
+      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Implement matrix representation system with format conversion, element access, nullspace, factorization across 18 files. Tests domain isolation and mathematical correctness.",
+      "prompt_file": "prompts/featurebench/sympy-nullspace.md",
+      "tags": ["featurebench", "real-world", "mathematical"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "assertions": [
+        "Matrix types (DDM, SDM, DFM) defined once and shared across children",
+        "Domain constraints isolated as separate sub-spec",
+        "Format conversion handles both directions",
+        "Each child has explicit scope boundaries",
+        "Reunification verifies consistent matrix type interfaces",
+        "Decomposition by mathematical concern, not by file path"
+      ]
+    },
+    {
+      "id": "featurebench-mlflow-tracing-e2e",
+      "name": "FeatureBench E2E: MLflow Tracing (code output + pytest)",
+      "description": "End-to-end evaluation: fractal decompose with output_mode=code on the MLflow tracing task, then score via FeatureBench F2P + P2P pytest. This is the ground truth eval — design quality markers are necessary but not sufficient; only passing tests count.",
+      "prompt_file": "prompts/featurebench/mlflow-tracing-e2e.md",
+      "tags": ["featurebench", "e2e", "code", "pytest"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "mlflow-tracing",
+        "setup": "e2e/setup-testbed.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "huggingface_hub", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (feature correctly implemented)",
+        "All P2P tests pass (no regressions introduced)",
+        "SOLVE subagents use isolation: worktree for code output",
+        "REUNIFY merges worktree branches without manual intervention",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "featurebench-sympy-nullspace-e2e",
+      "name": "FeatureBench E2E: SymPy Nullspace (code output + pytest)",
+      "description": "End-to-end evaluation: fractal decompose with output_mode=code on the SymPy matrix operations task, then score via FeatureBench F2P + P2P pytest.",
+      "prompt_file": "prompts/featurebench/sympy-nullspace.md",
+      "tags": ["featurebench", "e2e", "code", "pytest", "mathematical"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "sympy-nullspace",
+        "setup": "e2e/setup-testbed.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "huggingface_hub", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (matrix operations correctly implemented)",
+        "All P2P tests pass (no regressions in existing SymPy)",
+        "SOLVE subagents use isolation: worktree for code output",
+        "REUNIFY merges worktree branches without manual intervention",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "swebench-pro-django-16379",
+      "name": "SWE-bench Pro: Django #16379 (multi-file bug fix)",
+      "description": "SWE-bench Pro task requiring multi-file changes in Django. Tests whether fractal decomposition helps on hard bug fixes that span 4+ files. SOTA: 23.1% (Claude Opus 4.1).",
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file"],
+      "source": {
+        "benchmark": "SWE-bench Pro",
+        "instance_id": "django__django-16379",
+        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "split": "pro"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "swe:django-16379",
+        "setup": "e2e/setup-swebench.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (bug correctly fixed)",
+        "All P2P tests pass (no regressions)",
+        "Decomposition adapts to task complexity (may detect as LEAF for simple fixes)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "swebench-verified-sample",
+      "name": "SWE-bench Verified: Control group (baseline comparison)",
+      "description": "SWE-bench Verified task as a control group. Since SOTA is 80.9%, fractal decomposition should NOT hurt performance on simpler tasks. Tests overhead tolerance — decomposition should detect simple tasks as LEAFs.",
+      "tags": ["swebench", "e2e", "code", "pytest", "control"],
+      "source": {
+        "benchmark": "SWE-bench Verified",
+        "dataset": "princeton-nlp/SWE-bench_Verified",
+        "split": "verified"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "setup": "e2e/setup-swebench.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "Simple tasks detected as LEAF (no unnecessary decomposition)",
+        "Overhead of fractal skill does not cause regressions",
+        "Score report shows resolved: true",
+        "Performance comparable to baseline (no decomposition)"
+      ]
+    },
+    {
+      "id": "devbench-project-build",
+      "name": "DevBench: Full project from PRD (build + acceptance)",
+      "description": "DevBench evaluation: build an entire project from a Product Requirements Document. This is the most natural fit for fractal decomposition — the PRD decomposes into orthogonal modules, each built in an isolated worktree, then integrated. SOTA: <40%.",
+      "tags": ["devbench", "e2e", "code", "build-from-scratch"],
+      "source": {
+        "benchmark": "DevBench",
+        "dataset": "open-compass/DevBench",
+        "split": "full"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "setup": "e2e/setup-devbench.sh",
+        "score": "e2e/score-devbench.sh",
+        "requires": ["git", "python3"]
+      },
+      "assertions": [
+        "Project builds successfully",
+        "All acceptance tests pass",
+        "Decomposition splits PRD into 3+ orthogonal modules",
+        "Each module built independently in worktree isolation",
+        "REUNIFY integrates modules into working project",
+        "Score report shows resolved: true"
+      ]
+    }
+  ]
+}
