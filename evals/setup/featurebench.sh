@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# setup-testbed.sh — Prepare a FeatureBench testbed for e2e evaluation
+# featurebench.sh — Prepare a FeatureBench testbed for e2e evaluation
 #
-# Usage: ./setup-testbed.sh <instance-id> [--testbed-dir <path>]
+# Usage: ./featurebench.sh <instance-id> [--testbed-dir <path>] [--skill <name>]
 #
 # This script:
 #   1. Downloads the FeatureBench task from HuggingFace
@@ -9,15 +9,7 @@
 #   3. Strips the implementation (applies the gold patch to remove feature code)
 #   4. Verifies F2P tests fail and P2P tests pass (sanity check)
 #   5. Installs dependencies
-#   6. Writes the full problem statement to a file for the agent
-#
-# FeatureBench patch format:
-#   - base_commit: the commit AFTER the feature was merged (has feature + tests)
-#   - patch: a reverse diff that REMOVES the implementation code
-#   - test_patch: a reverse diff that REMOVES the test file(s)
-#   We apply `patch` to strip the implementation, leaving tests in place.
-#   We do NOT apply `test_patch` — the F2P tests must remain so they can
-#   be used to verify the agent's re-implementation.
+#   6. Writes the agent prompt (skill-specific)
 #
 # Prerequisites:
 #   - git, python3, pip, jq
@@ -26,27 +18,28 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-EVALS_DIR="$(dirname "$SCRIPT_DIR")"
 
 # --- Argument parsing ---
-INSTANCE_ID="${1:?Usage: setup-testbed.sh <instance-id> [--testbed-dir <path>]}"
+INSTANCE_ID="${1:?Usage: featurebench.sh <instance-id> [--testbed-dir <path>] [--skill <name>]}"
 shift
 
 TESTBED_DIR=""
+SKILL="fractal"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --testbed-dir) TESTBED_DIR="$2"; shift 2 ;;
+    --skill) SKILL="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-# Default testbed location
 if [[ -z "$TESTBED_DIR" ]]; then
   TESTBED_DIR="/tmp/featurebench-testbed/${INSTANCE_ID}"
 fi
 
 echo "=== FeatureBench Testbed Setup ==="
 echo "Instance: $INSTANCE_ID"
+echo "Skill:    $SKILL"
 echo "Testbed:  $TESTBED_DIR"
 echo ""
 
@@ -95,7 +88,6 @@ print(f'  P2P tests: {len(task.get(\"PASS_TO_PASS\", \"[]\"))} chars')
 
 # Save task data
 with open(f'{task_dir}/task.json', 'w') as f:
-    # Convert to serializable dict
     task_dict = dict(task)
     json.dump(task_dict, f, indent=2, default=str)
 
@@ -144,7 +136,6 @@ echo "[2/6] Cloning target repo..."
 META_FILE="${TASK_DATA_DIR}/meta.json"
 REPO=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['repo'])")
 BASE_COMMIT=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['base_commit'])")
-ENV_COMMIT=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['environment_setup_commit'])")
 
 REPO_DIR="${TESTBED_DIR}/repo"
 
@@ -163,9 +154,6 @@ echo "  Checked out at ${BASE_COMMIT:0:12}"
 echo ""
 
 # --- Step 3: Strip implementation code ---
-# FeatureBench stores patches in reverse: base_commit has the feature already,
-# and `patch` removes it. We apply `patch` to create the "before" state where
-# the feature code is missing but the tests remain.
 echo "[3/6] Stripping implementation code (applying gold patch)..."
 
 IMPL_PATCH="${TASK_DATA_DIR}/patch.diff"
@@ -196,13 +184,11 @@ echo "[4/6] Sanity check — verifying F2P tests fail without implementation..."
 F2P_FILE="${TASK_DATA_DIR}/fail_to_pass.json"
 if [[ -f "$F2P_FILE" ]]; then
   cd "$REPO_DIR"
-  # Activate venv if already present (from a previous run)
   VENV_DIR="${TESTBED_DIR}/venv"
   if [[ -d "$VENV_DIR" ]]; then
     source "${VENV_DIR}/bin/activate"
   fi
 
-  # Extract first F2P test entry for a quick sanity check
   FIRST_F2P=$(python3 -c "
 import json
 data = json.loads(open('${F2P_FILE}').read())
@@ -217,12 +203,10 @@ else:
   if [[ -n "$FIRST_F2P" ]]; then
     echo "  Checking: $FIRST_F2P"
     if timeout 120 python3 -m pytest "$FIRST_F2P" --tb=line -q --no-header 2>&1 | tail -3; then
-      # If pytest exits 0, the test passed — that's BAD
       if timeout 120 python3 -m pytest "$FIRST_F2P" --tb=no -q --no-header 2>/dev/null; then
         echo ""
         echo "  WARNING: F2P tests PASS without implementation!"
         echo "  The testbed may not be set up correctly."
-        echo "  Expected: tests should FAIL before agent implements the feature."
       else
         echo "  OK — F2P tests fail as expected."
       fi
@@ -241,24 +225,20 @@ echo "[5/6] Installing dependencies..."
 
 cd "$REPO_DIR"
 
-# Detect project type and install
 if [[ -f "setup.py" ]] || [[ -f "pyproject.toml" ]] || [[ -f "setup.cfg" ]]; then
   echo "  Python project detected."
 
-  # Create a venv if it doesn't exist
   VENV_DIR="${TESTBED_DIR}/venv"
   if [[ ! -d "$VENV_DIR" ]]; then
     python3 -m venv "$VENV_DIR"
   fi
   source "${VENV_DIR}/bin/activate"
 
-  # Install in editable mode
   pip install -e ".[dev]" 2>/dev/null || \
     pip install -e "." 2>/dev/null || \
     pip install -e ".[test]" 2>/dev/null || \
     echo "  WARNING: Could not install package. Tests may fail."
 
-  # Also install pytest if not already present
   pip install pytest 2>/dev/null
 
   echo "  Dependencies installed in venv: $VENV_DIR"
@@ -269,12 +249,15 @@ fi
 echo ""
 
 # --- Step 6: Write agent prompt ---
-echo "[6/6] Generating agent prompt..."
+echo "[6/6] Generating agent prompt (skill: $SKILL)..."
 
 PROMPT_FILE="${TASK_DATA_DIR}/agent_prompt.md"
 PROBLEM_STMT="${TASK_DATA_DIR}/problem_statement.txt"
 
-cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# Skill-specific prompt header
+case "$SKILL" in
+  fractal)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
 # FeatureBench E2E Evaluation — Fractal Decomposition
 
 You have the fractal decomposition skill loaded.
@@ -289,10 +272,61 @@ You have the fractal decomposition skill loaded.
 ## Problem Statement
 
 PROMPT_HEADER
+    ;;
+  factory)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# FeatureBench E2E Evaluation — Factory Skill
+
+You have the factory skill loaded.
+
+## Instructions
+
+1. Read the FULL problem statement below carefully — including all Interface Descriptions.
+2. Create a spec from the problem statement, then run `/factory run` on it.
+3. All code must be written to the testbed repo (paths are relative to the repo root).
+4. After implementation, run the test suite to verify.
+
+## Problem Statement
+
+PROMPT_HEADER
+    ;;
+  baseline)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# FeatureBench E2E Evaluation — Baseline (No Skill)
+
+## Instructions
+
+1. Read the FULL problem statement below carefully — including all Interface Descriptions.
+2. Implement the feature directly. Write code to the testbed repo.
+3. After implementation, run the test suite to verify.
+
+## Problem Statement
+
+PROMPT_HEADER
+    ;;
+  *)
+    echo "  WARNING: Unknown skill '$SKILL', using generic prompt."
+    cat > "$PROMPT_FILE" << PROMPT_HEADER
+# FeatureBench E2E Evaluation — ${SKILL}
+
+## Instructions
+
+1. Read the FULL problem statement below carefully.
+2. Implement the feature. All code goes in the testbed repo.
+3. Run the test suite to verify.
+
+## Problem Statement
+
+PROMPT_HEADER
+    ;;
+esac
 
 cat "$PROBLEM_STMT" >> "$PROMPT_FILE"
 
-cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+# Skill-specific config footer
+case "$SKILL" in
+  fractal)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
 
 ## Configuration
 
@@ -303,6 +337,30 @@ Repo root: ${REPO_DIR}
 
 Follow the full orchestration protocol from SKILL.md.
 PROMPT_FOOTER
+    ;;
+  factory)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+
+## Configuration
+
+\`\`\`
+Repo root: ${REPO_DIR}
+\`\`\`
+
+Follow the full orchestration protocol from SKILL.md.
+PROMPT_FOOTER
+    ;;
+  *)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+
+## Configuration
+
+\`\`\`
+Repo root: ${REPO_DIR}
+\`\`\`
+PROMPT_FOOTER
+    ;;
+esac
 
 echo "  Agent prompt written to: $PROMPT_FILE"
 echo ""
@@ -312,11 +370,12 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Testbed:          $TESTBED_DIR"
 echo "Repo:             $REPO_DIR"
+echo "Skill:            $SKILL"
 echo "Problem statement: $(wc -c < "$PROBLEM_STMT") chars"
 echo "Agent prompt:     $PROMPT_FILE"
 echo "Venv:             ${VENV_DIR:-N/A}"
 echo ""
 echo "Next steps:"
-echo "  1. Feed the agent prompt to Claude Code with the fractal skill"
-echo "  2. Run scoring: ./score.sh ${INSTANCE_ID} --testbed-dir ${TESTBED_DIR}"
+echo "  1. Feed the agent prompt to Claude Code with the $SKILL skill"
+echo "  2. Run scoring: $(dirname "$SCRIPT_DIR")/score.sh ${INSTANCE_ID} --testbed-dir ${TESTBED_DIR}"
 echo ""

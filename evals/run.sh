@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# run.sh — Unified e2e evaluation runner for the fractal decomposition skill
+# run.sh — Unified e2e evaluation runner for Synodic skills
 #
-# Supports three benchmarks:
-#   - FeatureBench: Feature implementation in existing repos (F2P + P2P pytest)
-#   - SWE-bench:    Bug fixing in existing repos (F2P + P2P pytest)
-#   - DevBench:     Building entire projects from PRDs (build + acceptance tests)
+# Runs any benchmark task against any skill (fractal, factory, or plain baseline).
 #
 # Usage: ./run.sh <benchmark>:<alias-or-id> [options]
 #
@@ -28,6 +25,7 @@
 #   seaborn-regr        → fb:seaborn-regr
 #
 # Options:
+#   --skill <name>         Skill to invoke: fractal, factory, baseline (default: fractal)
 #   --testbed-dir <path>   Override testbed location
 #   --skip-setup           Skip testbed setup (assume already done)
 #   --skip-agent           Skip agent invocation (just score existing code)
@@ -37,12 +35,12 @@
 #   --split <split>        SWE-bench split: verified, lite, pro (default: verified)
 #
 # Examples:
-#   ./run.sh fb:mlflow-tracing                  # FeatureBench e2e
-#   ./run.sh swe:django__django-16379           # SWE-bench e2e
-#   ./run.sh swe:django__django-16379 --split pro  # SWE-bench Pro
-#   ./run.sh dev:TextCNN                        # DevBench e2e
-#   ./run.sh fb:mlflow-tracing --dry-run        # Print prompt only
-#   ./run.sh mlflow-tracing                     # Legacy alias (→ fb:mlflow-tracing)
+#   ./run.sh fb:mlflow-tracing                        # FeatureBench e2e (fractal)
+#   ./run.sh fb:seaborn-regr --skill factory          # FeatureBench e2e (factory)
+#   ./run.sh swe:django__django-16379 --split pro     # SWE-bench Pro
+#   ./run.sh dev:TextCNN                              # DevBench e2e
+#   ./run.sh fb:mlflow-tracing --skill baseline       # Plain agent (no skill)
+#   ./run.sh fb:mlflow-tracing --dry-run              # Print prompt only
 
 set -euo pipefail
 
@@ -119,6 +117,7 @@ shift
 
 read -r BENCHMARK INSTANCE_ID <<< "$(resolve_target "$RAW_TARGET")"
 
+SKILL="fractal"
 TESTBED_DIR=""
 SKIP_SETUP=false
 SKIP_AGENT=false
@@ -129,6 +128,7 @@ SWE_SPLIT="verified"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --skill) SKILL="$2"; shift 2 ;;
     --testbed-dir) TESTBED_DIR="$2"; shift 2 ;;
     --skip-setup) SKIP_SETUP=true; shift ;;
     --skip-agent) SKIP_AGENT=true; shift ;;
@@ -165,11 +165,20 @@ case "$BENCHMARK" in
   devbench)     BENCH_LABEL="DevBench" ;;
 esac
 
+SKILL_LABEL=""
+case "$SKILL" in
+  fractal)  SKILL_LABEL="Fractal Decomposition" ;;
+  factory)  SKILL_LABEL="Factory (BUILD → INSPECT)" ;;
+  baseline) SKILL_LABEL="Baseline (no skill)" ;;
+  *)        SKILL_LABEL="$SKILL" ;;
+esac
+
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║          E2E Eval — Fractal Decomposition                  ║"
+echo "║          E2E Eval — Synodic Harness                        ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Benchmark: $BENCH_LABEL"
+echo "Skill:     $SKILL_LABEL"
 echo "Instance:  $INSTANCE_ID"
 echo "Testbed:   $TESTBED_DIR"
 echo ""
@@ -179,13 +188,13 @@ if [[ "$SKIP_SETUP" == "false" ]]; then
   echo "━━━ Phase 1: Testbed Setup ━━━"
   case "$BENCHMARK" in
     featurebench)
-      "$SCRIPT_DIR/setup-testbed.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR"
+      "$SCRIPT_DIR/setup/featurebench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR" --skill "$SKILL"
       ;;
     swebench)
-      "$SCRIPT_DIR/setup-swebench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR" --split "$SWE_SPLIT"
+      "$SCRIPT_DIR/setup/swebench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR" --split "$SWE_SPLIT" --skill "$SKILL"
       ;;
     devbench)
-      "$SCRIPT_DIR/setup-devbench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR"
+      "$SCRIPT_DIR/setup/devbench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR" --skill "$SKILL"
       ;;
   esac
 else
@@ -219,6 +228,7 @@ if [[ "$SKIP_AGENT" == "false" ]]; then
   echo ""
   echo "Starting agent in testbed repo..."
   echo "  Agent command: $AGENT_CMD"
+  echo "  Skill:         $SKILL_LABEL"
   echo "  Working dir:   $REPO_DIR"
   echo "  Prompt:        $PROMPT_FILE ($(wc -c < "$PROMPT_FILE") chars)"
   echo ""

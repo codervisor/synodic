@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# setup-swebench.sh — Prepare a SWE-bench (Pro/Verified/Lite) testbed for e2e evaluation
+# swebench.sh — Prepare a SWE-bench (Pro/Verified/Lite) testbed for e2e evaluation
 #
-# Usage: ./setup-swebench.sh <instance-id> [--testbed-dir <path>] [--split <verified|lite|pro>]
+# Usage: ./swebench.sh <instance-id> [--testbed-dir <path>] [--split <verified|lite|pro>] [--skill <name>]
 #
 # This script:
 #   1. Downloads the SWE-bench task from HuggingFace
 #   2. Clones the target repo at the base commit
 #   3. Applies the test patch
 #   4. Installs dependencies
-#   5. Writes the full problem statement for the agent
+#   5. Writes the agent prompt (skill-specific)
 #
 # Prerequisites:
 #   - git, python3, pip
@@ -19,15 +19,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # --- Argument parsing ---
-INSTANCE_ID="${1:?Usage: setup-swebench.sh <instance-id> [--testbed-dir <path>] [--split <verified|lite|pro>]}"
+INSTANCE_ID="${1:?Usage: swebench.sh <instance-id> [--testbed-dir <path>] [--split <verified|lite|pro>] [--skill <name>]}"
 shift
 
 TESTBED_DIR=""
 SPLIT="verified"
+SKILL="fractal"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --testbed-dir) TESTBED_DIR="$2"; shift 2 ;;
     --split) SPLIT="$2"; shift 2 ;;
+    --skill) SKILL="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -48,6 +50,7 @@ esac
 echo "=== SWE-bench Testbed Setup ==="
 echo "Instance: $INSTANCE_ID"
 echo "Split:    $SPLIT ($HF_DATASET)"
+echo "Skill:    $SKILL"
 echo "Testbed:  $TESTBED_DIR"
 echo ""
 
@@ -101,7 +104,7 @@ if task.get('test_patch'):
     with open(f'{task_dir}/test_patch.diff', 'w') as f:
         f.write(task['test_patch'])
 
-# Save test lists — SWE-bench stores these as JSON strings
+# Save test lists
 for key in ['FAIL_TO_PASS', 'PASS_TO_PASS']:
     val = task.get(key)
     if val:
@@ -190,8 +193,6 @@ if [[ -f "setup.py" ]] || [[ -f "pyproject.toml" ]] || [[ -f "setup.cfg" ]]; the
   fi
   source "${VENV_DIR}/bin/activate"
 
-  # SWE-bench repos often need specific install procedures
-  # Try common patterns in order of preference
   if [[ -f "pyproject.toml" ]]; then
     pip install -e ".[dev,test]" 2>/dev/null || \
       pip install -e ".[dev]" 2>/dev/null || \
@@ -227,13 +228,16 @@ fi
 echo ""
 
 # --- Step 5: Write agent prompt ---
-echo "[5/5] Generating agent prompt..."
+echo "[5/5] Generating agent prompt (skill: $SKILL)..."
 
 PROMPT_FILE="${TASK_DATA_DIR}/agent_prompt.md"
 PROBLEM_STMT="${TASK_DATA_DIR}/problem_statement.txt"
 HINTS_FILE="${TASK_DATA_DIR}/hints.txt"
 
-cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# Skill-specific prompt header
+case "$SKILL" in
+  fractal)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
 # SWE-bench E2E Evaluation — Fractal Decomposition
 
 You have the fractal decomposition skill loaded.
@@ -251,6 +255,55 @@ You have the fractal decomposition skill loaded.
 ## Issue Description
 
 PROMPT_HEADER
+    ;;
+  factory)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# SWE-bench E2E Evaluation — Factory Skill
+
+You have the factory skill loaded.
+
+## Instructions
+
+1. Read the issue description below carefully.
+2. Analyze the codebase to understand the relevant code.
+3. Create a spec from the issue, then run `/factory run` on it.
+4. All code must be written to the testbed repo.
+5. After implementation, run the test suite to verify.
+
+## Issue Description
+
+PROMPT_HEADER
+    ;;
+  baseline)
+    cat > "$PROMPT_FILE" << 'PROMPT_HEADER'
+# SWE-bench E2E Evaluation — Baseline (No Skill)
+
+## Instructions
+
+1. Read the issue description below carefully.
+2. Analyze the codebase to understand the relevant code.
+3. Implement the fix directly.
+4. After implementation, run the test suite to verify.
+
+## Issue Description
+
+PROMPT_HEADER
+    ;;
+  *)
+    cat > "$PROMPT_FILE" << PROMPT_HEADER
+# SWE-bench E2E Evaluation — ${SKILL}
+
+## Instructions
+
+1. Read the issue description below carefully.
+2. Implement the fix.
+3. Run the test suite to verify.
+
+## Issue Description
+
+PROMPT_HEADER
+    ;;
+esac
 
 cat "$PROBLEM_STMT" >> "$PROMPT_FILE"
 
@@ -262,7 +315,10 @@ if [[ -f "$HINTS_FILE" ]] && [[ -s "$HINTS_FILE" ]]; then
   cat "$HINTS_FILE" >> "$PROMPT_FILE"
 fi
 
-cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+# Skill-specific config footer
+case "$SKILL" in
+  fractal)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
 
 ## Configuration
 
@@ -274,6 +330,32 @@ Benchmark: SWE-bench (${SPLIT})
 
 Follow the full orchestration protocol from SKILL.md.
 PROMPT_FOOTER
+    ;;
+  factory)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+
+## Configuration
+
+\`\`\`
+Repo root: ${REPO_DIR}
+Benchmark: SWE-bench (${SPLIT})
+\`\`\`
+
+Follow the full orchestration protocol from SKILL.md.
+PROMPT_FOOTER
+    ;;
+  *)
+    cat >> "$PROMPT_FILE" << PROMPT_FOOTER
+
+## Configuration
+
+\`\`\`
+Repo root: ${REPO_DIR}
+Benchmark: SWE-bench (${SPLIT})
+\`\`\`
+PROMPT_FOOTER
+    ;;
+esac
 
 echo "  Agent prompt written to: $PROMPT_FILE"
 echo ""
@@ -282,6 +364,7 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Benchmark:        SWE-bench ($SPLIT)"
+echo "Skill:            $SKILL"
 echo "Testbed:          $TESTBED_DIR"
 echo "Repo:             $REPO_DIR"
 echo "Problem statement: $(wc -c < "$PROBLEM_STMT") chars"
@@ -289,6 +372,6 @@ echo "Agent prompt:     $PROMPT_FILE"
 echo "Venv:             ${VENV_DIR:-N/A}"
 echo ""
 echo "Next steps:"
-echo "  1. Feed the agent prompt to Claude Code with the fractal skill"
-echo "  2. Run scoring: ./score.sh ${INSTANCE_ID} --testbed-dir ${TESTBED_DIR}"
+echo "  1. Feed the agent prompt to Claude Code with the $SKILL skill"
+echo "  2. Run scoring: $(dirname "$SCRIPT_DIR")/score.sh ${INSTANCE_ID} --testbed-dir ${TESTBED_DIR}"
 echo ""

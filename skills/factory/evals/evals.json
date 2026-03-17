@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "factory-skill-evals",
-  "description": "Behavioral evals for the factory skill",
+  "description": "Behavioral evals for the factory skill — tests skill-specific mechanics (BUILD/INSPECT pipeline, rework loops, manifest tracking, isolation)",
   "evals": [
     {
       "id": "e2e-sample-spec",
@@ -73,27 +73,6 @@
         "Each run has a unique work ID (different timestamps)",
         "Each run uses a different branch (factory/{work-id-1} vs factory/{work-id-2})",
         "Each run has its own manifest directory"
-      ]
-    },
-    {
-      "id": "featurebench-seaborn-regression",
-      "name": "FeatureBench: Seaborn Regression Plotting (5 files, 30k chars)",
-      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Medium-complexity task implementing statistical regression plotting with multiple model types. Tests BUILD implementation quality and INSPECT statistical review rigor.",
-      "prompt_file": "prompts/featurebench/seaborn-regression.md",
-      "tags": ["featurebench", "real-world", "python", "statistics"],
-      "source": {
-        "benchmark": "FeatureBench",
-        "instance_id": "mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1",
-        "dataset": "LiberCoders/FeatureBench",
-        "split": "lite"
-      },
-      "assertions": [
-        "BUILD creates regression.py with statistical computation",
-        "INSPECT reviews statistical correctness (bootstrap, CI, fitting)",
-        "INSPECT checks edge case handling (NaN, empty, singleton)",
-        "Rework items are specific and actionable if REWORK verdict",
-        "Manifest records all attempts with build/inspect details",
-        "Factory produces a branch with implementation commits"
       ]
     }
   ]

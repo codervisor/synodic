@@ -37,11 +37,14 @@ PRD → DECOMPOSE → Module specs
 ## Running
 
 ```bash
-# DevBench project (e.g., TextCNN — a text classification CNN)
-./skills/fractal/evals/e2e/run.sh dev:TextCNN
+# DevBench project with fractal decomposition
+./evals/run.sh dev:TextCNN --skill fractal
+
+# Same project with factory
+./evals/run.sh dev:TextCNN --skill factory
 
 # Dry run
-./skills/fractal/evals/e2e/run.sh dev:TextCNN --dry-run
+./evals/run.sh dev:TextCNN --dry-run
 ```
 
 ## Scoring
