@@ -25,10 +25,14 @@ Thumbs.db
 *.swo
 
 # Project
-/.factory
-!/.factory/governance.jsonl
-!/.factory/rules/
-/.fractal
-!/.fractal/governance.jsonl
 /.claude
 Cargo.lock
+
+# Harness — per-run manifests are local, governance logs are tracked
+.factory/*/
+.fractal/*/
+
+# Do NOT ignore:
+# .harness/           (governance infrastructure)
+# .harness/rules/     (crystallized rules)
+# .harness/*.governance.jsonl  (learning logs)

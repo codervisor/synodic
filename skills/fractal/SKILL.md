@@ -5,6 +5,14 @@ description: "Fractal decomposition — recursively split a complex task into or
 
 # Fractal Decomposition Skill
 
+> **Governance:** This skill implements the Harness governance protocol.
+> See [HARNESS.md](../../HARNESS.md) for the evaluation model, checkpoint protocol,
+> and feedback taxonomy. Fractal's checkpoint map:
+> - Step 2.5 DECOMPOSE GATE → Layer 1
+> - Step 3.5 SOLVE GATE → Layer 1 (or Layer 2 via solve_mode: factory)
+> - Step 4.5 REUNIFY REWORK → Layer 2
+> - Step 5 Escalate (on rework exhaustion) → Layer 3
+
 Recursively decompose a complex task into a tree of sub-specs on disk, solve each leaf via independent subagents, then reunify results bottom-up into a single coherent output.
 
 ## Why specs as intermediate medium
@@ -278,7 +286,7 @@ After each leaf's SOLVE subagent returns, apply a quality gate. The gate tier de
    - **Python** (`.py` files): `pyright` and `ruff check`
    - Only run checkers for languages that appear in the leaf's changed files.
 
-2. If `.factory/rules/` exists, run each executable rule script against the leaf's changes.
+2. If `.harness/rules/` exists, run each executable rule script against the leaf's changes.
 
 3. **If static failures:** re-solve **once** with failures as feedback.
    - Track as `static_rework_count` per leaf in the manifest.
@@ -403,7 +411,7 @@ After rework (or if no rework needed), continue bottom-up until the root is reun
 
 ### Step 5b — Persist to GovernanceLog
 
-After finalizing the manifest, append a summary record to `.fractal/governance.jsonl`. This file is **not** gitignored — it accumulates across runs and is committed to version control.
+After finalizing the manifest, append a summary record to `.harness/fractal.governance.jsonl`. This file is **not** gitignored — it accumulates across runs and is committed to version control.
 
 Each line is a JSON object:
 
@@ -451,7 +459,7 @@ After appending, commit the updated `governance.jsonl` as part of the fractal ru
 ## Important Notes
 
 - **No nested subagents.** The orchestrator (you) walks the tree level by level, spawning flat subagents at each step. The spec files on disk ARE the recursion.
-- `.fractal/` directory is gitignored — working artifacts are local only. The exception is `.fractal/governance.jsonl`, which is committed to version control.
+- `.fractal/` directory is gitignored (per-run manifests are local artifacts). Governance infrastructure lives in `.harness/` (rules, scripts, governance logs) and is committed to version control.
 - SOLVE subagents with `output_mode: code` run in `isolation: worktree` to avoid conflicts.
 - SOLVE subagents receive sibling specs as read-only context for interface alignment.
 - The decompose phase is inherently sequential (each level depends on the previous). The solve phase can be parallel.
@@ -460,7 +468,7 @@ After appending, commit the updated `governance.jsonl` as part of the fractal ru
 - **DECOMPOSE GATE** (Step 2.5) runs `scripts/decompose_gate.py` to catch structural decomposition issues (overlap, coverage gaps, budget pressure) before they propagate down the tree. Deterministic and fast — no LLM cost.
 - **SOLVE GATE** (Step 3.5) applies static checks to leaf solutions. Two tiers: lightweight (static checks only) for default mode, full Factory pipeline for `solve_mode: factory`.
 - **REUNIFY REWORK** (Step 4.5) re-solves conflicting children once when reunification fails. Bounded to 1 retry per node to prevent exponential cost in deep trees.
-- **GovernanceLog** (`.fractal/governance.jsonl`) accumulates a summary record from every fractal run, enabling cross-run pattern analysis. Shared static rules with Factory via `.factory/rules/`.
+- **GovernanceLog** (`.harness/fractal.governance.jsonl`) accumulates a summary record from every fractal run, enabling cross-run pattern analysis. Shared static rules with Factory via `.harness/rules/`.
 - All governance checkpoints are **bounded**: 1 retry at DECOMPOSE, 1 retry per leaf at SOLVE, 1 retry per node at REUNIFY. This is intentional — trees compound, and unbounded rework would be catastrophic for cost.
 
 ## Comparison with Factory Skill
@@ -471,7 +479,7 @@ After appending, commit the updated `governance.jsonl` as part of the fractal ru
 | Parallelism | Sequential stations | Parallel leaf solving |
 | Rework | INSPECT → BUILD loop (max 3) | Bounded: 1 retry at DECOMPOSE, SOLVE, REUNIFY |
 | Governance | STATIC GATE + adversarial INSPECT | DECOMPOSE GATE + SOLVE GATE + REUNIFY REWORK |
-| Learning | .factory/governance.jsonl | .fractal/governance.jsonl (shared rules) |
+| Learning | .harness/factory.governance.jsonl | .harness/fractal.governance.jsonl (shared rules) |
 | Output | PR from single implementation | Unified result from merged sub-solutions |
 | When to use | Single spec, needs review | Complex task, needs decomposition |
 
@@ -484,16 +492,16 @@ The fractal skill composes with the factory skill:
 
 ## Future: Cross-Topology Crystallization
 
-Both Factory and Fractal write to governance logs (`.factory/governance.jsonl`
-and `.fractal/governance.jsonl`). A future crystallization process can aggregate
+Both Factory and Fractal write to governance logs (`.harness/factory.governance.jsonl`
+and `.harness/fractal.governance.jsonl`). A future crystallization process can aggregate
 across BOTH logs to identify patterns that transcend execution topology:
 
 - Recurring decompose flags → improve DECOMPOSE_PROMPT heuristics or add
   static decomposition templates for known problem shapes
-- Recurring solve static failures → feed into `.factory/rules/` (shared with Factory)
+- Recurring solve static failures → feed into `.harness/rules/` (shared with Factory)
 - Recurring reunify conflicts → generate interface contract templates
   in `.fractal/templates/` that future decompositions can reference
 
-The static rules in `.factory/rules/` are shared between Factory and Fractal
+The static rules in `.harness/rules/` are shared between Factory and Fractal
 because SOLVE (Fractal) and BUILD (Factory) face the same class of structural errors.
 Crystallizing once benefits both topologies.
