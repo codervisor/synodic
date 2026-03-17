@@ -188,6 +188,79 @@
         "REUNIFY merges worktree branches without manual intervention",
         "Score report shows resolved: true"
       ]
+    },
+    {
+      "id": "swebench-pro-django-16379",
+      "name": "SWE-bench Pro: Django #16379 (multi-file bug fix)",
+      "description": "SWE-bench Pro task requiring multi-file changes in Django. Tests whether fractal decomposition helps on hard bug fixes that span 4+ files. SOTA: 23.1% (Claude Opus 4.1).",
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file"],
+      "source": {
+        "benchmark": "SWE-bench Pro",
+        "instance_id": "django__django-16379",
+        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "split": "pro"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "swe:django-16379",
+        "setup": "e2e/setup-swebench.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (bug correctly fixed)",
+        "All P2P tests pass (no regressions)",
+        "Decomposition adapts to task complexity (may detect as LEAF for simple fixes)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "swebench-verified-sample",
+      "name": "SWE-bench Verified: Control group (baseline comparison)",
+      "description": "SWE-bench Verified task as a control group. Since SOTA is 80.9%, fractal decomposition should NOT hurt performance on simpler tasks. Tests overhead tolerance — decomposition should detect simple tasks as LEAFs.",
+      "tags": ["swebench", "e2e", "code", "pytest", "control"],
+      "source": {
+        "benchmark": "SWE-bench Verified",
+        "dataset": "princeton-nlp/SWE-bench_Verified",
+        "split": "verified"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "setup": "e2e/setup-swebench.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "Simple tasks detected as LEAF (no unnecessary decomposition)",
+        "Overhead of fractal skill does not cause regressions",
+        "Score report shows resolved: true",
+        "Performance comparable to baseline (no decomposition)"
+      ]
+    },
+    {
+      "id": "devbench-project-build",
+      "name": "DevBench: Full project from PRD (build + acceptance)",
+      "description": "DevBench evaluation: build an entire project from a Product Requirements Document. This is the most natural fit for fractal decomposition — the PRD decomposes into orthogonal modules, each built in an isolated worktree, then integrated. SOTA: <40%.",
+      "tags": ["devbench", "e2e", "code", "build-from-scratch"],
+      "source": {
+        "benchmark": "DevBench",
+        "dataset": "open-compass/DevBench",
+        "split": "full"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "setup": "e2e/setup-devbench.sh",
+        "score": "e2e/score-devbench.sh",
+        "requires": ["git", "python3"]
+      },
+      "assertions": [
+        "Project builds successfully",
+        "All acceptance tests pass",
+        "Decomposition splits PRD into 3+ orthogonal modules",
+        "Each module built independently in worktree isolation",
+        "REUNIFY integrates modules into working project",
+        "Score report shows resolved: true"
+      ]
     }
   ]
 }
