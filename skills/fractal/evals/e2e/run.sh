@@ -1,52 +1,131 @@
 #!/usr/bin/env bash
-# run.sh — End-to-end FeatureBench evaluation for the fractal decomposition skill
+# run.sh — Unified e2e evaluation runner for the fractal decomposition skill
 #
-# Usage: ./run.sh <instance-id-or-alias> [options]
+# Supports three benchmarks:
+#   - FeatureBench: Feature implementation in existing repos (F2P + P2P pytest)
+#   - SWE-bench:    Bug fixing in existing repos (F2P + P2P pytest)
+#   - DevBench:     Building entire projects from PRDs (build + acceptance tests)
 #
-# Aliases:
-#   mlflow-tracing  → mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1
-#   sympy-nullspace → sympy__sympy.c1097516.test_nullspace.f14fc970.lv1
-#   seaborn-regr    → mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1
+# Usage: ./run.sh <benchmark>:<alias-or-id> [options]
+#
+# FeatureBench aliases:
+#   fb:mlflow-tracing   → mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1
+#   fb:sympy-nullspace  → sympy__sympy.c1097516.test_nullspace.f14fc970.lv1
+#   fb:seaborn-regr     → mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1
+#
+# SWE-bench aliases:
+#   swe:django-16379    → django__django-16379
+#   swe:astropy-14995   → astropy__astropy-14995
+#   swe:<instance-id>   → literal instance ID
+#
+# DevBench aliases:
+#   dev:TextCNN         → TextCNN project
+#   dev:<project-name>  → literal project name
+#
+# Legacy aliases (backward-compatible):
+#   mlflow-tracing      → fb:mlflow-tracing
+#   sympy-nullspace     → fb:sympy-nullspace
+#   seaborn-regr        → fb:seaborn-regr
 #
 # Options:
-#   --testbed-dir <path>   Override testbed location (default: /tmp/featurebench-testbed/<id>)
+#   --testbed-dir <path>   Override testbed location
 #   --skip-setup           Skip testbed setup (assume already done)
 #   --skip-agent           Skip agent invocation (just score existing code)
 #   --agent-cmd <cmd>      Command to invoke the agent (default: claude)
 #   --output <path>        Score report output path
 #   --dry-run              Print the agent prompt without running anything
+#   --split <split>        SWE-bench split: verified, lite, pro (default: verified)
 #
-# Example:
-#   ./run.sh mlflow-tracing                          # Full e2e run
-#   ./run.sh mlflow-tracing --skip-setup             # Re-run agent + score
-#   ./run.sh mlflow-tracing --skip-agent             # Just score existing code
-#   ./run.sh mlflow-tracing --dry-run                # Print the prompt
+# Examples:
+#   ./run.sh fb:mlflow-tracing                  # FeatureBench e2e
+#   ./run.sh swe:django__django-16379           # SWE-bench e2e
+#   ./run.sh swe:django__django-16379 --split pro  # SWE-bench Pro
+#   ./run.sh dev:TextCNN                        # DevBench e2e
+#   ./run.sh fb:mlflow-tracing --dry-run        # Print prompt only
+#   ./run.sh mlflow-tracing                     # Legacy alias (→ fb:mlflow-tracing)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# --- Alias resolution ---
-resolve_alias() {
-  case "$1" in
-    mlflow-tracing|mlflow)   echo "mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1" ;;
-    sympy-nullspace|sympy)   echo "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1" ;;
-    seaborn-regr|seaborn)    echo "mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1" ;;
-    *)                       echo "$1" ;;  # Treat as literal instance ID
+# --- Parse benchmark prefix and resolve aliases ---
+
+resolve_target() {
+  local raw="$1"
+  local benchmark=""
+  local instance=""
+
+  # Check for benchmark prefix (fb:, swe:, dev:)
+  if [[ "$raw" == fb:* ]]; then
+    benchmark="featurebench"
+    raw="${raw#fb:}"
+  elif [[ "$raw" == swe:* ]]; then
+    benchmark="swebench"
+    raw="${raw#swe:}"
+  elif [[ "$raw" == dev:* ]]; then
+    benchmark="devbench"
+    raw="${raw#dev:}"
+  fi
+
+  # Resolve aliases
+  case "$raw" in
+    # FeatureBench aliases
+    mlflow-tracing|mlflow)
+      benchmark="${benchmark:-featurebench}"
+      instance="mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1"
+      ;;
+    sympy-nullspace|sympy)
+      benchmark="${benchmark:-featurebench}"
+      instance="sympy__sympy.c1097516.test_nullspace.f14fc970.lv1"
+      ;;
+    seaborn-regr|seaborn)
+      benchmark="${benchmark:-featurebench}"
+      instance="mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1"
+      ;;
+    # SWE-bench common aliases
+    django-16379)
+      benchmark="${benchmark:-swebench}"
+      instance="django__django-16379"
+      ;;
+    astropy-14995)
+      benchmark="${benchmark:-swebench}"
+      instance="astropy__astropy-14995"
+      ;;
+    *)
+      instance="$raw"
+      ;;
   esac
+
+  # Auto-detect benchmark from instance ID format if not specified
+  if [[ -z "$benchmark" ]]; then
+    if [[ "$instance" == *"."*"."*"."*"."* ]]; then
+      # FeatureBench: org__repo.commit.test_module.hash.level
+      benchmark="featurebench"
+    elif [[ "$instance" == *"__"*"-"* ]]; then
+      # SWE-bench: org__repo-number
+      benchmark="swebench"
+    else
+      # Assume DevBench project name
+      benchmark="devbench"
+    fi
+  fi
+
+  echo "$benchmark $instance"
 }
 
 # --- Argument parsing ---
-RAW_ID="${1:?Usage: run.sh <instance-id-or-alias> [options]}"
+RAW_TARGET="${1:?Usage: run.sh <benchmark>:<alias-or-id> [options]}"
 shift
 
-INSTANCE_ID=$(resolve_alias "$RAW_ID")
+read -r BENCHMARK INSTANCE_ID <<< "$(resolve_target "$RAW_TARGET")"
+
 TESTBED_DIR=""
 SKIP_SETUP=false
 SKIP_AGENT=false
 AGENT_CMD="claude"
 OUTPUT_FILE=""
 DRY_RUN=false
+SWE_SPLIT="verified"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,29 +135,59 @@ while [[ $# -gt 0 ]]; do
     --agent-cmd) AGENT_CMD="$2"; shift 2 ;;
     --output) OUTPUT_FILE="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --split) SWE_SPLIT="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
+# Default testbed directory per benchmark
 if [[ -z "$TESTBED_DIR" ]]; then
-  TESTBED_DIR="/tmp/featurebench-testbed/${INSTANCE_ID}"
+  case "$BENCHMARK" in
+    featurebench) TESTBED_DIR="/tmp/featurebench-testbed/${INSTANCE_ID}" ;;
+    swebench)     TESTBED_DIR="/tmp/swebench-testbed/${INSTANCE_ID}" ;;
+    devbench)     TESTBED_DIR="/tmp/devbench-testbed/${INSTANCE_ID}" ;;
+  esac
 fi
 
-TASK_DIR="${TESTBED_DIR}/.featurebench"
+# Benchmark metadata directory
+case "$BENCHMARK" in
+  featurebench) TASK_DIR="${TESTBED_DIR}/.featurebench" ;;
+  swebench)     TASK_DIR="${TESTBED_DIR}/.swebench" ;;
+  devbench)     TASK_DIR="${TESTBED_DIR}/.devbench" ;;
+esac
 REPO_DIR="${TESTBED_DIR}/repo"
 
+# --- Header ---
+BENCH_LABEL=""
+case "$BENCHMARK" in
+  featurebench) BENCH_LABEL="FeatureBench" ;;
+  swebench)     BENCH_LABEL="SWE-bench (${SWE_SPLIT})" ;;
+  devbench)     BENCH_LABEL="DevBench" ;;
+esac
+
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║        FeatureBench E2E — Fractal Decomposition            ║"
+echo "║          E2E Eval — Fractal Decomposition                  ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Instance: $INSTANCE_ID"
-echo "Testbed:  $TESTBED_DIR"
+echo "Benchmark: $BENCH_LABEL"
+echo "Instance:  $INSTANCE_ID"
+echo "Testbed:   $TESTBED_DIR"
 echo ""
 
 # --- Phase 1: Setup ---
 if [[ "$SKIP_SETUP" == "false" ]]; then
   echo "━━━ Phase 1: Testbed Setup ━━━"
-  "$SCRIPT_DIR/setup-testbed.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR"
+  case "$BENCHMARK" in
+    featurebench)
+      "$SCRIPT_DIR/setup-testbed.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR"
+      ;;
+    swebench)
+      "$SCRIPT_DIR/setup-swebench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR" --split "$SWE_SPLIT"
+      ;;
+    devbench)
+      "$SCRIPT_DIR/setup-devbench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR"
+      ;;
+  esac
 else
   echo "━━━ Phase 1: Testbed Setup (skipped) ━━━"
   if [[ ! -d "$TASK_DIR" ]]; then
@@ -95,13 +204,13 @@ PROMPT_FILE="${TASK_DIR}/agent_prompt.md"
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "━━━ Phase 2: Agent Prompt (dry run) ━━━"
   echo ""
-  echo "--- BEGIN PROMPT ---"
+  echo "--- BEGIN PROMPT ($(wc -c < "$PROMPT_FILE") chars) ---"
   cat "$PROMPT_FILE"
   echo "--- END PROMPT ---"
   echo ""
   echo "To run manually:"
   echo "  cd $REPO_DIR"
-  echo "  $AGENT_CMD --print \"$(head -1 "$PROMPT_FILE")\""
+  echo "  cat ${PROMPT_FILE} | $AGENT_CMD --print -"
   exit 0
 fi
 
@@ -111,20 +220,12 @@ if [[ "$SKIP_AGENT" == "false" ]]; then
   echo "Starting agent in testbed repo..."
   echo "  Agent command: $AGENT_CMD"
   echo "  Working dir:   $REPO_DIR"
-  echo "  Prompt:        $PROMPT_FILE"
+  echo "  Prompt:        $PROMPT_FILE ($(wc -c < "$PROMPT_FILE") chars)"
   echo ""
 
-  # Record start time
   START_TIME=$(date +%s)
 
-  # Run the agent with the prompt
-  # The agent needs to:
-  #   1. Read the full problem statement
-  #   2. Run /fractal decompose with output_mode=code
-  #   3. Write code to the repo
   cd "$REPO_DIR"
-
-  # Use --print to pass the prompt, or pipe it
   if command -v "$AGENT_CMD" &>/dev/null; then
     "$AGENT_CMD" --print "$(cat "$PROMPT_FILE")" \
       2>&1 | tee "${TASK_DIR}/agent_output.log" || true
@@ -148,16 +249,29 @@ else
   echo "━━━ Phase 2: Agent Invocation (skipped) ━━━"
 fi
 
+echo ""
+
 # --- Phase 3: Scoring ---
 echo "━━━ Phase 3: Scoring ━━━"
 echo ""
 
-SCORE_ARGS=("$INSTANCE_ID" --testbed-dir "$TESTBED_DIR")
-if [[ -n "$OUTPUT_FILE" ]]; then
-  SCORE_ARGS+=(--output "$OUTPUT_FILE")
-fi
-
-"$SCRIPT_DIR/score.sh" "${SCORE_ARGS[@]}"
+case "$BENCHMARK" in
+  featurebench|swebench)
+    # Both use the same F2P + P2P pytest scoring
+    SCORE_ARGS=("$INSTANCE_ID" --testbed-dir "$TESTBED_DIR")
+    if [[ -n "$OUTPUT_FILE" ]]; then
+      SCORE_ARGS+=(--output "$OUTPUT_FILE")
+    fi
+    "$SCRIPT_DIR/score.sh" "${SCORE_ARGS[@]}"
+    ;;
+  devbench)
+    SCORE_ARGS=("$INSTANCE_ID" --testbed-dir "$TESTBED_DIR")
+    if [[ -n "$OUTPUT_FILE" ]]; then
+      SCORE_ARGS+=(--output "$OUTPUT_FILE")
+    fi
+    "$SCRIPT_DIR/score-devbench.sh" "${SCORE_ARGS[@]}"
+    ;;
+esac
 
 echo ""
 echo "━━━ Done ━━━"
