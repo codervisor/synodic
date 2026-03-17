@@ -1,0 +1,1 @@
+{"work_id": "harness-1773756154", "source": "harness", "timestamp": "2026-03-17T14:02:34Z", "status": "passed", "agent_command": "echo no changes", "rework_items": [], "static_failures": [], "metrics": {"attempt_count": 1, "duration_s": 0, "base_ref": "315fc084c5710efc73a5bdce5c8b0700d4305d98"}}
