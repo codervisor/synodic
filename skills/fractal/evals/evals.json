@@ -92,6 +92,48 @@
         "Merged result is internally consistent",
         "STATUS is MERGED (not CONFLICT) after resolution"
       ]
+    },
+    {
+      "id": "featurebench-mlflow-tracing",
+      "name": "FeatureBench: MLflow Tracing System (15 files, 42k chars)",
+      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Implement distributed tracing with 6 subsystems spanning 15 files. Tests orthogonal decomposition, shared type contracts, and cross-cutting concern handling.",
+      "prompt_file": "prompts/featurebench/mlflow-tracing.md",
+      "tags": ["featurebench", "real-world", "large"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "assertions": [
+        "6 top-level children with non-overlapping scopes",
+        "At least 2 children further decomposed (depth >= 2)",
+        "Shared Span/Trace types defined once, referenced across children",
+        "Thread-safety scoped to memory-management, not spread everywhere",
+        "Reunification identifies and resolves shared type interfaces",
+        "Cross-cutting concerns (error handling, backward compat) handled during reunification"
+      ]
+    },
+    {
+      "id": "featurebench-sympy-nullspace",
+      "name": "FeatureBench: SymPy Matrix Operations (18 files, 20k chars)",
+      "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Implement matrix representation system with format conversion, element access, nullspace, factorization across 18 files. Tests domain isolation and mathematical correctness.",
+      "prompt_file": "prompts/featurebench/sympy-nullspace.md",
+      "tags": ["featurebench", "real-world", "mathematical"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "assertions": [
+        "Matrix types (DDM, SDM, DFM) defined once and shared across children",
+        "Domain constraints isolated as separate sub-spec",
+        "Format conversion handles both directions",
+        "Each child has explicit scope boundaries",
+        "Reunification verifies consistent matrix type interfaces",
+        "Decomposition by mathematical concern, not by file path"
+      ]
     }
   ]
 }
