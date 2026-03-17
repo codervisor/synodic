@@ -26,5 +26,6 @@ Thumbs.db
 
 # Project
 /.factory
+/.fractal
 /.claude
 Cargo.lock

@@ -22,6 +22,13 @@ npx skills add codervisor/forge@codervisor-forge -g -y
 npx skills add codervisor/lean-spec@leanspec-sdd -g -y
 ```
 
+### Local Skills
+
+| Skill | Description | Usage |
+|-------|-------------|-------|
+| `factory` | Coding factory — transforms a spec into a reviewed PR via BUILD → INSPECT pipeline | `/factory run <spec-path>` |
+| `fractal` | Fractal decomposition — recursively splits complex tasks into sub-specs, solves leaves independently, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` |
+
 ## Conventions
 
 - **Version source of truth**: Root `package.json` — never edit versions elsewhere directly
