@@ -26,4 +26,5 @@ Thumbs.db
 
 # Project
 /.factory
+/.claude
 Cargo.lock
