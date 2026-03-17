@@ -1,0 +1,711 @@
+#!/usr/bin/env bash
+# harness — Governance wrapper for any agent command.
+#
+# Wraps any agent execution with the three-layer evaluation model:
+#   Layer 1: Static rules (deterministic, zero AI cost)
+#   Layer 2: AI judge (independent review of the diff)
+#   Layer 3: Human escalation (rework limit exhausted)
+#
+# The wrapped agent runs freely. After it finishes, the harness observes
+# the working tree, evaluates the output, and either accepts or feeds
+# structured feedback back for rework.
+#
+# The agent and skills know nothing about governance. The harness is
+# the outer loop.
+#
+# Usage:
+#   ./harness run -- <agent-command>
+#   ./harness run --max-rework 3 --workdir /path -- claude "fix the bug"
+#   ./harness run --no-l2 -- ./my-script.sh
+#   ./harness eval                          # Run evaluate_harness.py
+#   ./harness log                           # Show governance log tail
+#   ./harness rules                         # List crystallized rules
+#
+# Environment:
+#   HARNESS_DIR     Override .harness/ location (default: repo root/.harness)
+#   HARNESS_NO_L2   Skip Layer 2 AI judge (default: false)
+#   HARNESS_JUDGE   AI judge command (default: claude)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VERSION="0.2.0"
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+HARNESS_DIR="${HARNESS_DIR:-}"
+MAX_REWORK="${HARNESS_MAX_REWORK:-3}"
+WORKDIR=""
+NO_L2="${HARNESS_NO_L2:-false}"
+JUDGE_CMD="${HARNESS_JUDGE:-claude}"
+DRY_RUN=false
+QUIET=false
+JSON_OUTPUT=false
+
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
+usage() {
+  cat <<'EOF'
+harness — Governance wrapper for any agent command
+
+Usage:
+  harness run [options] -- <agent-command...>
+  harness eval [evaluate_harness.py options]
+  harness log [--json] [--tail N]
+  harness rules
+  harness version
+
+Run options:
+  --max-rework N     Max rework cycles before escalation (default: 3)
+  --workdir PATH     Working directory to observe (default: git root)
+  --no-l2            Skip Layer 2 AI judge
+  --judge CMD        AI judge command (default: claude)
+  --base-ref REF     Git base ref for diff (default: HEAD before agent runs)
+  --dry-run          Show what would happen without executing
+  --quiet            Minimal output
+  --json             Machine-readable JSON output
+
+Environment variables:
+  HARNESS_DIR        Path to .harness/ directory
+  HARNESS_NO_L2      Skip Layer 2 if "true"
+  HARNESS_JUDGE      AI judge command
+  HARNESS_MAX_REWORK Max rework cycles
+EOF
+  exit 0
+}
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+log_info() {
+  if [[ "$QUIET" != "true" ]]; then
+    echo "harness: $*" >&2
+  fi
+}
+
+log_error() {
+  echo "harness: ERROR: $*" >&2
+}
+
+timestamp_iso() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+find_repo_root() {
+  git rev-parse --show-toplevel 2>/dev/null || echo "."
+}
+
+resolve_harness_dir() {
+  if [[ -n "$HARNESS_DIR" ]]; then
+    echo "$HARNESS_DIR"
+  else
+    echo "$(find_repo_root)/.harness"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Subcommands
+# ---------------------------------------------------------------------------
+
+# --- harness eval ---
+cmd_eval() {
+  local hdir
+  hdir="$(resolve_harness_dir)"
+  exec python3 "${hdir}/scripts/evaluate_harness.py" "$hdir" "$@"
+}
+
+# --- harness log ---
+cmd_log() {
+  local hdir tail_n=20 json_flag=false
+  hdir="$(resolve_harness_dir)"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_flag=true; shift ;;
+      --tail) tail_n="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  local logs
+  logs=$(find "$hdir" -name "*.governance.jsonl" 2>/dev/null)
+  if [[ -z "$logs" ]]; then
+    echo "No governance logs found in $hdir"
+    return 0
+  fi
+
+  if [[ "$json_flag" == "true" ]]; then
+    cat $logs
+  else
+    echo "=== Governance Log (last $tail_n entries) ==="
+    cat $logs | tail -n "$tail_n" | python3 -c "
+import sys, json
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try:
+        r = json.loads(line)
+        wid = r.get('work_id', '?')
+        status = r.get('status', '?')
+        cats = [i.get('category','?') for i in r.get('rework_items', [])]
+        attempt = r.get('metrics', {}).get('attempt_count', '?')
+        ts = r.get('timestamp', '')
+        cat_str = ', '.join(cats) if cats else '(clean)'
+        print(f'  {ts}  {wid:<30} {status:<10} attempts={attempt}  {cat_str}')
+    except: pass
+" 2>/dev/null || cat $logs | tail -n "$tail_n"
+  fi
+}
+
+# --- harness rules ---
+cmd_rules() {
+  local hdir
+  hdir="$(resolve_harness_dir)"
+  local rules_dir="$hdir/rules"
+
+  if [[ ! -d "$rules_dir" ]]; then
+    echo "No rules directory at $rules_dir"
+    return 0
+  fi
+
+  local count=0
+  echo "=== Crystallized Rules ==="
+  for rule in "$rules_dir"/*; do
+    if [[ -f "$rule" ]] && [[ "$(basename "$rule")" != ".gitkeep" ]]; then
+      local name
+      name=$(basename "$rule")
+      local executable=""
+      [[ -x "$rule" ]] && executable=" (executable)"
+      echo "  $name$executable"
+      count=$((count + 1))
+    fi
+  done
+
+  if [[ $count -eq 0 ]]; then
+    echo "  (none — rules directory is empty)"
+    echo ""
+    echo "Rules are created through the crystallization process when"
+    echo "governance logs show the same issue in ≥3 independent runs."
+  fi
+  echo ""
+  echo "Rules directory: $rules_dir"
+}
+
+# --- harness version ---
+cmd_version() {
+  echo "harness $VERSION"
+}
+
+# ---------------------------------------------------------------------------
+# harness run — the core governance loop
+# ---------------------------------------------------------------------------
+cmd_run() {
+  local base_ref=""
+  local agent_cmd=()
+
+  # Parse options before --
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --max-rework) MAX_REWORK="$2"; shift 2 ;;
+      --workdir)    WORKDIR="$2"; shift 2 ;;
+      --no-l2)      NO_L2=true; shift ;;
+      --judge)      JUDGE_CMD="$2"; shift 2 ;;
+      --base-ref)   base_ref="$2"; shift 2 ;;
+      --dry-run)    DRY_RUN=true; shift ;;
+      --quiet)      QUIET=true; shift ;;
+      --json)       JSON_OUTPUT=true; shift ;;
+      --)           shift; break ;;
+      *)            log_error "Unknown option: $1 (use -- before agent command)"; exit 1 ;;
+    esac
+  done
+
+  # Everything after -- is the agent command
+  agent_cmd=("$@")
+  if [[ ${#agent_cmd[@]} -eq 0 ]]; then
+    log_error "No agent command provided. Usage: harness run -- <command>"
+    exit 1
+  fi
+
+  # Resolve paths
+  local hdir
+  hdir="$(resolve_harness_dir)"
+  if [[ -z "$WORKDIR" ]]; then
+    WORKDIR="$(find_repo_root)"
+  fi
+
+  local run_id="harness-$(date +%s)"
+  local run_dir="$hdir/.runs/$run_id"
+  mkdir -p "$run_dir"
+
+  # Snapshot the base ref (what the tree looks like before the agent runs)
+  if [[ -z "$base_ref" ]]; then
+    base_ref=$(git -C "$WORKDIR" rev-parse HEAD 2>/dev/null || echo "")
+  fi
+
+  log_info "Starting governed run: $run_id"
+  log_info "Agent command: ${agent_cmd[*]}"
+  log_info "Working directory: $WORKDIR"
+  log_info "Base ref: ${base_ref:-"(no git)"}"
+  log_info "Max rework: $MAX_REWORK"
+  log_info "Layer 2 (AI judge): $([ "$NO_L2" = true ] && echo "disabled" || echo "enabled")"
+  log_info ""
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_info "DRY RUN — would execute:"
+    log_info "  1. Run agent: ${agent_cmd[*]}"
+    log_info "  2. Observe: git diff $base_ref...HEAD"
+    log_info "  3. Layer 1: static rules from $hdir/rules/ + language checkers"
+    log_info "  4. Layer 2: AI judge via $JUDGE_CMD"
+    log_info "  5. Rework loop (up to $MAX_REWORK times)"
+    log_info "  6. Log to $hdir/harness.governance.jsonl"
+    return 0
+  fi
+
+  # --- Governance loop ---
+  local attempt=0
+  local status="running"
+  local feedback_file="$run_dir/feedback.md"
+  local all_rework_items="[]"
+  local all_static_failures="[]"
+  local start_time
+  start_time=$(date +%s)
+
+  while [[ $attempt -lt $((MAX_REWORK + 1)) ]] && [[ "$status" == "running" ]]; do
+    # If this is the last allowed attempt and we're looping, we'll escalate after eval
+    local is_last_attempt=false
+    [[ $attempt -eq $MAX_REWORK ]] && is_last_attempt=true
+    attempt=$((attempt + 1))
+    log_info "━━━ Attempt $attempt/$((MAX_REWORK + 1)) ━━━"
+
+    # --- Run the agent ---
+    log_info "Running agent..."
+    local agent_exit=0
+    local agent_log="$run_dir/agent-attempt-${attempt}.log"
+
+    if [[ -f "$feedback_file" ]] && [[ $attempt -gt 1 ]]; then
+      # Rework: feed structured feedback to the agent
+      local feedback_content
+      feedback_content=$(cat "$feedback_file")
+      log_info "Providing rework feedback ($( wc -l < "$feedback_file" ) lines)"
+
+      # Re-invoke agent with feedback appended
+      (
+        cd "$WORKDIR"
+        "${agent_cmd[@]}" <<REWORK_INPUT 2>&1 | tee "$agent_log" || true
+## Harness Governance Feedback (Rework Required)
+
+The governance layer has reviewed your previous output and found issues.
+Please address the following feedback, then make your changes.
+
+$feedback_content
+
+Re-read the original task and fix the issues above.
+REWORK_INPUT
+      ) || agent_exit=$?
+    else
+      # First attempt: run agent normally
+      (
+        cd "$WORKDIR"
+        "${agent_cmd[@]}" 2>&1 | tee "$agent_log"
+      ) || agent_exit=$?
+    fi
+
+    log_info "Agent finished (exit code: $agent_exit)"
+
+    # --- Observe: what changed? ---
+    local diff_file="$run_dir/diff-attempt-${attempt}.patch"
+    local diff_stat=""
+    local has_changes=false
+
+    if [[ -n "$base_ref" ]] && git -C "$WORKDIR" rev-parse HEAD &>/dev/null; then
+      local head_ref
+      head_ref=$(git -C "$WORKDIR" rev-parse HEAD)
+
+      if [[ "$head_ref" != "$base_ref" ]]; then
+        git -C "$WORKDIR" diff "$base_ref"..."$head_ref" > "$diff_file" 2>/dev/null || true
+        diff_stat=$(git -C "$WORKDIR" diff --stat "$base_ref"..."$head_ref" 2>/dev/null || true)
+        has_changes=true
+      else
+        # Check for unstaged/staged changes
+        git -C "$WORKDIR" diff > "$diff_file" 2>/dev/null || true
+        git -C "$WORKDIR" diff --cached >> "$diff_file" 2>/dev/null || true
+        if [[ -s "$diff_file" ]]; then
+          diff_stat=$(git -C "$WORKDIR" diff --stat 2>/dev/null || true)
+          has_changes=true
+        fi
+      fi
+    fi
+
+    if [[ "$has_changes" != "true" ]]; then
+      log_info "No changes detected. Agent may have failed silently."
+      if [[ $agent_exit -ne 0 ]]; then
+        status="error"
+        break
+      fi
+      # No changes but agent succeeded — nothing to evaluate
+      status="passed"
+      break
+    fi
+
+    log_info "Changes detected:"
+    echo "$diff_stat" | head -20 | while IFS= read -r line; do
+      log_info "  $line"
+    done
+
+    # =====================================================================
+    # Layer 1 — Static Rules (deterministic, zero AI cost)
+    # =====================================================================
+    log_info ""
+    log_info "Layer 1: Static rules..."
+
+    local l1_passed=true
+    local l1_failures="[]"
+    local l1_report="$run_dir/l1-attempt-${attempt}.json"
+
+    # Run static_gate.sh if available
+    local static_gate="$hdir/scripts/static_gate.sh"
+    if [[ -x "$static_gate" ]]; then
+      local gate_output
+      if gate_output=$("$static_gate" "$base_ref" "HEAD" 2>&1); then
+        log_info "  Static gate: PASS"
+      else
+        l1_passed=false
+        log_info "  Static gate: FAIL"
+        l1_failures=$(echo "$gate_output" | python3 -c "
+import sys, json
+try:
+    report = json.loads(sys.stdin.read())
+    print(json.dumps(report.get('failures', [])))
+except:
+    print('[]')
+" 2>/dev/null || echo "[]")
+      fi
+    else
+      log_info "  Static gate: not found (skipping)"
+    fi
+
+    # Run crystallized rules directly
+    local rules_dir="$hdir/rules"
+    if [[ -d "$rules_dir" ]]; then
+      local rule_count=0
+      for rule in "$rules_dir"/*; do
+        if [[ -x "$rule" ]] && [[ -f "$rule" ]] && [[ "$(basename "$rule")" != ".gitkeep" ]]; then
+          rule_count=$((rule_count + 1))
+          local rule_name
+          rule_name=$(basename "$rule")
+          local diff_content
+          diff_content=$(cat "$diff_file")
+
+          if echo "$diff_content" | "$rule" > /dev/null 2>&1; then
+            log_info "  Rule [$rule_name]: PASS"
+          else
+            l1_passed=false
+            local rule_output
+            rule_output=$(echo "$diff_content" | "$rule" 2>&1 | head -10 || true)
+            log_info "  Rule [$rule_name]: FAIL"
+            l1_failures=$(echo "$l1_failures" | python3 -c "
+import sys, json
+failures = json.loads(sys.stdin.read())
+failures.append({'checker': 'rule:$rule_name', 'output': '''$rule_output'''})
+print(json.dumps(failures))
+" 2>/dev/null || echo "$l1_failures")
+          fi
+        fi
+      done
+      if [[ $rule_count -gt 0 ]]; then
+        log_info "  Ran $rule_count crystallized rule(s)"
+      fi
+    fi
+
+    # Save L1 report
+    echo "{\"passed\": $l1_passed, \"failures\": $l1_failures}" > "$l1_report"
+
+    # Track static failures
+    all_static_failures=$(python3 -c "
+import json
+existing = json.loads('$all_static_failures')
+new = json.loads('$l1_failures')
+for f in new:
+    desc = f.get('checker', '') + ': ' + f.get('output', '')[:100]
+    if desc not in existing:
+        existing.append(desc)
+print(json.dumps(existing))
+" 2>/dev/null || echo "$all_static_failures")
+
+    if [[ "$l1_passed" != "true" ]]; then
+      log_info ""
+      log_info "Layer 1 REJECTED. Generating rework feedback..."
+
+      # Check if rework is exhausted at L1
+      if [[ $attempt -ge $((MAX_REWORK + 1)) ]]; then
+        log_info "Rework limit reached at Layer 1. Escalating to human."
+        status="escalated"
+        break
+      fi
+
+      # Format L1 failures as structured feedback
+      python3 -c "
+import json
+failures = json.loads('$(cat "$l1_report" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('failures',[])))")')
+lines = ['## Layer 1 (Static Rules) Failures\n']
+for f in failures:
+    checker = f.get('checker', 'unknown')
+    output = f.get('output', 'no details')
+    lines.append(f'- **{checker}**: {output}')
+lines.append('\nFix these issues before your changes can be accepted.')
+print('\n'.join(lines))
+" > "$feedback_file" 2>/dev/null
+
+      continue  # Rework
+    fi
+
+    log_info "Layer 1: PASSED"
+
+    # =====================================================================
+    # Layer 2 — AI Judge (independent review)
+    # =====================================================================
+    if [[ "$NO_L2" == "true" ]]; then
+      log_info ""
+      log_info "Layer 2: SKIPPED (--no-l2)"
+      status="passed"
+      break
+    fi
+
+    log_info ""
+    log_info "Layer 2: AI judge ($JUDGE_CMD)..."
+
+    local l2_report="$run_dir/l2-attempt-${attempt}.json"
+    local judge_output="$run_dir/judge-attempt-${attempt}.log"
+
+    # Build the judge prompt
+    local diff_content
+    diff_content=$(cat "$diff_file" | head -2000)  # Cap diff size
+    local judge_prompt
+    judge_prompt=$(cat <<JUDGE_PROMPT
+You are an independent code reviewer for the Harness governance system.
+You have NOT seen the agent's reasoning — you only see the diff.
+
+## Review the following changes
+
+\`\`\`diff
+$diff_content
+\`\`\`
+
+## Review dimensions
+
+Evaluate against these criteria:
+
+1. **Completeness** — Does the change look like it addresses a coherent goal?
+2. **Correctness** — Logic errors, bugs, off-by-one, null handling?
+3. **Security** — Injection, hardcoded secrets, unsafe operations?
+4. **Conformance** — Does the approach make sense for the codebase?
+5. **Quality** — Clean, maintainable, no dead code or debug artifacts?
+
+## Output format
+
+Respond with EXACTLY one of these two formats:
+
+If approved:
+\`\`\`
+=== VERDICT ===
+VERDICT: APPROVE
+SUMMARY: <one line>
+=== END VERDICT ===
+\`\`\`
+
+If rework needed:
+\`\`\`
+=== VERDICT ===
+VERDICT: REWORK
+ITEMS:
+- [category] specific actionable issue
+- [category] specific actionable issue
+SUMMARY: <one line>
+=== END VERDICT ===
+\`\`\`
+
+Categories must be one of: completeness, correctness, security, conformance, quality.
+Be rigorous but fair. Only flag genuine issues, not style preferences.
+JUDGE_PROMPT
+)
+
+    # Run the AI judge
+    local judge_exit=0
+    echo "$judge_prompt" | "$JUDGE_CMD" --print - > "$judge_output" 2>&1 || judge_exit=$?
+
+    if [[ $judge_exit -ne 0 ]]; then
+      log_info "  AI judge failed to run (exit $judge_exit). Accepting by default."
+      status="passed"
+      break
+    fi
+
+    # Parse the verdict
+    local verdict=""
+    local items=""
+    local summary=""
+
+    verdict=$(grep -oP 'VERDICT:\s*\K\w+' "$judge_output" | head -1 || true)
+    summary=$(grep -oP 'SUMMARY:\s*\K.*' "$judge_output" | head -1 || true)
+
+    if [[ "$verdict" == "APPROVE" ]]; then
+      log_info "  AI judge: APPROVE — $summary"
+      status="passed"
+      break
+    elif [[ "$verdict" == "REWORK" ]]; then
+      log_info "  AI judge: REWORK — $summary"
+
+      # Extract rework items
+      local rework_items
+      rework_items=$(python3 -c "
+import re, json
+with open('$judge_output') as f:
+    text = f.read()
+# Find items between ITEMS: and SUMMARY:
+m = re.search(r'ITEMS:\s*\n(.*?)(?:SUMMARY:|===)', text, re.DOTALL)
+if m:
+    items = []
+    for line in m.group(1).strip().split('\n'):
+        line = line.strip().lstrip('- ')
+        cat_m = re.match(r'\[(\w+)\]\s*(.*)', line)
+        if cat_m:
+            items.append({'category': '[' + cat_m.group(1) + ']', 'description': cat_m.group(2)})
+        elif line:
+            items.append({'category': '[quality]', 'description': line})
+    print(json.dumps(items))
+else:
+    print('[]')
+" 2>/dev/null || echo "[]")
+
+      # Accumulate rework items
+      all_rework_items=$(python3 -c "
+import json
+existing = json.loads('$all_rework_items')
+new = json.loads('$rework_items')
+existing.extend(new)
+print(json.dumps(existing))
+" 2>/dev/null || echo "$all_rework_items")
+
+      # Save as feedback for next rework cycle
+      python3 -c "
+import json
+items = json.loads('$rework_items')
+lines = ['## Layer 2 (AI Judge) Review Findings\n']
+for item in items:
+    cat = item.get('category', '[quality]')
+    desc = item.get('description', '')
+    lines.append(f'- **{cat}** {desc}')
+lines.append(f'\nSummary: $summary')
+lines.append('\nFix these issues. Your changes will be re-evaluated.')
+print('\n'.join(lines))
+" > "$feedback_file" 2>/dev/null
+
+      # Check if we've exhausted rework
+      if [[ $attempt -ge $((MAX_REWORK + 1)) ]]; then
+        log_info ""
+        log_info "Rework limit reached ($MAX_REWORK). Escalating to human."
+        status="escalated"
+      fi
+      # Otherwise loop continues
+    else
+      log_info "  AI judge: could not parse verdict. Accepting by default."
+      log_info "  (Raw output saved to $judge_output)"
+      status="passed"
+      break
+    fi
+  done
+
+  # =====================================================================
+  # Finalize — record governance log
+  # =====================================================================
+  local end_time
+  end_time=$(date +%s)
+  local duration=$((end_time - start_time))
+
+  log_info ""
+  log_info "━━━ Result ━━━"
+  log_info "Status:   $status"
+  log_info "Attempts: $attempt"
+  log_info "Duration: ${duration}s"
+  log_info "Run dir:  $run_dir"
+
+  # Write governance log entry
+  local gov_log="$hdir/harness.governance.jsonl"
+  local gov_record
+  gov_record=$(python3 -c "
+import json
+record = {
+    'work_id': '$run_id',
+    'source': 'harness',
+    'timestamp': '$(timestamp_iso)',
+    'status': '$status',
+    'agent_command': '${agent_cmd[*]}',
+    'rework_items': json.loads('$all_rework_items'),
+    'static_failures': json.loads('$all_static_failures'),
+    'metrics': {
+        'attempt_count': $attempt,
+        'duration_s': $duration,
+        'base_ref': '$base_ref'
+    }
+}
+print(json.dumps(record))
+" 2>/dev/null)
+
+  echo "$gov_record" >> "$gov_log"
+  log_info "Governance log: $gov_log"
+
+  # JSON output if requested
+  if [[ "$JSON_OUTPUT" == "true" ]]; then
+    echo "$gov_record"
+  fi
+
+  # Write run manifest
+  python3 -c "
+import json
+manifest = {
+    'run_id': '$run_id',
+    'status': '$status',
+    'attempts': $attempt,
+    'duration_s': $duration,
+    'agent_command': '${agent_cmd[*]}',
+    'base_ref': '$base_ref',
+    'rework_items': json.loads('$all_rework_items'),
+    'static_failures': json.loads('$all_static_failures'),
+    'workdir': '$WORKDIR',
+    'harness_dir': '$hdir'
+}
+with open('$run_dir/manifest.json', 'w') as f:
+    json.dump(manifest, f, indent=2)
+" 2>/dev/null
+
+  # Exit code: 0 for passed, 1 for failed/error, 2 for escalated
+  case "$status" in
+    passed)    return 0 ;;
+    escalated) return 2 ;;
+    *)         return 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+if [[ $# -eq 0 ]]; then
+  usage
+fi
+
+SUBCOMMAND="$1"
+shift
+
+case "$SUBCOMMAND" in
+  run)     cmd_run "$@" ;;
+  eval)    cmd_eval "$@" ;;
+  log)     cmd_log "$@" ;;
+  rules)   cmd_rules "$@" ;;
+  version) cmd_version ;;
+  -h|--help|help) usage ;;
+  *)
+    log_error "Unknown command: $SUBCOMMAND"
+    usage
+    ;;
+esac
