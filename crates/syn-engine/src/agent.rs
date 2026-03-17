@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
@@ -125,19 +123,46 @@ fn parse_claude_output(raw: &str) -> Result<AgentOutput> {
     })
 }
 
-/// Run a git command in the given directory.
-pub async fn git(dir: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .await
-        .with_context(|| format!("Failed to run git {:?}", args))?;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("git {:?} failed: {}", args, stderr);
+    #[test]
+    fn test_parse_valid_complete_json() {
+        let raw = r#"{"result": "done", "usage": {"input_tokens": 100, "output_tokens": 50}}"#;
+        let output = parse_claude_output(raw).unwrap();
+        assert_eq!(output.result_text, "done");
+        assert_eq!(output.tokens_used, 150);
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    #[test]
+    fn test_parse_missing_result_field() {
+        let raw = r#"{"usage": {"input_tokens": 10, "output_tokens": 5}}"#;
+        let output = parse_claude_output(raw).unwrap();
+        assert_eq!(output.result_text, "");
+        assert_eq!(output.tokens_used, 15);
+    }
+
+    #[test]
+    fn test_parse_missing_usage_field() {
+        let raw = r#"{"result": "hello"}"#;
+        let output = parse_claude_output(raw).unwrap();
+        assert_eq!(output.result_text, "hello");
+        assert_eq!(output.tokens_used, 0);
+    }
+
+    #[test]
+    fn test_parse_empty_json_object() {
+        let raw = r#"{}"#;
+        let output = parse_claude_output(raw).unwrap();
+        assert_eq!(output.result_text, "");
+        assert_eq!(output.tokens_used, 0);
+    }
+
+    #[test]
+    fn test_parse_invalid_json() {
+        let raw = "not json at all";
+        let result = parse_claude_output(raw);
+        assert!(result.is_err());
+    }
 }

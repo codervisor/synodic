@@ -1,8 +1,9 @@
 use std::path::Path;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use syn_types::{StationOutcome, StationTransition, WorkItem};
+use syn_types::{validate_transition, StationOutcome, StationTransition, WorkItem};
 
 use crate::station::process_station;
 
@@ -13,11 +14,38 @@ const MAX_REWORK: u32 = 3;
 ///
 /// Returns the final work item on success (approved), or an error on escalation/failure.
 pub async fn run_pipeline(item: &mut WorkItem, repo_root: &Path) -> Result<()> {
+    // Resume logic: inspect history to determine where to pick up.
+    if let Some(last) = item.history.last() {
+        match &last.outcome {
+            StationOutcome::Pass { next } => {
+                item.station = *next;
+            }
+            StationOutcome::Rework { back_to, feedback } => {
+                item.station = *back_to;
+                item.rework_feedback = Some(feedback.clone());
+            }
+            StationOutcome::Approved => {
+                eprintln!("Pipeline already approved, nothing to resume.");
+                return Ok(());
+            }
+            StationOutcome::Escalate { .. } => {
+                anyhow::bail!("Pipeline was previously escalated, cannot resume.");
+            }
+        }
+    }
+
     loop {
         let station_id = item.station;
-        let outcome = process_station(item, repo_root)
-            .await
+        let start = Instant::now();
+        let result = process_station(item, repo_root).await;
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let outcome = result
             .with_context(|| format!("Station {} failed", station_id))?;
+
+        // Validate the transition before recording it.
+        if let Err(msg) = validate_transition(&station_id, &outcome, item.attempt) {
+            anyhow::bail!(msg);
+        }
 
         // Record the transition.
         let transition = StationTransition {
@@ -31,6 +59,7 @@ pub async fn run_pipeline(item: &mut WorkItem, repo_root: &Path) -> Result<()> {
             outcome: outcome.clone(),
             timestamp: Utc::now(),
             tokens_used: 0, // already tracked in item.metrics
+            duration_ms,
         };
         item.history.push(transition);
 
@@ -96,4 +125,168 @@ pub async fn load_manifest(artifacts_dir: &Path) -> Result<WorkItem> {
     let item: WorkItem =
         serde_json::from_str(&json).context("Failed to parse manifest")?;
     Ok(item)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use std::path::PathBuf;
+    use syn_types::{StationId, StationOutcome, StationTransition, WorkItem, WorkMetrics};
+
+    fn make_test_item(artifacts_dir: PathBuf) -> WorkItem {
+        WorkItem {
+            id: "test-123".to_string(),
+            spec_path: PathBuf::from("specs/test"),
+            station: StationId::Build,
+            attempt: 1,
+            branch: "factory/test".to_string(),
+            artifacts_dir,
+            history: vec![],
+            started_at: Utc::now(),
+            metrics: WorkMetrics::default(),
+            rework_feedback: None,
+        }
+    }
+
+    fn make_item(history: Vec<StationTransition>, station: StationId, attempt: u32) -> WorkItem {
+        WorkItem {
+            id: "test-001".to_string(),
+            spec_path: PathBuf::from("specs/test"),
+            station,
+            attempt,
+            branch: "factory/test-001".to_string(),
+            artifacts_dir: PathBuf::from("/tmp/syn-test-artifacts"),
+            history,
+            started_at: Utc::now(),
+            metrics: WorkMetrics::default(),
+            rework_feedback: None,
+        }
+    }
+
+    fn make_transition(outcome: StationOutcome, from: StationId) -> StationTransition {
+        StationTransition {
+            from,
+            to: match &outcome {
+                StationOutcome::Pass { next } => Some(*next),
+                StationOutcome::Rework { back_to, .. } => Some(*back_to),
+                _ => None,
+            },
+            outcome,
+            timestamp: Utc::now(),
+            tokens_used: 0,
+            duration_ms: 0,
+        }
+    }
+
+    // --- manifest round-trip tests ---
+
+    #[tokio::test]
+    async fn test_save_and_load_manifest_round_trip() {
+        let temp_dir = std::env::temp_dir().join(format!("syn-engine-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let item = make_test_item(temp_dir.clone());
+        save_manifest(&item).await.unwrap();
+        let loaded = load_manifest(&temp_dir).await.unwrap();
+
+        assert_eq!(loaded.id, item.id);
+        assert_eq!(loaded.spec_path, item.spec_path);
+        assert_eq!(loaded.station, item.station);
+        assert_eq!(loaded.attempt, item.attempt);
+        assert_eq!(loaded.branch, item.branch);
+        assert_eq!(loaded.artifacts_dir, item.artifacts_dir);
+        assert_eq!(loaded.rework_feedback, item.rework_feedback);
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_load_manifest_nonexistent_path() {
+        let nonexistent = PathBuf::from("/tmp/syn-engine-nonexistent-dir-that-does-not-exist");
+        let result = load_manifest(&nonexistent).await;
+        assert!(result.is_err());
+    }
+
+    // --- idempotent resume tests ---
+
+    #[tokio::test]
+    async fn resume_empty_history_station_unchanged() {
+        let mut item = make_item(vec![], StationId::Build, 1);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err());
+        assert_eq!(item.station, StationId::Build);
+    }
+
+    #[tokio::test]
+    async fn resume_after_pass_sets_station_to_next() {
+        let history = vec![make_transition(
+            StationOutcome::Pass {
+                next: StationId::Inspect,
+            },
+            StationId::Build,
+        )];
+        let mut item = make_item(history, StationId::Build, 1);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err());
+        assert_eq!(item.station, StationId::Inspect);
+    }
+
+    #[tokio::test]
+    async fn resume_after_rework_sets_station_and_feedback() {
+        let history = vec![make_transition(
+            StationOutcome::Rework {
+                back_to: StationId::Build,
+                feedback: "fix X".to_string(),
+            },
+            StationId::Inspect,
+        )];
+        let mut item = make_item(history, StationId::Inspect, 2);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err());
+        assert_eq!(item.station, StationId::Build);
+        assert_eq!(item.rework_feedback, Some("fix X".to_string()));
+    }
+
+    #[tokio::test]
+    async fn resume_after_approved_returns_ok() {
+        let history = vec![make_transition(StationOutcome::Approved, StationId::Inspect)];
+        let mut item = make_item(history, StationId::Inspect, 1);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn resume_after_escalate_returns_err() {
+        let history = vec![make_transition(
+            StationOutcome::Escalate {
+                reason: "too many reworks".to_string(),
+            },
+            StationId::Inspect,
+        )];
+        let mut item = make_item(history, StationId::Inspect, 3);
+        let result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("previously escalated"),
+            "Expected escalation error, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn resume_after_rework_does_not_increment_attempt() {
+        let history = vec![make_transition(
+            StationOutcome::Rework {
+                back_to: StationId::Build,
+                feedback: "fix Y".to_string(),
+            },
+            StationId::Inspect,
+        )];
+        let mut item = make_item(history, StationId::Inspect, 2);
+        let _result = run_pipeline(&mut item, Path::new("/nonexistent")).await;
+        assert_eq!(item.attempt, 2);
+    }
 }
