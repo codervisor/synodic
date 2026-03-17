@@ -5,6 +5,14 @@ description: "Fractal decomposition — recursively split a complex task into or
 
 # Fractal Decomposition Skill
 
+> **Governance:** This skill implements the Harness governance protocol.
+> See [HARNESS.md](../../HARNESS.md) for the evaluation model, checkpoint protocol,
+> and feedback taxonomy. Fractal's checkpoint map:
+> - Step 2.5 DECOMPOSE GATE → Layer 1
+> - Step 3.5 SOLVE GATE → Layer 1 (or Layer 2 via solve_mode: factory)
+> - Step 4.5 REUNIFY REWORK → Layer 2
+> - Step 5 Escalate (on rework exhaustion) → Layer 3
+
 Recursively decompose a complex task into a tree of sub-specs on disk, solve each leaf via independent subagents, then reunify results bottom-up into a single coherent output.
 
 ## Why specs as intermediate medium

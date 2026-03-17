@@ -36,6 +36,12 @@ npx skills add codervisor/lean-spec@leanspec-sdd -g -y
 - **Specs first**: Create a spec before starting non-trivial work
 - **CI must pass**: All PRs require passing CI (Node + Rust checks)
 
+## Governance
+
+All agent operations in this repository are subject to the governance protocol
+defined in [HARNESS.md](./HARNESS.md). Before executing any skill, read HARNESS.md
+to understand checkpoint requirements, feedback classification, and escalation rules.
+
 ## Build & Test
 
 ```bash
