@@ -1,7 +1,7 @@
 # Eval: SWE-bench Pro — Primary Benchmark (Fractal + Factory)
 
 > **Status**: Primary benchmark for all Synodic skill evaluations.
-> See [specs/BENCHMARKS.md](../../../../specs/BENCHMARKS.md) for the full strategy.
+> See [docs/BENCHMARKS.md](../../../../docs/BENCHMARKS.md) for the full strategy.
 
 ## Source
 
@@ -129,5 +129,5 @@ but SWE-bench Pro supersedes it as the primary evaluation signal because:
 4. More diverse task types (not just feature additions)
 5. Stricter test validation
 
-See [specs/BENCHMARKS.md](../../../../specs/BENCHMARKS.md) for the full benchmark
+See [docs/BENCHMARKS.md](../../../../docs/BENCHMARKS.md) for the full benchmark
 hierarchy and evaluation priorities.

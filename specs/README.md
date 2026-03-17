@@ -21,7 +21,7 @@ Spec-driven development for Synodic. Each spec is a numbered directory containin
 
 Specs 001–043 (excluding 037) are archived. They were designed for a platform architecture
 (Rust binary, fleet execution, coordination theory) that was superseded by the skill-first
-approach. See [SCOPE-REVIEW.md](./SCOPE-REVIEW.md) for the rationale.
+approach. See [SCOPE-REVIEW.md](../docs/SCOPE-REVIEW.md) for the rationale.
 
 | Range | Category | Count |
 |-------|----------|-------|
@@ -30,9 +30,6 @@ approach. See [SCOPE-REVIEW.md](./SCOPE-REVIEW.md) for the rationale.
 | 036 | Competitive Analysis | 1 |
 | 038–043 | Factory (pre-skill versions) | 6 |
 
-## Reference Documents
+## Related Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [SCOPE-REVIEW.md](./SCOPE-REVIEW.md) | March 2026 scope review — rationale for skill-first pivot |
-| [BENCHMARKS.md](./BENCHMARKS.md) | Evaluation strategy (SWE-bench Pro, FeatureBench, DevBench) |
+See [`docs/`](../docs/) for project documentation (architectural context, evaluation strategy, etc.).

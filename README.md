@@ -48,7 +48,8 @@ synodic/
 ├── skills/
 │   ├── factory/          # BUILD → INSPECT pipeline skill
 │   └── fractal/          # Recursive decomposition skill
-├── specs/                # LeanSpec-driven design documents
+├── specs/                # Actionable requirements (LeanSpec format)
+├── docs/                 # Project documentation and guidance
 ├── .harness/             # Governance infrastructure
 ├── .lean-spec/           # LeanSpec configuration
 ├── HARNESS.md            # Governance protocol
@@ -57,7 +58,7 @@ synodic/
 
 ## Status
 
-Active development. The factory and fractal skills are functional. See [`specs/`](./specs/) for design documents and [`specs/SCOPE-REVIEW.md`](./specs/SCOPE-REVIEW.md) for architectural context.
+Active development. The factory and fractal skills are functional. See [`specs/`](./specs/) for design specifications and [`docs/`](./docs/) for project documentation.
 
 ## License
 
