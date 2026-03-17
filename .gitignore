@@ -18,6 +18,7 @@ Thumbs.db
 # Harness — per-run manifests are local, governance logs are tracked
 .factory/*/
 .fractal/*/
+.harness/.runs/
 
 # Do NOT ignore:
 # .harness/           (governance infrastructure)
