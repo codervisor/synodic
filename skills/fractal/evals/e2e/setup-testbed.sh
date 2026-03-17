@@ -6,9 +6,18 @@
 # This script:
 #   1. Downloads the FeatureBench task from HuggingFace
 #   2. Clones the target repo at the base commit
-#   3. Applies the test patch (F2P tests)
-#   4. Installs dependencies
-#   5. Writes the full problem statement to a file for the agent
+#   3. Strips the implementation (applies the gold patch to remove feature code)
+#   4. Verifies F2P tests fail and P2P tests pass (sanity check)
+#   5. Installs dependencies
+#   6. Writes the full problem statement to a file for the agent
+#
+# FeatureBench patch format:
+#   - base_commit: the commit AFTER the feature was merged (has feature + tests)
+#   - patch: a reverse diff that REMOVES the implementation code
+#   - test_patch: a reverse diff that REMOVES the test file(s)
+#   We apply `patch` to strip the implementation, leaving tests in place.
+#   We do NOT apply `test_patch` — the F2P tests must remain so they can
+#   be used to verify the agent's re-implementation.
 #
 # Prerequisites:
 #   - git, python3, pip, jq
@@ -42,7 +51,7 @@ echo "Testbed:  $TESTBED_DIR"
 echo ""
 
 # --- Step 1: Download task data from HuggingFace ---
-echo "[1/5] Downloading task data from HuggingFace..."
+echo "[1/6] Downloading task data from HuggingFace..."
 
 TASK_DATA_DIR="${TESTBED_DIR}/.featurebench"
 mkdir -p "$TASK_DATA_DIR"
@@ -94,10 +103,15 @@ with open(f'{task_dir}/task.json', 'w') as f:
 with open(f'{task_dir}/problem_statement.txt', 'w') as f:
     f.write(task['problem_statement'])
 
-# Save test patch
+# Save patches
 if task.get('test_patch'):
     with open(f'{task_dir}/test_patch.diff', 'w') as f:
         f.write(task['test_patch'])
+
+if task.get('patch'):
+    with open(f'{task_dir}/patch.diff', 'w') as f:
+        f.write(task['patch'])
+    print(f'  Gold patch: {len(task[\"patch\"])} chars')
 
 # Save test lists
 for key in ['FAIL_TO_PASS', 'PASS_TO_PASS']:
@@ -112,6 +126,7 @@ meta = {
     'base_commit': task['base_commit'],
     'environment_setup_commit': task.get('environment_setup_commit', ''),
     'problem_statement_length': len(task['problem_statement']),
+    'has_patch': bool(task.get('patch')),
     'has_test_patch': bool(task.get('test_patch')),
     'has_hints': bool(task.get('hints_text')),
 }
@@ -124,7 +139,7 @@ print('Task data saved.')
 echo ""
 
 # --- Step 2: Clone the target repo ---
-echo "[2/5] Cloning target repo..."
+echo "[2/6] Cloning target repo..."
 
 META_FILE="${TASK_DATA_DIR}/meta.json"
 REPO=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['repo'])")
@@ -147,27 +162,82 @@ fi
 echo "  Checked out at ${BASE_COMMIT:0:12}"
 echo ""
 
-# --- Step 3: Apply test patch ---
-echo "[3/5] Applying test patch (F2P tests)..."
+# --- Step 3: Strip implementation code ---
+# FeatureBench stores patches in reverse: base_commit has the feature already,
+# and `patch` removes it. We apply `patch` to create the "before" state where
+# the feature code is missing but the tests remain.
+echo "[3/6] Stripping implementation code (applying gold patch)..."
 
-TEST_PATCH="${TASK_DATA_DIR}/test_patch.diff"
-if [[ -f "$TEST_PATCH" ]] && [[ -s "$TEST_PATCH" ]]; then
+IMPL_PATCH="${TASK_DATA_DIR}/patch.diff"
+if [[ -f "$IMPL_PATCH" ]] && [[ -s "$IMPL_PATCH" ]]; then
   cd "$REPO_DIR"
-  if git apply --check "$TEST_PATCH" 2>/dev/null; then
-    git apply "$TEST_PATCH"
-    echo "  Test patch applied."
+  if git apply --check "$IMPL_PATCH" 2>/dev/null; then
+    git apply "$IMPL_PATCH"
+    echo "  Implementation stripped ($(grep -c '^diff --git' "$IMPL_PATCH") files affected)."
   else
-    echo "  WARNING: Test patch doesn't apply cleanly, trying with --3way..."
-    git apply --3way "$TEST_PATCH" || echo "  ERROR: Could not apply test patch" >&2
+    echo "  WARNING: Patch doesn't apply cleanly, trying with --3way..."
+    git apply --3way "$IMPL_PATCH" || {
+      echo "  ERROR: Could not strip implementation code." >&2
+      echo "  The gold patch failed to apply. F2P tests may pass trivially." >&2
+      exit 1
+    }
   fi
 else
-  echo "  No test patch to apply."
+  echo "  ERROR: No gold patch (patch.diff) found. Cannot create testbed." >&2
+  echo "  Without stripping the implementation, F2P tests pass trivially." >&2
+  exit 1
 fi
 
 echo ""
 
-# --- Step 4: Install dependencies ---
-echo "[4/5] Installing dependencies..."
+# --- Step 4: Sanity check — verify F2P tests fail ---
+echo "[4/6] Sanity check — verifying F2P tests fail without implementation..."
+
+F2P_FILE="${TASK_DATA_DIR}/fail_to_pass.json"
+if [[ -f "$F2P_FILE" ]]; then
+  cd "$REPO_DIR"
+  # Activate venv if already present (from a previous run)
+  VENV_DIR="${TESTBED_DIR}/venv"
+  if [[ -d "$VENV_DIR" ]]; then
+    source "${VENV_DIR}/bin/activate"
+  fi
+
+  # Extract first F2P test entry for a quick sanity check
+  FIRST_F2P=$(python3 -c "
+import json
+data = json.loads(open('${F2P_FILE}').read())
+if isinstance(data, str):
+    data = json.loads(data)
+if isinstance(data, list):
+    print(data[0])
+else:
+    print(data)
+")
+
+  if [[ -n "$FIRST_F2P" ]]; then
+    echo "  Checking: $FIRST_F2P"
+    if timeout 120 python3 -m pytest "$FIRST_F2P" --tb=line -q --no-header 2>&1 | tail -3; then
+      # If pytest exits 0, the test passed — that's BAD
+      if timeout 120 python3 -m pytest "$FIRST_F2P" --tb=no -q --no-header 2>/dev/null; then
+        echo ""
+        echo "  WARNING: F2P tests PASS without implementation!"
+        echo "  The testbed may not be set up correctly."
+        echo "  Expected: tests should FAIL before agent implements the feature."
+      else
+        echo "  OK — F2P tests fail as expected."
+      fi
+    else
+      echo "  OK — F2P tests fail as expected."
+    fi
+  fi
+else
+  echo "  No F2P test list found, skipping sanity check."
+fi
+
+echo ""
+
+# --- Step 5: Install dependencies ---
+echo "[5/6] Installing dependencies..."
 
 cd "$REPO_DIR"
 
@@ -198,8 +268,8 @@ fi
 
 echo ""
 
-# --- Step 5: Write agent prompt ---
-echo "[5/5] Generating agent prompt..."
+# --- Step 6: Write agent prompt ---
+echo "[6/6] Generating agent prompt..."
 
 PROMPT_FILE="${TASK_DATA_DIR}/agent_prompt.md"
 PROBLEM_STMT="${TASK_DATA_DIR}/problem_statement.txt"
