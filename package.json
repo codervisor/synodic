@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.6.2",
+  "scripts": {
+    "build": "cd cli && cargo build --release",
+    "dev": "cd cli && cargo build"
+  },
   "devDependencies": {
     "ajv": "^8.18.0"
   }
