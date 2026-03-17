@@ -1,0 +1,37 @@
+{
+  "instance_id": "mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1",
+  "benchmark": "FeatureBench",
+  "skill": "factory",
+  "timestamp": "2026-03-17T08:30:00Z",
+  "resolved": true,
+  "f2p": {
+    "total": 52,
+    "passed": 52,
+    "skipped": 9,
+    "failed": 0,
+    "all_pass": true,
+    "test_files": ["tests/test_regression.py"]
+  },
+  "p2p": {
+    "total": 218,
+    "passed": 218,
+    "skipped": 2,
+    "failed": 0,
+    "all_pass": true,
+    "test_files": [
+      "tests/_marks/test_bar.py",
+      "tests/test_algorithms.py",
+      "tests/test_objects.py",
+      "tests/test_base.py",
+      "tests/_stats/test_density.py"
+    ]
+  },
+  "files_modified": [
+    "seaborn/axisgrid.py",
+    "seaborn/categorical.py",
+    "seaborn/matrix.py",
+    "seaborn/regression.py",
+    "seaborn/utils.py"
+  ],
+  "notes": "52 F2P tests passed (9 skipped: statsmodels not installed). All 218 P2P tests passed with no regressions."
+}
