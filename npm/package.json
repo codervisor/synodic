@@ -1,0 +1,18 @@
+{
+  "name": "@synodic/cli",
+  "version": "0.1.0",
+  "description": "Synodic governance CLI — harness + eval",
+  "bin": {
+    "synodic": "bin/synodic"
+  },
+  "files": [
+    "bin"
+  ],
+  "optionalDependencies": {
+    "@synodic/cli-darwin-arm64": "0.1.0",
+    "@synodic/cli-darwin-x64": "0.1.0",
+    "@synodic/cli-linux-x64": "0.1.0",
+    "@synodic/cli-linux-arm64": "0.1.0"
+  },
+  "license": "MIT"
+}

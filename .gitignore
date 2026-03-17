@@ -15,6 +15,9 @@ Thumbs.db
 # Project
 /.claude
 
+# Rust
+cli/target/
+
 # Harness — per-run manifests are local, governance logs are tracked
 .factory/*/
 .fractal/*/

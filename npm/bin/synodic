@@ -1,0 +1,65 @@
+#!/usr/bin/env node
+
+"use strict";
+
+const { execFileSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+
+const PLATFORM_MAP = {
+  darwin: { arm64: "darwin-arm64", x64: "darwin-x64" },
+  linux: { arm64: "linux-arm64", x64: "linux-x64" },
+};
+
+function findBinary() {
+  const platform = PLATFORM_MAP[process.platform];
+  if (!platform) {
+    throw new Error(`Unsupported platform: ${process.platform}`);
+  }
+  const triple = platform[process.arch];
+  if (!triple) {
+    throw new Error(
+      `Unsupported architecture: ${process.platform}-${process.arch}`
+    );
+  }
+
+  // 1. Try platform-specific npm package
+  const pkgName = `@synodic/cli-${triple}`;
+  try {
+    const pkgDir = path.dirname(require.resolve(`${pkgName}/package.json`));
+    const bin = path.join(pkgDir, "synodic");
+    if (fs.existsSync(bin)) return bin;
+  } catch {
+    // Not installed — fall through
+  }
+
+  // 2. Local dev: check for cargo build output relative to this package
+  const devBin = path.resolve(__dirname, "../../cli/target/debug/synodic");
+  if (fs.existsSync(devBin)) return devBin;
+
+  // 3. Release build
+  const releaseBin = path.resolve(
+    __dirname,
+    "../../cli/target/release/synodic"
+  );
+  if (fs.existsSync(releaseBin)) return releaseBin;
+
+  throw new Error(
+    `Could not find synodic binary.\n` +
+      `  Tried: ${pkgName}, cli/target/debug/synodic, cli/target/release/synodic\n` +
+      `  Run "cargo build" in the cli/ directory for local development.`
+  );
+}
+
+try {
+  const binary = findBinary();
+  const result = execFileSync(binary, process.argv.slice(2), {
+    stdio: "inherit",
+  });
+} catch (err) {
+  if (err.status != null) {
+    process.exit(err.status);
+  }
+  console.error(err.message);
+  process.exit(1);
+}
