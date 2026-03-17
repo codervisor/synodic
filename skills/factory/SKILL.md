@@ -5,6 +5,13 @@ description: "Coding factory — transforms a spec into a reviewed PR via BUILD 
 
 # Factory Skill
 
+> **Governance:** This skill implements the Harness governance protocol.
+> See [HARNESS.md](../../HARNESS.md) for the evaluation model, checkpoint protocol,
+> and feedback taxonomy. Factory's checkpoint map:
+> - Step 2.5 STATIC GATE → Layer 1
+> - Step 3 INSPECT → Layer 2
+> - Step 6 Escalate → Layer 3
+
 Implement a spec as a reviewed PR using a two-station assembly line: BUILD (implement + test + commit) → INSPECT (adversarial review with fresh context). Rework up to 3 times if INSPECT finds issues.
 
 ## Usage
