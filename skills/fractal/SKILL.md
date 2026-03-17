@@ -175,6 +175,37 @@ After each decompose subagent returns:
 
 **Budget enforcement:** If `max_total_nodes` would be exceeded, mark the current node as a leaf regardless of the decompose verdict.
 
+### Step 2.5 — DECOMPOSE GATE
+
+After parsing a SPLIT verdict, **before** writing child spec files, validate the decomposition structurally. This does NOT require a subagent — it's a deterministic check.
+
+1. **Run the gate script.** Pipe the decomposition data to `scripts/decompose_gate.py`:
+   ```
+   echo '{"parent_spec": "<parent spec text>", "children": [{"slug": "...", "scope": "..."}], "current_depth": N, "max_depth": N, "total_nodes": N, "max_total_nodes": N}' | python3 scripts/decompose_gate.py
+   ```
+   The script returns JSON with a `flags` array. Each flag has a `category` and `description`.
+
+2. **Flag categories:**
+   - `[orthogonality]` — scope overlap between children (>30% Jaccard keyword similarity)
+   - `[coverage]` — parent requirements not covered by any child (>20% parent terms missing)
+   - `[granularity]` — splitting too fine or too coarse
+   - `[budget]` — node budget under pressure (>80% used with depth remaining)
+
+3. **If any flags raised:**
+   - Do NOT auto-reject. Append the flags to the DECOMPOSE subagent's output and re-prompt **once** with:
+
+     > The following structural concerns were detected with your decomposition:
+     > {flags}
+     > Please revise your SPLIT verdict to address these concerns,
+     > or change to LEAF if splitting is not appropriate.
+
+   - Parse the revised verdict. Accept it regardless (one retry only).
+   - Record **both** the original and revised verdicts in the manifest.
+
+4. **If no flags:** proceed normally.
+
+This gate is fast and deterministic — no LLM cost. It catches common decomposition failures (overlapping scopes, missing coverage, budget exhaustion) before they propagate down the tree.
+
 ### Step 3 — Solve (leaves, bottom-up)
 
 Process all leaf nodes. If `solve_mode` is `parallel`, spawn all leaf subagents concurrently. If `sequential`, process them in dependency order.
@@ -233,6 +264,35 @@ After each solve subagent returns:
 - Parse the SOLVE REPORT.
 - Write `result.md` in the leaf's directory with the full subagent output.
 - Update the manifest with solve status.
+- Proceed to the SOLVE GATE (Step 3.5).
+
+### Step 3.5 — SOLVE GATE
+
+After each leaf's SOLVE subagent returns, apply a quality gate. The gate tier depends on `solve_mode`:
+
+**If `solve_mode` is `parallel` or `sequential` (lightweight gate):**
+
+1. Run static checks on changed files (same checks as Factory's STATIC GATE):
+   - **Rust** (`.rs` files): `cargo check` and `cargo clippy -- -D warnings`
+   - **TypeScript/JavaScript** (`.ts`, `.tsx`, `.js`, `.jsx`): `tsc --noEmit` and `eslint`
+   - **Python** (`.py` files): `pyright` and `ruff check`
+   - Only run checkers for languages that appear in the leaf's changed files.
+
+2. If `.factory/rules/` exists, run each executable rule script against the leaf's changes.
+
+3. **If static failures:** re-solve **once** with failures as feedback.
+   - Track as `static_rework_count` per leaf in the manifest.
+   - Cap at 1 retry per leaf (trees have many leaves — keep cost bounded).
+
+4. **If pass:** proceed to reunify.
+
+**If `solve_mode` is `factory` (full governance gate):**
+
+Delegate to `/factory run` for each leaf spec. Factory's own BUILD → STATIC GATE → INSPECT pipeline provides the quality gate — no additional gate needed here. Record the Factory manifest reference (work ID) in the Fractal manifest under the leaf node.
+
+This creates two tiers of governance for SOLVE:
+- **Lightweight** (default): static checks only, fast, no AI cost
+- **Full** (`solve_mode: factory`): Factory's complete pipeline per leaf
 
 ### Step 4 — Reunify (bottom-up)
 
@@ -289,11 +349,37 @@ Agent(
 > SUMMARY: {one-paragraph summary of the merged result}
 > === END REUNIFY REPORT ===
 > ```
+>
+> Each conflict MUST be prefixed with a category tag:
+>
+> - [interface] — mismatched types, signatures, or contracts between children
+> - [boundary] — a child implemented something outside its declared scope
+> - [redundancy] — multiple children solved the same thing differently
+> - [gap] — something needed for integration was not produced by any child
 
 After each reunify subagent returns:
 - Write `result.md` in the node's directory.
 - Update the manifest.
-- Continue bottom-up until the root is reunified.
+- If STATUS is MERGED: continue bottom-up. No additional action.
+- If STATUS is CONFLICT or PARTIAL: proceed to Step 4.5 (REUNIFY REWORK).
+
+### Step 4.5 — REUNIFY REWORK
+
+When a REUNIFY subagent returns CONFLICT or PARTIAL status, attempt bounded rework:
+
+1. Parse the CONFLICTS list from the REUNIFY REPORT.
+2. Identify which child solutions are in conflict.
+3. Re-spawn SOLVE subagents for **only** the conflicting children, with:
+   - The original spec
+   - The conflict description as additional context
+   - The non-conflicting sibling results as fixed constraints
+4. After re-solve, run Step 3.5 (SOLVE GATE) on the re-solved leaves.
+5. Retry REUNIFY once with the updated child solutions.
+6. If still CONFLICT after one retry: mark this node as PARTIAL in the manifest and continue bottom-up. The parent reunification will see a PARTIAL child and can attempt resolution at its level.
+
+Track `reunify_rework_count` per node in the manifest. Maximum 1 rework per reunify node — trees compound, so keep it bounded.
+
+After rework (or if no rework needed), continue bottom-up until the root is reunified.
 
 ### Step 5 — Prune & Finalize
 
@@ -315,6 +401,46 @@ After each reunify subagent returns:
    ```
 4. Report results to the user.
 
+### Step 5b — Persist to GovernanceLog
+
+After finalizing the manifest, append a summary record to `.fractal/governance.jsonl`. This file is **not** gitignored — it accumulates across runs and is committed to version control.
+
+Each line is a JSON object:
+
+```json
+{
+  "work_id": "fractal-...",
+  "source": "fractal",
+  "timestamp": "<ISO 8601>",
+  "status": "complete|partial|failed",
+  "config": { "max_depth": 3, "split_strategy": "orthogonal", "..." : "..." },
+  "tree_metrics": {
+    "depth": 0,
+    "total_nodes": 0,
+    "leaf_nodes": 0,
+    "pruned_nodes": 0
+  },
+  "decompose_flags": [
+    {"node": "1-auth", "category": "orthogonality", "description": "..."}
+  ],
+  "solve_failures": [
+    {"leaf": "1-auth/2-sessions", "static_failures": ["type_error"], "rework_count": 1}
+  ],
+  "reunify_conflicts": [
+    {"node": "1-auth", "category": "interface", "description": "..."}
+  ],
+  "cycle_time_seconds": 0
+}
+```
+
+Fields:
+- `decompose_flags`: all flags raised by Step 2.5 across all nodes in this run.
+- `solve_failures`: all static gate failures from Step 3.5, grouped by leaf.
+- `reunify_conflicts`: all conflicts from Step 4/4.5, with category tags.
+- `tree_metrics`: final tree shape metrics from the manifest.
+
+After appending, commit the updated `governance.jsonl` as part of the fractal run.
+
 ## Parsing Rules
 
 - DECOMPOSE VERDICT is between `=== DECOMPOSE VERDICT ===` and `=== END DECOMPOSE VERDICT ===`.
@@ -325,12 +451,17 @@ After each reunify subagent returns:
 ## Important Notes
 
 - **No nested subagents.** The orchestrator (you) walks the tree level by level, spawning flat subagents at each step. The spec files on disk ARE the recursion.
-- `.fractal/` directory is gitignored — working artifacts are local only.
+- `.fractal/` directory is gitignored — working artifacts are local only. The exception is `.fractal/governance.jsonl`, which is committed to version control.
 - SOLVE subagents with `output_mode: code` run in `isolation: worktree` to avoid conflicts.
 - SOLVE subagents receive sibling specs as read-only context for interface alignment.
 - The decompose phase is inherently sequential (each level depends on the previous). The solve phase can be parallel.
 - Each fractal run is independent — concurrent runs use different work IDs.
 - Budget enforcement is strict: if `max_total_nodes` is hit, remaining nodes become forced leaves.
+- **DECOMPOSE GATE** (Step 2.5) runs `scripts/decompose_gate.py` to catch structural decomposition issues (overlap, coverage gaps, budget pressure) before they propagate down the tree. Deterministic and fast — no LLM cost.
+- **SOLVE GATE** (Step 3.5) applies static checks to leaf solutions. Two tiers: lightweight (static checks only) for default mode, full Factory pipeline for `solve_mode: factory`.
+- **REUNIFY REWORK** (Step 4.5) re-solves conflicting children once when reunification fails. Bounded to 1 retry per node to prevent exponential cost in deep trees.
+- **GovernanceLog** (`.fractal/governance.jsonl`) accumulates a summary record from every fractal run, enabling cross-run pattern analysis. Shared static rules with Factory via `.factory/rules/`.
+- All governance checkpoints are **bounded**: 1 retry at DECOMPOSE, 1 retry per leaf at SOLVE, 1 retry per node at REUNIFY. This is intentional — trees compound, and unbounded rework would be catastrophic for cost.
 
 ## Comparison with Factory Skill
 
@@ -338,7 +469,9 @@ After each reunify subagent returns:
 |--------|---------|---------|
 | Shape | Linear pipeline (BUILD → INSPECT) | Recursive tree (DECOMPOSE → SOLVE → REUNIFY) |
 | Parallelism | Sequential stations | Parallel leaf solving |
-| Rework | INSPECT → BUILD loop (max 3) | No rework — decompose correctly once |
+| Rework | INSPECT → BUILD loop (max 3) | Bounded: 1 retry at DECOMPOSE, SOLVE, REUNIFY |
+| Governance | STATIC GATE + adversarial INSPECT | DECOMPOSE GATE + SOLVE GATE + REUNIFY REWORK |
+| Learning | .factory/governance.jsonl | .fractal/governance.jsonl (shared rules) |
 | Output | PR from single implementation | Unified result from merged sub-solutions |
 | When to use | Single spec, needs review | Complex task, needs decomposition |
 
@@ -348,3 +481,19 @@ The fractal skill composes with the factory skill:
 
 - **Fractal → Factory**: Each leaf sub-spec is implemented via `/factory run` instead of a bare SOLVE subagent. This adds adversarial review to each leaf. To enable, set `solve_mode: factory` in `.fractal.yaml`.
 - **Factory → Fractal**: A factory BUILD station can invoke `/fractal decompose` if it determines the spec is too complex for a single pass.
+
+## Future: Cross-Topology Crystallization
+
+Both Factory and Fractal write to governance logs (`.factory/governance.jsonl`
+and `.fractal/governance.jsonl`). A future crystallization process can aggregate
+across BOTH logs to identify patterns that transcend execution topology:
+
+- Recurring decompose flags → improve DECOMPOSE_PROMPT heuristics or add
+  static decomposition templates for known problem shapes
+- Recurring solve static failures → feed into `.factory/rules/` (shared with Factory)
+- Recurring reunify conflicts → generate interface contract templates
+  in `.fractal/templates/` that future decompositions can reference
+
+The static rules in `.factory/rules/` are shared between Factory and Fractal
+because SOLVE (Fractal) and BUILD (Factory) face the same class of structural errors.
+Crystallizing once benefits both topologies.
