@@ -94,6 +94,56 @@
       ]
     },
     {
+      "id": "swebench-pro-scikit-learn-25747",
+      "name": "SWE-bench Pro: scikit-learn #25747 (multi-file, ML pipeline)",
+      "description": "SWE-bench Pro task requiring multi-file changes in scikit-learn. Tests fractal decomposition on ML library internals spanning estimator, validation, and pipeline modules.",
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
+      "source": {
+        "benchmark": "SWE-bench Pro",
+        "instance_id": "scikit-learn__scikit-learn-25747",
+        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "split": "pro"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "swe:scikit-learn-25747",
+        "setup": "e2e/setup-swebench.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (bug correctly fixed)",
+        "All P2P tests pass (no regressions)",
+        "Decomposition adapts to task complexity",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "swebench-pro-flask-5063",
+      "name": "SWE-bench Pro: Flask #5063 (routing + error handling)",
+      "description": "SWE-bench Pro task in Flask involving routing and error handling changes across multiple modules. Tests decomposition on web framework internals.",
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
+      "source": {
+        "benchmark": "SWE-bench Pro",
+        "instance_id": "pallets__flask-5063",
+        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "split": "pro"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "swe:flask-5063",
+        "setup": "e2e/setup-swebench.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (bug correctly fixed)",
+        "All P2P tests pass (no regressions)",
+        "Decomposition adapts to task complexity",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
       "id": "featurebench-mlflow-tracing",
       "name": "FeatureBench: MLflow Tracing System (15 files, 42k chars)",
       "description": "Real-world benchmark task from FeatureBench (ICLR 2026). Implement distributed tracing with 6 subsystems spanning 15 files. Tests orthogonal decomposition, shared type contracts, and cross-cutting concern handling.",
@@ -193,7 +243,7 @@
       "id": "swebench-pro-django-16379",
       "name": "SWE-bench Pro: Django #16379 (multi-file bug fix)",
       "description": "SWE-bench Pro task requiring multi-file changes in Django. Tests whether fractal decomposition helps on hard bug fixes that span 4+ files. SOTA: 23.1% (Claude Opus 4.1).",
-      "tags": ["swebench", "e2e", "code", "pytest", "multi-file"],
+      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
       "source": {
         "benchmark": "SWE-bench Pro",
         "instance_id": "django__django-16379",
