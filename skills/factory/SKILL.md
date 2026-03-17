@@ -89,6 +89,34 @@ After the BUILD subagent returns:
 - Record the attempt in the manifest.
 - If the subagent reported TESTS: FAIL and no commit was made, record the failure and proceed to rework (go to Step 2 with the failure as rework feedback) if attempts remain.
 
+### Step 2.5 — STATIC GATE
+
+After BUILD completes and reports a commit, run project-level checks **without spawning a subagent** — this is pure tooling:
+
+1. **Detect languages changed** by examining the files listed in the BUILD REPORT. Run only the relevant checkers:
+   - **Rust** (`.rs` files): `cargo check` and `cargo clippy -- -D warnings`
+   - **TypeScript/JavaScript** (`.ts`, `.tsx`, `.js`, `.jsx` files): `tsc --noEmit` and `eslint`
+   - **Python** (`.py` files): `pyright` and `ruff check`
+   - Only run checkers for languages that actually appear in the changed files.
+
+2. **Custom rule scripts**: If a `.factory/rules/` directory exists, run each executable script in it against the diff (`git diff main...{build-branch}`). Each script should exit 0 on pass, non-zero on failure, and print failure details to stdout.
+
+3. **Collect all failures** into a structured report.
+
+4. **If any failures**:
+   - Record them in the manifest under the current attempt as:
+     ```json
+     {"gate": "static", "passed": false, "failures": ["type_error: ...", "lint: ..."]}
+     ```
+   - Route back to Step 2 (BUILD) with the failures as rework feedback.
+   - This does **NOT** count toward the 3-attempt INSPECT limit.
+   - Track separately as `static_rework_count` in the manifest metrics.
+   - Cap static rework at **2** to prevent infinite loops. If static gate fails a third time, proceed to INSPECT anyway.
+
+5. **If all pass**:
+   - Record in the manifest: `{"gate": "static", "passed": true, "failures": []}`
+   - Proceed to Step 3 (INSPECT).
+
 ### Step 3 — INSPECT
 
 Spawn a **general-purpose subagent** (no worktree — read-only review):
@@ -139,8 +167,11 @@ Agent(
 > === INSPECT VERDICT ===
 > VERDICT: REWORK
 > ITEMS:
-> - <specific actionable rework item 1>
-> - <specific actionable rework item 2>
+> - [completeness] <specific actionable rework item>
+> - [correctness] <specific actionable rework item>
+> - [security] <specific actionable rework item>
+> - [conformance] <specific actionable rework item>
+> - [quality] <specific actionable rework item>
 > ...
 > SUMMARY: <one-line summary of key issues>
 > === END INSPECT VERDICT ===
@@ -148,6 +179,7 @@ Agent(
 >
 > Be rigorous but fair. Only request rework for genuine issues, not style preferences.
 > Each rework item must be specific and actionable — the builder must know exactly what to fix.
+> Each rework item MUST be prefixed with a category tag in square brackets matching one of the five review dimensions above (completeness, correctness, security, conformance, quality). This enables automated pattern tracking across factory runs.
 
 After the INSPECT subagent returns:
 - Parse the INSPECT VERDICT block.
@@ -204,10 +236,55 @@ After Step 5 or Step 6, update `.factory/{work-id}/manifest.json` with:
   "metrics": {
     "cycle_time_seconds": <wall-clock seconds from start to finish>,
     "total_attempts": <number>,
-    "first_pass_yield": <true if approved on attempt 1>
+    "static_rework_count": <number of times BUILD was sent back by STATIC GATE>,
+    "first_pass_yield": <true if approved on attempt 1>,
+    "rework_categories": {"completeness": <count>, "correctness": <count>, ...}
   }
 }
 ```
+
+The `rework_categories` field aggregates all rework items across all INSPECT attempts by their category tag. Only include categories that have a non-zero count.
+
+Each attempt in the `attempts` array should include:
+
+```json
+{
+  "number": <attempt number>,
+  "build": { "commit": "<sha>", "tests": "PASS|FAIL|SKIPPED", "files": [...] },
+  "static_gate": { "passed": <bool>, "failures": [...] },
+  "inspect": {
+    "verdict": "APPROVE|REWORK",
+    "items": [
+      {"category": "completeness", "description": "Missing error handler for..."},
+      {"category": "correctness", "description": "Off-by-one in pagination..."}
+    ],
+    "summary": "..."
+  }
+}
+```
+
+### Step 7b — Persist to GovernanceLog
+
+After finalizing the manifest:
+
+1. Append a summary record to `.factory/governance.jsonl`. This file is **not** gitignored — it accumulates across runs and is committed to version control.
+2. Each line is a JSON object:
+   ```json
+   {
+     "work_id": "factory-...",
+     "spec": "specs/...",
+     "timestamp": "<ISO 8601>",
+     "status": "approved|escalated",
+     "total_attempts": <N>,
+     "static_rework_count": <N>,
+     "first_pass_yield": <bool>,
+     "static_failures": ["type_error: ...", "lint: ...", ...],
+     "rework_items": [{"category": "...", "description": "..."}]
+   }
+   ```
+3. The `static_failures` field collects all unique static gate failure strings across all attempts.
+4. The `rework_items` field collects all INSPECT rework items across all attempts.
+5. After appending, commit the updated `governance.jsonl` as part of the factory run.
 
 ## Parsing Rules
 
@@ -220,5 +297,20 @@ After Step 5 or Step 6, update `.factory/{work-id}/manifest.json` with:
 - BUILD always runs in `isolation: worktree` so it has its own git branch and working tree.
 - INSPECT runs WITHOUT worktree isolation — it reviews by reading the diff, not by modifying files.
 - INSPECT must NEVER see the BUILD subagent's reasoning or conversation. It only sees the diff and the spec. This ensures adversarial independence.
-- The `.factory/` directory is gitignored — manifests are local artifacts, not committed.
+- The `.factory/` directory is gitignored — manifests are local artifacts, not committed. The exception is `.factory/governance.jsonl` and `.factory/rules/`, which are committed to version control.
 - Each factory run is independent — concurrent runs use different work IDs and branches.
+- **STATIC GATE** runs between BUILD and INSPECT to catch type errors, lint violations, and custom rule failures at zero AI cost. Static rework does not count toward the 3-attempt INSPECT limit but is capped at 2 retries.
+- **GovernanceLog** (`.factory/governance.jsonl`) accumulates a summary record from every factory run, enabling cross-run pattern analysis.
+- **Custom rules** can be added to `.factory/rules/` as executable scripts. Each script receives the diff on stdin and should exit 0 on pass, non-zero on failure.
+
+## Future: Crystallization
+
+When `.factory/governance.jsonl` accumulates enough data (target: 10+ runs),
+a crystallization process can:
+
+1. Aggregate rework_items by category across all runs.
+2. Identify high-frequency patterns (e.g., "completeness/missing-error-handler" appears in >30% of runs).
+3. Generate new static gate rules in `.factory/rules/` that catch these patterns before INSPECT.
+4. This creates a feedback loop: the more factory runs, the fewer issues reach INSPECT.
+
+This is not yet implemented — it's a hook for a future `factory-crystallize` skill or CI job.
