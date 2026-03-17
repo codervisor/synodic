@@ -134,6 +134,60 @@
         "Reunification verifies consistent matrix type interfaces",
         "Decomposition by mathematical concern, not by file path"
       ]
+    },
+    {
+      "id": "featurebench-mlflow-tracing-e2e",
+      "name": "FeatureBench E2E: MLflow Tracing (code output + pytest)",
+      "description": "End-to-end evaluation: fractal decompose with output_mode=code on the MLflow tracing task, then score via FeatureBench F2P + P2P pytest. This is the ground truth eval — design quality markers are necessary but not sufficient; only passing tests count.",
+      "prompt_file": "prompts/featurebench/mlflow-tracing-e2e.md",
+      "tags": ["featurebench", "e2e", "code", "pytest"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "mlflow__mlflow.93dab383.test_trace.17fde8b0.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "mlflow-tracing",
+        "setup": "e2e/setup-testbed.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "huggingface_hub", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (feature correctly implemented)",
+        "All P2P tests pass (no regressions introduced)",
+        "SOLVE subagents use isolation: worktree for code output",
+        "REUNIFY merges worktree branches without manual intervention",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
+      "id": "featurebench-sympy-nullspace-e2e",
+      "name": "FeatureBench E2E: SymPy Nullspace (code output + pytest)",
+      "description": "End-to-end evaluation: fractal decompose with output_mode=code on the SymPy matrix operations task, then score via FeatureBench F2P + P2P pytest.",
+      "prompt_file": "prompts/featurebench/sympy-nullspace.md",
+      "tags": ["featurebench", "e2e", "code", "pytest", "mathematical"],
+      "source": {
+        "benchmark": "FeatureBench",
+        "instance_id": "sympy__sympy.c1097516.test_nullspace.f14fc970.lv1",
+        "dataset": "LiberCoders/FeatureBench",
+        "split": "lite"
+      },
+      "e2e": {
+        "runner": "e2e/run.sh",
+        "alias": "sympy-nullspace",
+        "setup": "e2e/setup-testbed.sh",
+        "score": "e2e/score.sh",
+        "requires": ["git", "python3", "pip", "pytest", "huggingface_hub", "datasets"]
+      },
+      "assertions": [
+        "All F2P tests pass (matrix operations correctly implemented)",
+        "All P2P tests pass (no regressions in existing SymPy)",
+        "SOLVE subagents use isolation: worktree for code output",
+        "REUNIFY merges worktree branches without manual intervention",
+        "Score report shows resolved: true"
+      ]
     }
   ]
 }
