@@ -1,5 +1,8 @@
+use std::path::PathBuf;
+
 use clap::{Args, Subcommand};
 
+use crate::eval as eval_mod;
 use crate::util;
 
 #[derive(Args)]
@@ -71,6 +74,67 @@ enum EvalSubcommand {
         /// Output as JSON
         #[arg(long)]
         json: bool,
+    },
+
+    /// Run batch evaluation across task × skill matrix
+    Batch {
+        /// Comma-separated task aliases (default: all e2e tasks)
+        #[arg(long)]
+        tasks: Option<String>,
+
+        /// Comma-separated skills to compare
+        #[arg(long, default_value = "fractal,factory,baseline")]
+        skills: String,
+
+        /// Filter to one benchmark: swebench, featurebench, devbench
+        #[arg(long)]
+        benchmark: Option<String>,
+
+        /// SWE-bench split
+        #[arg(long, default_value = "pro")]
+        split: String,
+
+        /// Directory for results
+        #[arg(long)]
+        output_dir: Option<String>,
+
+        /// Agent command
+        #[arg(long, default_value = "claude")]
+        agent_cmd: String,
+
+        /// Print what would run without executing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip testbed setup
+        #[arg(long)]
+        skip_setup: bool,
+
+        /// Resume from last incomplete batch
+        #[arg(long)]
+        resume: bool,
+    },
+
+    /// Generate a report from batch eval results
+    Report {
+        /// Batch results directory
+        batch_dir: Option<String>,
+
+        /// Report across all batches
+        #[arg(long)]
+        all: bool,
+
+        /// Report from most recent batch
+        #[arg(long)]
+        latest: bool,
+
+        /// Compare two batch runs side-by-side (provide two batch names)
+        #[arg(long, num_args = 2)]
+        compare: Option<Vec<String>>,
+
+        /// Output format: table, json, csv
+        #[arg(long, default_value = "table")]
+        format: String,
     },
 }
 
@@ -145,77 +209,66 @@ impl EvalCmd {
                 util::exec_script(&script, &args)
             }
             EvalSubcommand::List { tag, json } => {
-                list_evals(&repo_root, tag.as_deref(), json)
+                eval_mod::list::list_evals(&repo_root, tag.as_deref(), json)
+            }
+            EvalSubcommand::Batch {
+                tasks,
+                skills,
+                benchmark,
+                split,
+                output_dir,
+                agent_cmd,
+                dry_run,
+                skip_setup,
+                resume,
+            } => eval_mod::batch::execute(
+                &repo_root,
+                eval_mod::batch::BatchOptions {
+                    tasks,
+                    skills,
+                    benchmark,
+                    split,
+                    output_dir,
+                    agent_cmd,
+                    dry_run,
+                    skip_setup,
+                    resume,
+                },
+            ),
+            EvalSubcommand::Report {
+                batch_dir,
+                all,
+                latest,
+                compare,
+                format,
+            } => {
+                let results_dir = repo_root.join("evals/results");
+
+                let mode = if all {
+                    eval_mod::report::ReportMode::All
+                } else if latest {
+                    eval_mod::report::ReportMode::Latest
+                } else if let Some(dirs) = compare {
+                    eval_mod::report::ReportMode::Compare(
+                        dirs[0].clone(),
+                        dirs[1].clone(),
+                    )
+                } else if let Some(dir) = batch_dir {
+                    eval_mod::report::ReportMode::Single(PathBuf::from(dir))
+                } else {
+                    anyhow::bail!(
+                        "Specify a batch directory, --latest, --all, or --compare"
+                    );
+                };
+
+                let fmt = match format.as_str() {
+                    "json" => eval_mod::report::ReportFormat::Json,
+                    "csv" => eval_mod::report::ReportFormat::Csv,
+                    _ => eval_mod::report::ReportFormat::Table,
+                };
+
+                eval_mod::report::generate(&results_dir, mode, fmt)
             }
         }
     }
-}
-
-fn list_evals(
-    repo_root: &std::path::Path,
-    tag_filter: Option<&str>,
-    json_output: bool,
-) -> anyhow::Result<()> {
-    let evals_path = repo_root.join("evals/evals.json");
-    if !evals_path.exists() {
-        anyhow::bail!("evals/evals.json not found at {}", evals_path.display());
-    }
-
-    let content = std::fs::read_to_string(&evals_path)?;
-    let registry: serde_json::Value = serde_json::from_str(&content)?;
-
-    let evals = registry
-        .get("evals")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| anyhow::anyhow!("invalid evals.json: missing 'evals' array"))?;
-
-    let filtered: Vec<&serde_json::Value> = evals
-        .iter()
-        .filter(|e| {
-            if let Some(tag) = tag_filter {
-                e.get("tags")
-                    .and_then(|t| t.as_array())
-                    .map(|tags| tags.iter().any(|t| t.as_str() == Some(tag)))
-                    .unwrap_or(false)
-            } else {
-                true
-            }
-        })
-        .collect();
-
-    if json_output {
-        println!("{}", serde_json::to_string_pretty(&filtered)?);
-        return Ok(());
-    }
-
-    if filtered.is_empty() {
-        println!("No evals found.");
-        return Ok(());
-    }
-
-    // Table header
-    println!(
-        "{:<40} {:<12} {:<20}",
-        "ID", "BENCHMARK", "ALIAS"
-    );
-    println!("{}", "-".repeat(72));
-
-    for eval in &filtered {
-        let id = eval.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-        let benchmark = eval
-            .get("source")
-            .and_then(|s| s.get("benchmark"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("?");
-        let alias = eval
-            .get("e2e")
-            .and_then(|e| e.get("alias"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("-");
-
-        println!("{:<40} {:<12} {:<20}", id, benchmark, alias);
-    }
-
-    println!("\n{} eval(s) found.", filtered.len());
-    Ok(())
 }

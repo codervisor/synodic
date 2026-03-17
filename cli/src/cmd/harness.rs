@@ -1,5 +1,6 @@
 use clap::{Args, Subcommand};
 
+use crate::harness;
 use crate::util;
 
 #[derive(Args)]
@@ -63,8 +64,8 @@ enum HarnessSubcommand {
         json: bool,
 
         /// Show last N entries
-        #[arg(long)]
-        tail: Option<u32>,
+        #[arg(long, default_value = "20")]
+        tail: usize,
     },
 
     /// List crystallized rules
@@ -73,18 +74,6 @@ enum HarnessSubcommand {
 
 impl HarnessCmd {
     pub fn run(self) -> anyhow::Result<()> {
-        let repo_root = util::find_repo_root()?;
-        let harness_script = repo_root.join("harness");
-
-        if !harness_script.exists() {
-            anyhow::bail!(
-                "harness script not found at {}",
-                harness_script.display()
-            );
-        }
-
-        let mut args: Vec<String> = Vec::new();
-
         match self.command {
             HarnessSubcommand::Run {
                 max_rework,
@@ -97,53 +86,60 @@ impl HarnessCmd {
                 json,
                 agent_cmd,
             } => {
-                args.push("run".into());
-                args.push("--max-rework".into());
-                args.push(max_rework.to_string());
-                if let Some(dir) = workdir {
-                    args.push("--workdir".into());
-                    args.push(dir);
-                }
-                if no_l2 {
-                    args.push("--no-l2".into());
-                }
-                args.push("--judge".into());
-                args.push(judge);
-                if let Some(r) = base_ref {
-                    args.push("--base-ref".into());
-                    args.push(r);
-                }
-                if dry_run {
-                    args.push("--dry-run".into());
-                }
-                if quiet {
-                    args.push("--quiet".into());
-                }
-                if json {
-                    args.push("--json".into());
-                }
-                args.push("--".into());
-                args.extend(agent_cmd);
+                harness::run::execute(harness::run::RunConfig {
+                    max_rework,
+                    workdir,
+                    no_l2,
+                    judge,
+                    base_ref,
+                    dry_run,
+                    quiet,
+                    json_output: json,
+                    agent_cmd,
+                })
             }
-            HarnessSubcommand::Eval { args: extra } => {
-                args.push("eval".into());
-                args.extend(extra);
+            HarnessSubcommand::Eval { args } => {
+                // Delegate to evaluate_harness.py
+                let repo_root = util::find_repo_root()?;
+                let harness_dir = resolve_harness_dir(&repo_root)?;
+                let script = harness_dir.join("scripts/evaluate_harness.py");
+                if !script.exists() {
+                    anyhow::bail!(
+                        "evaluate_harness.py not found at {}",
+                        script.display()
+                    );
+                }
+                let mut cmd_args = vec![
+                    script.display().to_string(),
+                    harness_dir.display().to_string(),
+                ];
+                cmd_args.extend(args);
+                util::exec_script(std::path::Path::new("python3"), &cmd_args)
             }
             HarnessSubcommand::Log { json, tail } => {
-                args.push("log".into());
-                if json {
-                    args.push("--json".into());
-                }
-                if let Some(n) = tail {
-                    args.push("--tail".into());
-                    args.push(n.to_string());
-                }
+                let repo_root = util::find_repo_root()?;
+                let harness_dir = resolve_harness_dir(&repo_root)?;
+                harness::log::display(&harness_dir, json, tail)
             }
             HarnessSubcommand::Rules => {
-                args.push("rules".into());
+                let repo_root = util::find_repo_root()?;
+                let harness_dir = resolve_harness_dir(&repo_root)?;
+                harness::rules::list(&harness_dir)
             }
         }
-
-        util::exec_script(&harness_script, &args)
     }
+}
+
+fn resolve_harness_dir(repo_root: &std::path::Path) -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(dir) = std::env::var("HARNESS_DIR") {
+        let p = std::path::PathBuf::from(dir);
+        if p.is_dir() {
+            return Ok(p);
+        }
+    }
+    let hdir = repo_root.join(".harness");
+    if !hdir.is_dir() {
+        anyhow::bail!(".harness/ directory not found at {}", hdir.display());
+    }
+    Ok(hdir)
 }
