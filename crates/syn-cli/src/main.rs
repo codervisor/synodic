@@ -7,6 +7,8 @@ use syn_engine::conveyor::{load_manifest, save_manifest};
 use syn_engine::metrics::print_summary;
 use syn_types::{StationId, WorkItem, WorkMetrics};
 
+mod init;
+
 #[derive(Parser)]
 #[command(name = "synodic", version, about = "AI-native agent orchestration — Factory MVP")]
 struct Cli {
@@ -26,6 +28,23 @@ enum Commands {
         /// Work item ID (e.g., work-001)
         work_id: String,
     },
+    /// Initialize Harness governance infrastructure in a project
+    Init {
+        /// Target directory (default: current directory)
+        path: Option<PathBuf>,
+
+        /// Topologies to set up governance logs for (comma-separated)
+        #[arg(long, default_value = "factory,fractal")]
+        topology: String,
+
+        /// Custom rules directory path
+        #[arg(long, default_value = ".harness/rules")]
+        rules_dir: String,
+
+        /// Overwrite existing files
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[tokio::main]
@@ -35,6 +54,15 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Run { spec_path } => cmd_run(spec_path).await,
         Commands::Status { work_id } => cmd_status(work_id).await,
+        Commands::Init {
+            path,
+            topology,
+            rules_dir,
+            force,
+        } => {
+            let target = path.unwrap_or_else(|| std::env::current_dir().unwrap());
+            init::cmd_init(&target, &topology, &rules_dir, force).await
+        }
     }
 }
 

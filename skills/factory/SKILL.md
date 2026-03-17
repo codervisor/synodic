@@ -5,6 +5,13 @@ description: "Coding factory — transforms a spec into a reviewed PR via BUILD 
 
 # Factory Skill
 
+> **Governance:** This skill implements the Harness governance protocol.
+> See [HARNESS.md](../../HARNESS.md) for the evaluation model, checkpoint protocol,
+> and feedback taxonomy. Factory's checkpoint map:
+> - Step 2.5 STATIC GATE → Layer 1
+> - Step 3 INSPECT → Layer 2
+> - Step 6 Escalate → Layer 3
+
 Implement a spec as a reviewed PR using a two-station assembly line: BUILD (implement + test + commit) → INSPECT (adversarial review with fresh context). Rework up to 3 times if INSPECT finds issues.
 
 ## Usage
@@ -99,7 +106,7 @@ After BUILD completes and reports a commit, run project-level checks **without s
    - **Python** (`.py` files): `pyright` and `ruff check`
    - Only run checkers for languages that actually appear in the changed files.
 
-2. **Custom rule scripts**: If a `.factory/rules/` directory exists, run each executable script in it against the diff (`git diff main...{build-branch}`). Each script should exit 0 on pass, non-zero on failure, and print failure details to stdout.
+2. **Custom rule scripts**: If a `.harness/rules/` directory exists, run each executable script in it against the diff (`git diff main...{build-branch}`). Each script should exit 0 on pass, non-zero on failure, and print failure details to stdout.
 
 3. **Collect all failures** into a structured report.
 
@@ -267,7 +274,7 @@ Each attempt in the `attempts` array should include:
 
 After finalizing the manifest:
 
-1. Append a summary record to `.factory/governance.jsonl`. This file is **not** gitignored — it accumulates across runs and is committed to version control.
+1. Append a summary record to `.harness/factory.governance.jsonl` (or `.factory/governance.jsonl` as fallback). This file is **not** gitignored — it accumulates across runs and is committed to version control.
 2. Each line is a JSON object:
    ```json
    {
@@ -297,20 +304,20 @@ After finalizing the manifest:
 - BUILD always runs in `isolation: worktree` so it has its own git branch and working tree.
 - INSPECT runs WITHOUT worktree isolation — it reviews by reading the diff, not by modifying files.
 - INSPECT must NEVER see the BUILD subagent's reasoning or conversation. It only sees the diff and the spec. This ensures adversarial independence.
-- The `.factory/` directory is gitignored — manifests are local artifacts, not committed. The exception is `.factory/governance.jsonl` and `.factory/rules/`, which are committed to version control.
+- The `.factory/` directory is gitignored (per-run manifests are local artifacts). Governance infrastructure lives in `.harness/` (rules, scripts, governance logs) and is committed to version control.
 - Each factory run is independent — concurrent runs use different work IDs and branches.
 - **STATIC GATE** runs between BUILD and INSPECT to catch type errors, lint violations, and custom rule failures at zero AI cost. Static rework does not count toward the 3-attempt INSPECT limit but is capped at 2 retries.
-- **GovernanceLog** (`.factory/governance.jsonl`) accumulates a summary record from every factory run, enabling cross-run pattern analysis.
-- **Custom rules** can be added to `.factory/rules/` as executable scripts. Each script receives the diff on stdin and should exit 0 on pass, non-zero on failure.
+- **GovernanceLog** (`.harness/factory.governance.jsonl`) accumulates a summary record from every factory run, enabling cross-run pattern analysis.
+- **Custom rules** can be added to `.harness/rules/` as executable scripts. Each script receives the diff on stdin and should exit 0 on pass, non-zero on failure.
 
 ## Future: Crystallization
 
-When `.factory/governance.jsonl` accumulates enough data (target: 10+ runs),
+When `.harness/factory.governance.jsonl` accumulates enough data (target: 10+ runs),
 a crystallization process can:
 
 1. Aggregate rework_items by category across all runs.
 2. Identify high-frequency patterns (e.g., "completeness/missing-error-handler" appears in >30% of runs).
-3. Generate new static gate rules in `.factory/rules/` that catch these patterns before INSPECT.
+3. Generate new static gate rules in `.harness/rules/` that catch these patterns before INSPECT.
 4. This creates a feedback loop: the more factory runs, the fewer issues reach INSPECT.
 
 This is not yet implemented — it's a hook for a future `factory-crystallize` skill or CI job.
