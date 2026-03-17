@@ -219,9 +219,9 @@ The existing `coordination-model` skill (in spec 017) can remain as a standalone
 skill if its concepts prove useful — but it's not a prerequisite for the factory
 skill.
 
-### DELETE (Dead infrastructure)
+### DELETED (Dead infrastructure — removed March 2026)
 
-With the skill-first approach, the following become unnecessary:
+The following were removed as part of the skill-first pivot:
 
 | Path | Why |
 |------|-----|
@@ -231,9 +231,11 @@ With the skill-first approach, the following become unnecessary:
 | `.github/workflows/publish.yml` | Binary publishing pipeline |
 | `publish.config.ts` | Forge publishing config |
 | `Cargo.toml`, `Cargo.lock` | Rust workspace |
+| `turbo.json`, `pnpm-workspace.yaml` | Build orchestration for removed packages |
+| `specs/harness-integration/` | One-time implementation prompts (not LeanSpec) |
+| `specs/harness-spec/` | Empty stub |
 
-**Keep:** `.github/workflows/ci.yml` (adapt for skill validation), `.lean-spec/`,
-`AGENTS.md`, `package.json` (simplify).
+**Kept and simplified:** `.github/workflows/ci.yml`, `.lean-spec/`, `AGENTS.md`, `package.json`.
 
 ---
 

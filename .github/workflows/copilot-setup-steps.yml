@@ -1,9 +1,8 @@
 name: "Copilot Setup Steps"
 
-# Disabled
 on:
   repository_dispatch:
-    types: [disabled]
+    types: [copilot-setup]
 
 jobs:
   copilot-setup-steps:
@@ -18,12 +17,5 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-      - name: Install Node dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build project
-        run: pnpm build

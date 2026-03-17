@@ -221,13 +221,12 @@ normal PR process but MUST still bump the version.
 
 ## §11 — Template and Portability
 
-This document is designed to be portable across projects. The Synodic CLI provides
-`synodic init` to scaffold a Harness-governed project (see CLI documentation).
+This document is designed to be portable across projects.
 
 When adopting HARNESS.md in a new project:
 
 1. Copy this file to the project root.
-2. Run `synodic init` to generate the directory structure and helper scripts.
+2. Create `.harness/` with `rules/`, `scripts/`, and `templates/` subdirectories.
 3. Customize §5 taxonomy if the project's domain requires additional categories.
 4. Existing categories MUST NOT be redefined — only extended.
 5. Update `AGENTS.md` (or equivalent) to reference HARNESS.md.
