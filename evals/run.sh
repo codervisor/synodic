@@ -19,6 +19,10 @@
 #   dev:TextCNN         → TextCNN project
 #   dev:<project-name>  → literal project name
 #
+# Synodic dogfood aliases:
+#   syn:dogfood-syn-support  → Add syn: benchmark type to Synodic CLI
+#   syn:<alias>              → literal synodic instance alias
+#
 # Legacy aliases (backward-compatible):
 #   mlflow-tracing      → fb:mlflow-tracing
 #   sympy-nullspace     → fb:sympy-nullspace
@@ -63,6 +67,9 @@ resolve_target() {
   elif [[ "$raw" == dev:* ]]; then
     benchmark="devbench"
     raw="${raw#dev:}"
+  elif [[ "$raw" == syn:* ]]; then
+    benchmark="synodic"
+    raw="${raw#syn:}"
   fi
 
   # Resolve aliases
@@ -158,6 +165,7 @@ if [[ -z "$TESTBED_DIR" ]]; then
     featurebench) TESTBED_DIR="/tmp/featurebench-testbed/${INSTANCE_ID}" ;;
     swebench)     TESTBED_DIR="/tmp/swebench-testbed/${INSTANCE_ID}" ;;
     devbench)     TESTBED_DIR="/tmp/devbench-testbed/${INSTANCE_ID}" ;;
+    synodic)      TESTBED_DIR="/tmp/synodic-testbed/${INSTANCE_ID}" ;;
   esac
 fi
 
@@ -166,6 +174,7 @@ case "$BENCHMARK" in
   featurebench) TASK_DIR="${TESTBED_DIR}/.featurebench" ;;
   swebench)     TASK_DIR="${TESTBED_DIR}/.swebench" ;;
   devbench)     TASK_DIR="${TESTBED_DIR}/.devbench" ;;
+  synodic)      TASK_DIR="${TESTBED_DIR}/.synodic" ;;
 esac
 REPO_DIR="${TESTBED_DIR}/repo"
 
@@ -175,6 +184,7 @@ case "$BENCHMARK" in
   featurebench) BENCH_LABEL="FeatureBench" ;;
   swebench)     BENCH_LABEL="SWE-bench (${SWE_SPLIT})" ;;
   devbench)     BENCH_LABEL="DevBench" ;;
+  synodic)      BENCH_LABEL="Synodic (dogfood)" ;;
 esac
 
 SKILL_LABEL=""
@@ -207,6 +217,9 @@ if [[ "$SKIP_SETUP" == "false" ]]; then
       ;;
     devbench)
       "$SCRIPT_DIR/setup/devbench.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR" --skill "$SKILL"
+      ;;
+    synodic)
+      "$SCRIPT_DIR/setup/synodic.sh" "$INSTANCE_ID" --testbed-dir "$TESTBED_DIR" --skill "$SKILL"
       ;;
   esac
 else
@@ -293,6 +306,13 @@ case "$BENCHMARK" in
       SCORE_ARGS+=(--output "$OUTPUT_FILE")
     fi
     "$SCRIPT_DIR/score-devbench.sh" "${SCORE_ARGS[@]}"
+    ;;
+  synodic)
+    SCORE_ARGS=("$INSTANCE_ID" --testbed-dir "$TESTBED_DIR")
+    if [[ -n "$OUTPUT_FILE" ]]; then
+      SCORE_ARGS+=(--output "$OUTPUT_FILE")
+    fi
+    "$SCRIPT_DIR/score-synodic.sh" "${SCORE_ARGS[@]}"
     ;;
 esac
 
