@@ -1,10 +1,48 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
+use std::time::Duration;
 use anyhow::{Context, Result};
+
+const TEST_TIMEOUT: Duration = Duration::from_secs(600);
 
 use super::parser;
 use super::{TestResult, TestStatus};
+
+/// Run a command with a timeout, returning its output or an error string.
+///
+/// On timeout, kills the child process and returns an error describing the timeout.
+/// On spawn/IO failure, returns the underlying error message.
+fn run_with_timeout(cmd: &mut Command) -> Result<std::process::Output, String> {
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn process: {}", e))?;
+
+    let timeout = TEST_TIMEOUT;
+    let start = std::time::Instant::now();
+    let poll_interval = Duration::from_millis(250);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                // Process finished — collect output
+                return child.wait_with_output()
+                    .map_err(|e| format!("Failed to collect output: {}", e));
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("Timeout ({}s)", timeout.as_secs()));
+                }
+                std::thread::sleep(poll_interval);
+            }
+            Err(e) => return Err(format!("Failed waiting for process: {}", e)),
+        }
+    }
+}
 
 /// Detect how to run Django tests for this repo.
 ///
@@ -121,10 +159,11 @@ pub fn run_django_tests(
         let mut cmd_args = base_cmd.clone();
         cmd_args.push(module_class.clone());
 
-        let output = Command::new(&cmd_args[0])
-            .args(&cmd_args[1..])
-            .current_dir(&repo_dir)
-            .output();
+        let output = run_with_timeout(
+            Command::new(&cmd_args[0])
+                .args(&cmd_args[1..])
+                .current_dir(&repo_dir),
+        );
 
         match output {
             Ok(output) => {
@@ -155,7 +194,7 @@ pub fn run_django_tests(
                             });
                         } else {
                             let reason = if stderr.len() > 200 {
-                                stderr[stderr.len() - 200..].to_string()
+                                stderr.chars().rev().take(200).collect::<String>().chars().rev().collect()
                             } else if !stderr.is_empty() {
                                 stderr.to_string()
                             } else {
@@ -170,13 +209,12 @@ pub fn run_django_tests(
                     }
                 }
             }
-            Err(_) => {
-                // Timeout or execution failure
+            Err(err) => {
                 for name in test_names {
                     all_results.push(TestResult {
                         name: format!("{} ({})", name, module_class),
                         status: TestStatus::Error,
-                        reason: Some("Execution failed".into()),
+                        reason: Some(err.clone()),
                     });
                 }
             }
@@ -225,7 +263,7 @@ pub fn run_pytest_tests(
 
     eprintln!("  [{}] Running {} pytest tests...", label, tests.len());
 
-    let output = cmd.output();
+    let output = run_with_timeout(&mut cmd);
 
     let mut results = Vec::new();
 
@@ -266,13 +304,12 @@ pub fn run_pytest_tests(
                 }
             }
         }
-        Err(_) => {
-            // Timeout or execution failure
+        Err(err) => {
             for t in tests {
                 results.push(TestResult {
                     name: t.clone(),
                     status: TestStatus::Error,
-                    reason: Some("Timeout (600s)".into()),
+                    reason: Some(err.clone()),
                 });
             }
         }

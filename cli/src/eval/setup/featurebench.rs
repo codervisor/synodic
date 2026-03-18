@@ -27,9 +27,8 @@ pub fn setup(
     println!("[1/6] Downloading task data from HuggingFace...");
     std::fs::create_dir_all(&task_dir).context("create task data dir")?;
 
-    let download_script = format!(
-        r#"
-import json, sys
+    let download_script = r#"
+import json, os, sys
 try:
     from huggingface_hub import hf_hub_download
 except ImportError:
@@ -38,8 +37,8 @@ except ImportError:
 
 from datasets import load_dataset
 
-instance_id = '{instance_id}'
-task_dir = '{task_dir}'
+instance_id = os.environ['SYNODIC_INSTANCE_ID']
+task_dir = os.environ['SYNODIC_TASK_DIR']
 
 ds = load_dataset('LiberCoders/FeatureBench', split='lite')
 
@@ -48,34 +47,34 @@ if not matches:
     matches = [row for row in ds if instance_id in row['instance_id']]
 
 if not matches:
-    print(f'ERROR: Instance {{instance_id}} not found in FeatureBench dataset', file=sys.stderr)
+    print(f'ERROR: Instance {instance_id} not found in FeatureBench dataset', file=sys.stderr)
     sys.exit(1)
 
 task = matches[0]
-print(f'Found: {{task["instance_id"]}}')
-print(f'  Repo: {{task["repo"]}}')
-print(f'  Base commit: {{task["base_commit"]}}')
+print(f'Found: {task["instance_id"]}')
+print(f'  Repo: {task["repo"]}')
+print(f'  Base commit: {task["base_commit"]}')
 
-with open(f'{{task_dir}}/task.json', 'w') as f:
+with open(f'{task_dir}/task.json', 'w') as f:
     json.dump(dict(task), f, indent=2, default=str)
 
-with open(f'{{task_dir}}/problem_statement.txt', 'w') as f:
+with open(f'{task_dir}/problem_statement.txt', 'w') as f:
     f.write(task['problem_statement'])
 
 if task.get('test_patch'):
-    with open(f'{{task_dir}}/test_patch.diff', 'w') as f:
+    with open(f'{task_dir}/test_patch.diff', 'w') as f:
         f.write(task['test_patch'])
 
 if task.get('patch'):
-    with open(f'{{task_dir}}/patch.diff', 'w') as f:
+    with open(f'{task_dir}/patch.diff', 'w') as f:
         f.write(task['patch'])
 
 for key in ['FAIL_TO_PASS', 'PASS_TO_PASS']:
     if task.get(key):
-        with open(f'{{task_dir}}/{{key.lower()}}.json', 'w') as f:
+        with open(f'{task_dir}/{key.lower()}.json', 'w') as f:
             f.write(task[key] if isinstance(task[key], str) else json.dumps(task[key]))
 
-meta = {{
+meta = {
     'instance_id': task['instance_id'],
     'repo': task['repo'],
     'base_commit': task['base_commit'],
@@ -84,18 +83,17 @@ meta = {{
     'has_patch': bool(task.get('patch')),
     'has_test_patch': bool(task.get('test_patch')),
     'has_hints': bool(task.get('hints_text')),
-}}
-with open(f'{{task_dir}}/meta.json', 'w') as f:
+}
+with open(f'{task_dir}/meta.json', 'w') as f:
     json.dump(meta, f, indent=2)
 
 print('Task data saved.')
-"#,
-        instance_id = instance_id,
-        task_dir = task_dir.display(),
-    );
+"#;
 
     let status = Command::new("python3")
-        .args(["-c", &download_script])
+        .args(["-c", download_script])
+        .env("SYNODIC_INSTANCE_ID", instance_id)
+        .env("SYNODIC_TASK_DIR", task_dir.to_string_lossy().as_ref())
         .status()
         .context("run HuggingFace download")?;
     if !status.success() {
@@ -109,10 +107,23 @@ print('Task data saved.')
 
     if repo_dir.join(".git").exists() {
         println!("  Repo already cloned, resetting...");
-        let _ = Command::new("git")
+        let status = Command::new("git")
             .args(["checkout", "-f", &meta.base_commit])
             .current_dir(&repo_dir)
             .status();
+        if status.map(|s| !s.success()).unwrap_or(true) {
+            println!("  Checkout failed, fetching from origin...");
+            Command::new("git")
+                .args(["fetch", "origin"])
+                .current_dir(&repo_dir)
+                .status()
+                .context("git fetch")?;
+            Command::new("git")
+                .args(["checkout", "-f", &meta.base_commit])
+                .current_dir(&repo_dir)
+                .status()
+                .context("git checkout after fetch")?;
+        }
     } else {
         println!("  Cloning https://github.com/{}...", meta.repo);
         Command::new("git")
