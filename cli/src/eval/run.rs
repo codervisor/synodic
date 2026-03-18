@@ -306,54 +306,164 @@ pub fn execute(opts: RunOptions) -> Result<()> {
     Ok(())
 }
 
-/// Extract categorized findings from a verdict — the actual value of governance logging.
+/// Extract categorized, synthesized findings from a verdict.
 ///
-/// Returns `(findings, failure_category)` where findings are actionable observations
-/// matching the harness taxonomy: `[correctness]`, `[regression]`, `[infrastructure]`.
+/// Instead of dumping every failed test, this groups failures by pattern and
+/// produces actionable summaries that feed cross-run learning (HARNESS.md §6–7).
 fn extract_findings(verdict: &score::EvalVerdict) -> (Vec<serde_json::Value>, &'static str) {
     let mut findings: Vec<serde_json::Value> = Vec::new();
     let mut category = "resolved";
 
-    // F2P failures → [correctness]: agent didn't solve the task
-    for r in &verdict.f2p.results {
-        if matches!(r.status, score::TestStatus::Failed) {
-            findings.push(json!({
-                "category": "correctness",
-                "test": r.name,
-                "detail": r.reason.as_deref().unwrap_or("F2P test still failing after agent patch"),
-            }));
-            category = "correctness";
-        }
+    // --- F2P analysis: did the agent solve the task? ---
+    let f2p_failed: Vec<&score::TestResult> = verdict
+        .f2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Failed))
+        .collect();
+    let f2p_errors: Vec<&score::TestResult> = verdict
+        .f2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Error))
+        .collect();
+
+    if !f2p_failed.is_empty() {
+        category = "correctness";
+        // Collect distinct failure reasons
+        let reasons: Vec<&str> = f2p_failed
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let unique_reasons: Vec<&str> = {
+            let mut seen = std::collections::HashSet::new();
+            reasons.into_iter().filter(|r| seen.insert(*r)).collect()
+        };
+
+        findings.push(json!({
+            "category": "correctness",
+            "summary": format!(
+                "{}/{} F2P tests still failing — agent patch incomplete",
+                f2p_failed.len(),
+                verdict.f2p.expected.len()
+            ),
+            "tests": f2p_failed.iter().map(|r| &r.name).collect::<Vec<_>>(),
+            "reasons": unique_reasons,
+        }));
     }
 
-    // F2P/P2P errors → [infrastructure]: test couldn't even run
-    for group in [&verdict.f2p, &verdict.p2p] {
-        for r in &group.results {
-            if matches!(r.status, score::TestStatus::Error) {
-                findings.push(json!({
-                    "category": "infrastructure",
-                    "test": r.name,
-                    "detail": r.reason.as_deref().unwrap_or("test errored (import failure, env issue, or timeout)"),
-                }));
-                if category == "resolved" {
-                    category = "infrastructure";
-                }
-            }
+    if !f2p_errors.is_empty() {
+        if category == "resolved" {
+            category = "infrastructure";
         }
+        let reasons: Vec<&str> = f2p_errors
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        findings.push(json!({
+            "category": "infrastructure",
+            "summary": format!(
+                "{}/{} F2P tests errored — test environment broken",
+                f2p_errors.len(),
+                verdict.f2p.expected.len()
+            ),
+            "tests": f2p_errors.iter().map(|r| &r.name).collect::<Vec<_>>(),
+            "reasons": reasons,
+        }));
     }
 
-    // P2P failures → [regression]: agent broke existing behavior
-    for r in &verdict.p2p.results {
-        if matches!(r.status, score::TestStatus::Failed) {
-            findings.push(json!({
-                "category": "regression",
-                "test": r.name,
-                "detail": r.reason.as_deref().unwrap_or("P2P test broken by agent patch"),
-            }));
-            if category != "correctness" {
-                category = "regression";
-            }
+    // --- P2P analysis: did the agent break existing behavior? ---
+    let p2p_failed: Vec<&score::TestResult> = verdict
+        .p2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Failed))
+        .collect();
+    let p2p_errors: Vec<&score::TestResult> = verdict
+        .p2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Error))
+        .collect();
+    let p2p_total = verdict.p2p.expected.len();
+
+    if !p2p_failed.is_empty() {
+        if category != "correctness" {
+            category = "regression";
         }
+        let ratio = if p2p_total > 0 {
+            p2p_failed.len() as f64 / p2p_total as f64
+        } else {
+            0.0
+        };
+
+        // Synthesize: bulk failure vs selective regression
+        let summary = if ratio > 0.8 {
+            format!(
+                "{}/{} P2P tests failed — likely environment/setup issue, not selective regression",
+                p2p_failed.len(),
+                p2p_total
+            )
+        } else {
+            // Group by test file to find the blast radius
+            let mut by_file: HashMap<&str, usize> = HashMap::new();
+            for r in &p2p_failed {
+                let file = r.name.split("::").next().unwrap_or(&r.name);
+                *by_file.entry(file).or_default() += 1;
+            }
+            let hotspots: Vec<String> = by_file
+                .iter()
+                .map(|(f, n)| format!("{} ({})", f, n))
+                .collect();
+            format!(
+                "{}/{} P2P regressions in: {}",
+                p2p_failed.len(),
+                p2p_total,
+                hotspots.join(", ")
+            )
+        };
+
+        let reasons: Vec<&str> = p2p_failed
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let unique_reasons: Vec<&str> = {
+            let mut seen = std::collections::HashSet::new();
+            reasons.into_iter().filter(|r| seen.insert(*r)).take(5).collect()
+        };
+
+        findings.push(json!({
+            "category": if ratio > 0.8 { "infrastructure" } else { "regression" },
+            "summary": summary,
+            "failed_count": p2p_failed.len(),
+            "total_count": p2p_total,
+            "reasons": unique_reasons,
+        }));
+    }
+
+    if !p2p_errors.is_empty() {
+        if category == "resolved" {
+            category = "infrastructure";
+        }
+        let reasons: Vec<&str> = p2p_errors
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        findings.push(json!({
+            "category": "infrastructure",
+            "summary": format!(
+                "{}/{} P2P tests errored — test harness broken",
+                p2p_errors.len(),
+                p2p_total
+            ),
+            "reasons": reasons,
+        }));
     }
 
     (findings, category)
