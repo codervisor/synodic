@@ -95,11 +95,14 @@ operations, reserving AI subagents exclusively for semantic input→output trans
 | Solve (semantic) | AI subagent | Understands sub-spec → writes code/design |
 | Conflict resolution (semantic) | AI subagent | Resolves ambiguous interface mismatches |
 
-Scripts implementing the algorithmic spine live in `.harness/scripts/`:
-- `decompose_gate.py` — TF-IDF orthogonality, cycle detection, complexity scoring, budget allocation
-- `solve_scheduler.py` — DAG-based critical path scheduling into parallel waves
-- `reunify_merge.py` — git merge-tree reunification + structural conflict detection
-- `prune_gate.py` — set cover redundancy analysis
+The algorithmic spine is implemented in Rust as `synodic fractal` subcommands:
+- `synodic fractal gate` — TF-IDF orthogonality (via `rust-tfidf`), cycle detection, complexity scoring, budget allocation
+- `synodic fractal schedule` — DAG-based critical path scheduling into parallel waves
+- `synodic fractal reunify` — git merge-tree reunification + structural conflict detection
+- `synodic fractal prune` — set cover redundancy analysis
+- `synodic fractal complexity` — standalone complexity scoring
+
+All accept JSON from stdin (or `--input <file>`) and output JSON to stdout.
 
 ## Orchestration Protocol
 
@@ -131,10 +134,15 @@ When invoked, execute the following steps **exactly**:
 
 ### Step 1.5 — Complexity Pre-Filter (algorithmic)
 
-Before invoking AI for decomposition, compute a **complexity score** deterministically using `decompose_gate.py`:
+Before invoking AI for decomposition, compute a **complexity score** deterministically:
 
 ```
-echo '{"parent_spec": "<spec text>", "children": [], "current_depth": 0, "max_depth": 3, "total_nodes": 0, "max_total_nodes": 20}' | python3 scripts/decompose_gate.py
+echo '<spec text>' | synodic fractal complexity
+```
+
+Or as part of the full gate:
+```
+echo '{"parent_spec": "<spec text>", "children": [], "current_depth": 0, "max_depth": 3, "total_nodes": 0, "max_total_nodes": 20}' | synodic fractal gate
 ```
 
 The script returns a `complexity_score` (0.0–1.0) based on weighted feature scoring:
@@ -238,9 +246,9 @@ After each decompose subagent returns:
 
 After parsing a SPLIT verdict, **before** writing child spec files, validate the decomposition structurally. This does NOT require a subagent — it's a deterministic check.
 
-1. **Run the gate script.** Pipe the decomposition data to `scripts/decompose_gate.py`:
+1. **Run the gate.** Pipe the decomposition data to the Rust CLI:
    ```
-   echo '{"parent_spec": "<parent spec text>", "children": [{"slug": "...", "scope": "...", "inputs": "...", "outputs": "..."}], "current_depth": N, "max_depth": N, "total_nodes": N, "max_total_nodes": N}' | python3 scripts/decompose_gate.py
+   echo '{"parent_spec": "<parent spec text>", "children": [{"slug": "...", "scope": "...", "inputs": "...", "outputs": "..."}], "current_depth": N, "max_depth": N, "total_nodes": N, "max_total_nodes": N}' | synodic fractal gate
    ```
    The script returns JSON with:
    - `flags` — advisory warnings (array of `{category, description}`)
@@ -275,10 +283,10 @@ This gate is fast and deterministic — no LLM cost. It catches common decomposi
 
 ### Step 3 — Solve (leaves, dependency-ordered waves)
 
-Schedule leaf nodes for solving using the **DAG-based solve scheduler** (`scripts/solve_scheduler.py`):
+Schedule leaf nodes for solving using the **DAG-based solve scheduler**:
 
 ```
-cat .fractal/{work-id}/manifest.json | python3 scripts/solve_scheduler.py
+cat .fractal/{work-id}/manifest.json | synodic fractal schedule
 ```
 
 The scheduler returns:
@@ -381,10 +389,10 @@ Once all leaves at a level are solved, reunify them into their parent. Walk the 
 
 **For `output_mode: code` — algorithmic reunification first:**
 
-Run `scripts/reunify_merge.py` to attempt deterministic merging via git:
+Run `synodic fractal reunify` to attempt deterministic merging via git:
 
 ```
-echo '{"base_ref": "main", "children": [...], "dependency_order": [...], "node_slug": "root"}' | python3 scripts/reunify_merge.py
+echo '{"base_ref": "main", "children": [...], "dependency_order": [...], "node_slug": "root"}' | synodic fractal reunify
 ```
 
 The script performs:
@@ -497,9 +505,9 @@ After rework (or if no rework needed), continue bottom-up until the root is reun
 
 ### Step 5 — Prune & Finalize (algorithmic)
 
-1. **Run the prune gate** (`scripts/prune_gate.py`) to detect redundancy algorithmically:
+1. **Run the prune gate** to detect redundancy algorithmically:
    ```
-   echo '{"tree": <manifest tree>}' | python3 scripts/prune_gate.py
+   echo '{"tree": <manifest tree>}' | synodic fractal prune
    ```
    The script performs:
    - **Subset detection**: is a node's output files a strict subset of a sibling's?
@@ -576,7 +584,7 @@ After appending, commit the updated `governance.jsonl` as part of the fractal ru
 ## Important Notes
 
 - **No nested subagents.** The orchestrator (you) walks the tree level by level, spawning flat subagents at each step. The spec files on disk ARE the recursion.
-- **Algorithmic spine.** Most orchestration logic is deterministic — AI is only invoked for semantic operations (decompose, solve, conflict resolution). The scripts in `.harness/scripts/` implement classical algorithms: TF-IDF similarity, topological sort, 3-way merge, set cover.
+- **Algorithmic spine.** Most orchestration logic is deterministic — AI is only invoked for semantic operations (decompose, solve, conflict resolution). The `synodic fractal` subcommands implement classical algorithms in Rust: TF-IDF similarity (via `rust-tfidf` crate), topological sort, 3-way merge, set cover.
 - `.fractal/` directory is gitignored (per-run manifests are local artifacts). Governance infrastructure lives in `.harness/` (rules, scripts, governance logs) and is committed to version control.
 - SOLVE subagents with `output_mode: code` run in `isolation: worktree` to avoid conflicts.
 - SOLVE subagents receive sibling specs as read-only context for interface alignment.
@@ -584,10 +592,10 @@ After appending, commit the updated `governance.jsonl` as part of the fractal ru
 - Each fractal run is independent — concurrent runs use different work IDs.
 - Budget enforcement is strict: if `max_total_nodes` is hit, remaining nodes become forced leaves. Budget is **allocated proportionally** to children by complexity score (not first-come-first-served).
 - **COMPLEXITY PRE-FILTER** (Step 1.5) uses weighted feature scoring to auto-LEAF trivial tasks without invoking AI. Same principle as decision tree split criteria.
-- **DECOMPOSE GATE** (Step 2.5) runs `scripts/decompose_gate.py` with TF-IDF cosine similarity (not raw Jaccard), dependency cycle detection via Kahn's algorithm, and per-child budget allocation. Deterministic and fast — no LLM cost.
-- **SOLVE SCHEDULER** (Step 3) runs `scripts/solve_scheduler.py` to compute parallel execution waves via topological sort. Critical path analysis determines minimum sequential depth.
-- **REUNIFY MERGE** (Step 4) runs `scripts/reunify_merge.py` to attempt deterministic git merge-tree reunification. AI subagents are only spawned for semantic conflicts that algorithms can't resolve.
-- **PRUNE GATE** (Step 5) runs `scripts/prune_gate.py` for algorithmic redundancy detection via set cover and diff subset analysis. No AI needed.
+- **DECOMPOSE GATE** (Step 2.5) runs `synodic fractal gate` with TF-IDF cosine similarity (via `rust-tfidf`), dependency cycle detection via Kahn's algorithm, and per-child budget allocation. Deterministic and fast — no LLM cost.
+- **SOLVE SCHEDULER** (Step 3) runs `synodic fractal schedule` to compute parallel execution waves via topological sort. Critical path analysis determines minimum sequential depth.
+- **REUNIFY MERGE** (Step 4) runs `synodic fractal reunify` to attempt deterministic git merge-tree reunification. AI subagents are only spawned for semantic conflicts that algorithms can't resolve.
+- **PRUNE GATE** (Step 5) runs `synodic fractal prune` for algorithmic redundancy detection via set cover and diff subset analysis. No AI needed.
 - **SOLVE GATE** (Step 3.5) applies static checks to leaf solutions. Two tiers: lightweight (static checks only) for default mode, full Factory pipeline for `solve_mode: factory`.
 - **REUNIFY REWORK** (Step 4.5) re-solves conflicting children once when reunification fails. Bounded to 1 retry per node to prevent exponential cost in deep trees.
 - **GovernanceLog** (`.harness/fractal.governance.jsonl`) accumulates a summary record from every fractal run, enabling cross-run pattern analysis. Shared static rules with Factory via `.harness/rules/`.

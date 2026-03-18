@@ -388,37 +388,22 @@ def allocate_budget(node: dict, remaining_budget: int, children_scores: list[flo
 
 The savings compound: fewer AI calls → fewer retries → fewer rework loops.
 
-## Implementation Plan
+## Implementation
 
-### Phase 1: Enhanced Decompose Gate (Python)
-Extend `decompose_gate.py` with:
-- TF-IDF cosine similarity (replace Jaccard)
-- Dependency cycle detection (Kahn's algorithm)
-- Complexity scoring function
-- Budget allocation algorithm
+All algorithms are implemented in Rust as `synodic fractal` CLI subcommands
+(`cli/src/fractal/`), using the `rust-tfidf` crate for proper TF-IDF computation.
 
-### Phase 2: DAG Scheduler (Python or Rust)
-New script `solve_scheduler.py`:
-- Parse leaf dependency graph from manifest
-- Topological sort into parallel waves
-- Output wave plan as JSON
+| Module | CLI Command | Algorithms |
+|--------|-------------|------------|
+| `fractal/decompose.rs` | `synodic fractal gate` | TF-IDF cosine (via `rust-tfidf`), Jaccard pre-filter, Kahn's toposort, complexity scoring, budget allocation |
+| `fractal/schedule.rs` | `synodic fractal schedule` | BFS layer decomposition, critical path DP |
+| `fractal/reunify.rs` | `synodic fractal reunify` | git merge-tree 3-way merge, set intersection conflict detection |
+| `fractal/prune.rs` | `synodic fractal prune` | Greedy set cover, subset detection |
+| `fractal/mod.rs` | (shared) | Term extraction, Jaccard similarity, type definitions |
+| `cmd/fractal.rs` | (CLI dispatch) | stdin/file JSON input, pretty JSON output |
 
-### Phase 3: Algorithmic Reunify (Shell + Python)
-New script `reunify_merge.py`:
-- Drive `git merge-tree` for code mode
-- AST-based conflict detection (tree-sitter)
-- Auto-resolve textual conflicts
-- Output unresolved conflicts for AI fallback
-
-### Phase 4: Algorithmic Prune (Python)
-New script `prune_gate.py`:
-- Diff-based redundancy detection
-- Set cover analysis on outputs
-- Output prune recommendations
-
-### Phase 5: Update SKILL.md
-- Modify orchestration protocol to use algorithmic spine
-- AI subagent calls become conditional (only when algorithms can't decide)
+Tests: 28 fractal-specific tests covering orthogonality detection, cycle detection,
+wave scheduling, diamond dependencies, conflict detection, set cover, and budget allocation.
 
 ## Algorithm Reference
 
