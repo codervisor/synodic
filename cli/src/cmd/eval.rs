@@ -153,60 +153,39 @@ impl EvalCmd {
                 output,
                 dry_run,
                 split,
-            } => {
-                let script = repo_root.join("evals/run.sh");
-                if !script.exists() {
-                    anyhow::bail!("evals/run.sh not found at {}", script.display());
-                }
-
-                let mut args = vec![alias];
-                args.push("--skill".into());
-                args.push(skill);
-                if let Some(dir) = testbed_dir {
-                    args.push("--testbed-dir".into());
-                    args.push(dir);
-                }
-                if skip_setup {
-                    args.push("--skip-setup".into());
-                }
-                if skip_agent {
-                    args.push("--skip-agent".into());
-                }
-                args.push("--agent-cmd".into());
-                args.push(agent_cmd);
-                if let Some(o) = output {
-                    args.push("--output".into());
-                    args.push(o);
-                }
-                if dry_run {
-                    args.push("--dry-run".into());
-                }
-                args.push("--split".into());
-                args.push(split);
-
-                util::exec_script(&script, &args)
-            }
+            } => eval_mod::run::execute(eval_mod::run::RunOptions {
+                alias,
+                skill,
+                testbed_dir,
+                skip_setup,
+                skip_agent,
+                agent_cmd,
+                output,
+                dry_run,
+                split,
+                repo_root,
+            }),
             EvalSubcommand::Score {
                 instance_id,
                 testbed_dir,
                 output,
             } => {
-                let script = repo_root.join("evals/score.sh");
-                if !script.exists() {
-                    anyhow::bail!("evals/score.sh not found at {}", script.display());
-                }
-
-                let mut args = vec![instance_id];
-                if let Some(dir) = testbed_dir {
-                    args.push("--testbed-dir".into());
-                    args.push(dir);
-                }
-                if let Some(o) = output {
-                    args.push("--output".into());
-                    args.push(o);
-                }
-
-                util::exec_script(&script, &args)
+                let testbed = testbed_dir.unwrap_or_else(|| {
+                    let base = if instance_id.contains("__") {
+                        // SWE-bench IDs use double-underscore (e.g. django__django-10097)
+                        "/tmp/swebench-testbed"
+                    } else {
+                        "/tmp/featurebench-testbed"
+                    };
+                    format!("{}/{}", base, instance_id)
+                });
+                let output_path = output.map(std::path::PathBuf::from);
+                eval_mod::score::verdict::score(
+                    &instance_id,
+                    std::path::Path::new(&testbed),
+                    output_path.as_deref(),
+                )?;
+                Ok(())
             }
             EvalSubcommand::List { tag, json } => {
                 eval_mod::list::list_evals(&repo_root, tag.as_deref(), json)
