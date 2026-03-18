@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Walk up from CWD to find the repo root (contains `.harness/` or `.git`).
+/// Walk up from CWD to find the project root (contains `evals/` or `.git`).
 ///
-/// Respects `SYNODIC_ROOT` env var — set by `harness run` so that eval
-/// subprocesses write governance logs to the correct project, not the testbed.
-pub fn find_repo_root() -> anyhow::Result<PathBuf> {
-    if let Ok(root) = std::env::var("SYNODIC_ROOT") {
+/// Respects `EVAL_ROOT` env var for explicit override.
+pub fn find_project_root() -> anyhow::Result<PathBuf> {
+    if let Ok(root) = std::env::var("EVAL_ROOT") {
         let p = PathBuf::from(&root);
         if p.is_dir() {
             return Ok(p);
@@ -14,12 +13,12 @@ pub fn find_repo_root() -> anyhow::Result<PathBuf> {
     }
     let mut dir = std::env::current_dir()?;
     loop {
-        if dir.join(".harness").is_dir() || dir.join(".git").exists() {
+        if dir.join("evals").is_dir() || dir.join(".git").exists() {
             return Ok(dir);
         }
         if !dir.pop() {
             anyhow::bail!(
-                "could not find repo root (no .harness/ or .git/ in any parent directory)"
+                "could not find project root (no evals/ or .git/ in any parent directory)"
             );
         }
     }

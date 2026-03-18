@@ -7,45 +7,66 @@ AI coding factory — structured BUILD → INSPECT pipelines for spec-driven dev
 ## Build & Test
 
 ```bash
-cd cli && cargo build          # debug build
-cd cli && cargo test           # run all tests (29 tests covering parser, scoring, alias resolution)
+cd cli && cargo build          # debug build (both crates)
+cd cli && cargo test           # run all tests (35 tests covering parser, scoring, alias resolution)
 cd cli && cargo build --release # release build
+cd cli/synodic-eval && cargo test  # eval tests only (standalone)
 pnpm install                   # install node deps (spec validation tooling)
 ```
 
 ## Architecture
 
-Rust CLI (`cli/src/`) with Node.js tooling for spec validation.
+Cargo workspace (`cli/`) with two crates and Node.js tooling for spec validation.
+
+**synodic-eval** is a standalone eval framework — no governance concepts. **synodic** is the governance CLI that depends on synodic-eval as a library.
 
 ```
-cli/src/
-├── main.rs                    # CLI entry: Harness | Eval subcommands
-├── cmd/eval.rs                # Eval arg parsing → delegates to eval modules
-├── cmd/harness.rs             # Harness arg parsing → delegates to harness modules
-├── eval/
-│   ├── run.rs                 # Orchestration: setup → agent → score (replaces run.sh)
-│   ├── score/                 # Scoring pipeline (replaces score_runner.py + score.sh)
-│   │   ├── parser.rs          # Django/pytest output parsing — pure functions, heavily tested
-│   │   ├── runner.rs          # Test subprocess execution via Command
-│   │   ├── verdict.rs         # F2P/P2P verdict computation with structural invariants
-│   │   └── report.rs          # JSON score report generation
-│   ├── setup/                 # Testbed setup (replaces setup/*.sh)
-│   │   ├── swebench.rs        # SWE-bench: HF download → clone → patch → deps → prompt
-│   │   ├── featurebench.rs    # FeatureBench: same + gold patch stripping + sanity check
-│   │   └── devbench.rs        # DevBench: repo fetch → PRD extraction → scaffold
-│   ├── batch.rs               # Batch evaluation across task×skill matrix
-│   ├── list.rs                # List tasks from evals.json
-│   └── report.rs              # Report generation (table/json/csv)
-├── harness/                   # Governance loop (unchanged)
-└── util.rs                    # find_repo_root(), exec_script()
+cli/
+├── Cargo.toml                     # [workspace] members = ["synodic", "synodic-eval"]
+├── synodic-eval/                  # Standalone eval framework (zero synodic governance deps)
+│   └── src/
+│       ├── lib.rs                 # Public API: run, score, batch, list, report, setup
+│       ├── main.rs                # Binary: `synodic-eval run|score|list|batch|report`
+│       ├── run.rs                 # Orchestration: setup → agent → score → EvalResult
+│       ├── batch.rs               # Batch evaluation across task×skill matrix
+│       ├── list.rs                # List tasks from evals.json
+│       ├── report.rs              # Report generation (table/json/csv)
+│       ├── util.rs                # find_project_root() (EVAL_ROOT, evals/, .git)
+│       ├── score/                 # Scoring pipeline
+│       │   ├── mod.rs             # Types: TestStatus, TestResult, ScoreResult, EvalVerdict
+│       │   ├── parser.rs          # Django/pytest output parsing — heavily tested
+│       │   ├── runner.rs          # Test subprocess execution via Command
+│       │   ├── verdict.rs         # F2P/P2P verdict computation
+│       │   └── report.rs          # JSON score report generation
+│       └── setup/                 # Testbed setup
+│           ├── swebench.rs        # SWE-bench: HF download → clone → patch → deps → prompt
+│           ├── featurebench.rs    # FeatureBench: same + gold patch stripping + sanity check
+│           ├── devbench.rs        # DevBench: repo fetch → PRD extraction → scaffold
+│           └── synodic.rs         # Synodic dogfood: clone → verify build → prompt
+├── synodic/                       # Governance CLI (depends on synodic-eval)
+│   └── src/
+│       ├── main.rs                # CLI entry: Harness | Eval subcommands
+│       ├── cmd/eval.rs            # Eval dispatch → synodic_eval + governance log
+│       ├── cmd/harness.rs         # Harness dispatch → harness modules
+│       ├── governance.rs          # Eval result → .harness/eval.governance.jsonl
+│       ├── util.rs                # find_repo_root() (SYNODIC_ROOT, .harness/, .git)
+│       └── harness/               # Governance loop
+│           ├── run.rs             # L1 static rules + L2 AI judge + rework loop
+│           ├── log.rs             # Governance log display
+│           └── rules.rs           # Crystallized rules list
 ```
 
-### Key types (eval/score/mod.rs)
+### Key types (synodic-eval: score/mod.rs)
 
 - `TestStatus` enum: Passed, Failed, Error, Skipped — no stringly-typed status
 - `TestResult`: name + status + optional reason
 - `ScoreResult`: passed/failed/errors/skipped — total is structural (passed > total impossible)
 - `EvalVerdict`: instance_id + F2P verdict + P2P verdict + resolved bool
+- `EvalResult`: target + verdict + duration + resolved (returned by `run::execute()`)
+
+### Separation boundary
+
+Eval produces structured output (EvalResult / exit code). Synodic's governance.rs reads it and writes `.harness/eval.governance.jsonl`. Eval never writes governance logs or references `.harness/`.
 
 ### Python remnant
 

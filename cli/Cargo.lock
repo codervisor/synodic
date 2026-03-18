@@ -402,6 +402,19 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "regex",
+ "serde",
+ "serde_json",
+ "synodic-eval",
+]
+
+[[package]]
+name = "synodic-eval"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
  "quick-xml",
  "regex",
  "serde",

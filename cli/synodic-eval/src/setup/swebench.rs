@@ -53,11 +53,11 @@ except ImportError:
     print('ERROR: datasets not installed. Run: pip install datasets', file=sys.stderr)
     sys.exit(1)
 
-instance_id = os.environ['SYNODIC_INSTANCE_ID']
-task_dir = os.environ['SYNODIC_TASK_DIR']
-hf_dataset = os.environ['SYNODIC_HF_DATASET']
-hf_split = os.environ['SYNODIC_HF_SPLIT']
-split = os.environ['SYNODIC_SPLIT']
+instance_id = os.environ['EVAL_INSTANCE_ID']
+task_dir = os.environ['EVAL_TASK_DIR']
+hf_dataset = os.environ['EVAL_HF_DATASET']
+hf_split = os.environ['EVAL_HF_SPLIT']
+split = os.environ['EVAL_SPLIT']
 
 ds = load_dataset(hf_dataset, split=hf_split)
 
@@ -114,11 +114,11 @@ print('Task data saved.')
 
     let status = Command::new("python3")
         .args(["-c", download_script])
-        .env("SYNODIC_INSTANCE_ID", instance_id)
-        .env("SYNODIC_TASK_DIR", task_dir.to_string_lossy().as_ref())
-        .env("SYNODIC_HF_DATASET", hf_dataset)
-        .env("SYNODIC_HF_SPLIT", hf_split)
-        .env("SYNODIC_SPLIT", split)
+        .env("EVAL_INSTANCE_ID", instance_id)
+        .env("EVAL_TASK_DIR", task_dir.to_string_lossy().as_ref())
+        .env("EVAL_HF_DATASET", hf_dataset)
+        .env("EVAL_HF_SPLIT", hf_split)
+        .env("EVAL_SPLIT", split)
         .status()
         .context("run HuggingFace download")?;
     if !status.success() {

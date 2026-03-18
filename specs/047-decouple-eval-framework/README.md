@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-18
 priority: high
 tags:
@@ -7,8 +7,12 @@ tags:
 - eval
 - refactor
 created_at: 2026-03-18T22:30:33.987624411Z
-updated_at: 2026-03-18T22:30:33.987624411Z
+updated_at: 2026-03-18T23:37:22.070246603Z
+transitions:
+- status: in-progress
+  at: 2026-03-18T23:37:22.070246603Z
 ---
+
 # Decouple Eval as Standalone Testing Framework
 
 ## Overview
@@ -119,26 +123,26 @@ Eval needs to find the project root (for `evals/evals.json`). Currently it piggy
 
 ## Plan
 
-- [ ] Create Cargo workspace with `synodic` and `synodic-eval` member crates
-- [ ] Move eval modules to synodic-eval crate (run, batch, list, report, score/, setup/)
-- [ ] Delete `append_governance_log()` and `extract_findings()` from eval/run.rs entirely
-- [ ] Remove all `.harness/` references from eval code
-- [ ] Remove `SYNODIC_ROOT` reads from eval; add `EVAL_ROOT` env var for project root
-- [ ] Create `synodic/src/governance.rs` — reads eval JSON output, writes gov JSONL
-- [ ] Update harness/run.rs to capture eval stdout, pass to governance.rs
-- [ ] Add `--output <path>` flag to eval for structured JSON output
-- [ ] Ensure eval works standalone: no .harness/ needed, no synodic env vars
-- [ ] Verify all 29 existing tests pass in synodic-eval crate
-- [ ] Update CLAUDE.md to reflect two-crate architecture
+- [x] Create Cargo workspace with `synodic` and `synodic-eval` member crates
+- [x] Move eval modules to synodic-eval crate (run, batch, list, report, score/, setup/)
+- [x] Delete `append_governance_log()` and `extract_findings()` from eval/run.rs entirely
+- [x] Remove all `.harness/` references from eval code
+- [x] Remove `SYNODIC_ROOT` reads from eval; add `EVAL_ROOT` env var for project root
+- [x] Create `synodic/src/governance.rs` — reads eval JSON output, writes gov JSONL
+- [x] Update harness/run.rs to capture eval stdout, pass to governance.rs
+- [x] Add `--output <path>` flag to eval for structured JSON output
+- [x] Ensure eval works standalone: no .harness/ needed, no synodic env vars
+- [x] Verify all 29 existing tests pass in synodic-eval crate
+- [x] Update CLAUDE.md to reflect two-crate architecture
 
 ## Test
 
-- [ ] `cd cli/synodic-eval && cargo test` — all 29 tests pass standalone
-- [ ] `cd cli/synodic-eval && cargo build` — standalone binary, no synodic deps
-- [ ] `synodic-eval run` works in a directory with no `.harness/`
-- [ ] `synodic eval run` still works (synodic invokes eval, writes gov log itself)
-- [ ] Governance log schema unchanged (harness consumers unaffected)
-- [ ] `grep -r "harness\|governance\|SYNODIC" synodic-eval/src/` returns zero matches
+- [x] `cd cli/synodic-eval && cargo test` — all 29 tests pass standalone
+- [x] `cd cli/synodic-eval && cargo build` — standalone binary, no synodic deps
+- [x] `synodic-eval run` works in a directory with no `.harness/`
+- [x] `synodic eval run` still works (synodic invokes eval, writes gov log itself)
+- [x] Governance log schema unchanged (harness consumers unaffected)
+- [x] `grep -r "harness\|governance\|SYNODIC" synodic-eval/src/` returns zero matches
 
 ## Notes
 
