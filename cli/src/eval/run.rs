@@ -302,7 +302,16 @@ pub fn execute(opts: RunOptions) -> Result<()> {
     );
 
     println!();
-    println!("━━━ Done ━━━");
+
+    // Exit non-zero when the eval is not resolved so the harness (or any
+    // parent process) can detect failure without parsing log files.
+    let resolved = verdict.as_ref().map_or(false, |v| v.resolved);
+    if !resolved {
+        println!("━━━ Done (not resolved) ━━━");
+        std::process::exit(1);
+    }
+
+    println!("━━━ Done (resolved) ━━━");
     Ok(())
 }
 
