@@ -87,7 +87,7 @@ pub fn execute(repo_root: &Path, opts: BatchOptions) -> Result<()> {
 
     // Header
     println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║          Batch Eval — Synodic Harness                       ║");
+    println!("║          Batch Eval                                          ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
     println!("Tasks:      {}", task_list.len());
@@ -128,7 +128,7 @@ pub fn execute(repo_root: &Path, opts: BatchOptions) -> Result<()> {
                     extra.push_str(" --skip-setup");
                 }
                 println!(
-                    "  synodic eval run {task} --skill {skill} --agent-cmd {}{extra}",
+                    "  synodic-eval run {task} --skill {skill} --agent-cmd {}{extra}",
                     opts.agent_cmd
                 );
             }
@@ -278,7 +278,7 @@ pub fn execute(repo_root: &Path, opts: BatchOptions) -> Result<()> {
     println!("Manifest:     {}", manifest_path.display());
     println!();
     println!("To generate a report:");
-    println!("  synodic eval report {}", output_dir.display());
+    println!("  synodic-eval report {}", output_dir.display());
 
     Ok(())
 }

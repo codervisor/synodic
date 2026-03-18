@@ -37,8 +37,8 @@ except ImportError:
 
 from datasets import load_dataset
 
-instance_id = os.environ['SYNODIC_INSTANCE_ID']
-task_dir = os.environ['SYNODIC_TASK_DIR']
+instance_id = os.environ['EVAL_INSTANCE_ID']
+task_dir = os.environ['EVAL_TASK_DIR']
 
 ds = load_dataset('LiberCoders/FeatureBench', split='lite')
 
@@ -92,8 +92,8 @@ print('Task data saved.')
 
     let status = Command::new("python3")
         .args(["-c", download_script])
-        .env("SYNODIC_INSTANCE_ID", instance_id)
-        .env("SYNODIC_TASK_DIR", task_dir.to_string_lossy().as_ref())
+        .env("EVAL_INSTANCE_ID", instance_id)
+        .env("EVAL_TASK_DIR", task_dir.to_string_lossy().as_ref())
         .status()
         .context("run HuggingFace download")?;
     if !status.success() {
@@ -188,7 +188,7 @@ print('Task data saved.')
     let f2p_file = task_dir.join("fail_to_pass.json");
     if f2p_file.exists() {
         if let Ok(content) = std::fs::read_to_string(&f2p_file) {
-            let tests = super::super::score::parser::parse_test_list(&content);
+            let tests = crate::score::parser::parse_test_list(&content);
             if let Some(first) = tests.first() {
                 println!("  Checking: {}", first);
                 let python = if venv_dir.join("bin/python").exists() {

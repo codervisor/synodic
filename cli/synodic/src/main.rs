@@ -1,5 +1,5 @@
 mod cmd;
-mod eval;
+mod governance;
 mod harness;
 mod util;
 

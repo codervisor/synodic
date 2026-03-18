@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
-use crate::eval as eval_mod;
 use crate::util;
 
 #[derive(Args)]
@@ -153,18 +152,28 @@ impl EvalCmd {
                 output,
                 dry_run,
                 split,
-            } => eval_mod::run::execute(eval_mod::run::RunOptions {
-                alias,
-                skill,
-                testbed_dir,
-                skip_setup,
-                skip_agent,
-                agent_cmd,
-                output,
-                dry_run,
-                split,
-                repo_root,
-            }),
+            } => {
+                let result = synodic_eval::run::execute(synodic_eval::run::RunOptions {
+                    alias,
+                    skill,
+                    testbed_dir,
+                    skip_setup,
+                    skip_agent,
+                    agent_cmd,
+                    output,
+                    dry_run,
+                    split,
+                    project_root: repo_root.clone(),
+                })?;
+
+                // Record to governance log (synodic's responsibility)
+                crate::governance::record_eval_result(&repo_root, &result);
+
+                if !result.resolved {
+                    std::process::exit(1);
+                }
+                Ok(())
+            }
             EvalSubcommand::Score {
                 instance_id,
                 testbed_dir,
@@ -172,7 +181,6 @@ impl EvalCmd {
             } => {
                 let testbed = testbed_dir.unwrap_or_else(|| {
                     let base = if instance_id.contains("__") {
-                        // SWE-bench IDs use double-underscore (e.g. django__django-10097)
                         "/tmp/swebench-testbed"
                     } else {
                         "/tmp/featurebench-testbed"
@@ -180,7 +188,7 @@ impl EvalCmd {
                     format!("{}/{}", base, instance_id)
                 });
                 let output_path = output.map(std::path::PathBuf::from);
-                eval_mod::score::verdict::score(
+                synodic_eval::score::verdict::score(
                     &instance_id,
                     std::path::Path::new(&testbed),
                     output_path.as_deref(),
@@ -188,7 +196,7 @@ impl EvalCmd {
                 Ok(())
             }
             EvalSubcommand::List { tag, json } => {
-                eval_mod::list::list_evals(&repo_root, tag.as_deref(), json)
+                synodic_eval::list::list_evals(&repo_root, tag.as_deref(), json)
             }
             EvalSubcommand::Batch {
                 tasks,
@@ -200,9 +208,9 @@ impl EvalCmd {
                 dry_run,
                 skip_setup,
                 resume,
-            } => eval_mod::batch::execute(
+            } => synodic_eval::batch::execute(
                 &repo_root,
-                eval_mod::batch::BatchOptions {
+                synodic_eval::batch::BatchOptions {
                     tasks,
                     skills,
                     benchmark,
@@ -224,16 +232,16 @@ impl EvalCmd {
                 let results_dir = repo_root.join("evals/results");
 
                 let mode = if all {
-                    eval_mod::report::ReportMode::All
+                    synodic_eval::report::ReportMode::All
                 } else if latest {
-                    eval_mod::report::ReportMode::Latest
+                    synodic_eval::report::ReportMode::Latest
                 } else if let Some(dirs) = compare {
-                    eval_mod::report::ReportMode::Compare(
+                    synodic_eval::report::ReportMode::Compare(
                         dirs[0].clone(),
                         dirs[1].clone(),
                     )
                 } else if let Some(dir) = batch_dir {
-                    eval_mod::report::ReportMode::Single(PathBuf::from(dir))
+                    synodic_eval::report::ReportMode::Single(PathBuf::from(dir))
                 } else {
                     anyhow::bail!(
                         "Specify a batch directory, --latest, --all, or --compare"
@@ -241,12 +249,12 @@ impl EvalCmd {
                 };
 
                 let fmt = match format.as_str() {
-                    "json" => eval_mod::report::ReportFormat::Json,
-                    "csv" => eval_mod::report::ReportFormat::Csv,
-                    _ => eval_mod::report::ReportFormat::Table,
+                    "json" => synodic_eval::report::ReportFormat::Json,
+                    "csv" => synodic_eval::report::ReportFormat::Csv,
+                    _ => synodic_eval::report::ReportFormat::Table,
                 };
 
-                eval_mod::report::generate(&results_dir, mode, fmt)
+                synodic_eval::report::generate(&results_dir, mode, fmt)
             }
         }
     }
