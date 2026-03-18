@@ -88,9 +88,9 @@ pub fn execute(config: RunConfig) -> Result<()> {
                  {feedback}\n\n\
                  Re-read the original task and fix the issues above.\n"
             );
-            run_agent_with_stdin(&config.agent_cmd, &workdir, &rework_input, &agent_log)?
+            run_agent_with_stdin(&config.agent_cmd, &workdir, &rework_input, &agent_log, &repo_root)?
         } else {
-            run_agent(&config.agent_cmd, &workdir, &agent_log)?
+            run_agent(&config.agent_cmd, &workdir, &agent_log, &repo_root)?
         };
 
         log_info(&config, &format!("Agent finished (exit code: {agent_exit})"));
@@ -393,6 +393,12 @@ pub fn execute(config: RunConfig) -> Result<()> {
     log_info(&config, &format!("Duration: {duration}s"));
     log_info(&config, &format!("Run dir:  {}", run_dir.display()));
 
+    // Collect eval findings from the eval governance log (if the agent was an eval command)
+    let eval_findings = collect_eval_findings(&harness_dir, &start_time);
+    if !eval_findings.is_empty() {
+        log_info(&config, &format!("Collected {} eval finding(s)", eval_findings.len()));
+    }
+
     let gov_record = json!({
         "work_id": run_id,
         "source": "harness",
@@ -401,6 +407,7 @@ pub fn execute(config: RunConfig) -> Result<()> {
         "agent_command": config.agent_cmd.join(" "),
         "rework_items": all_rework_items,
         "static_failures": all_static_failures,
+        "eval_findings": eval_findings,
         "metrics": {
             "attempt_count": attempt,
             "duration_s": duration,
@@ -431,6 +438,7 @@ pub fn execute(config: RunConfig) -> Result<()> {
         "base_ref": base_ref,
         "rework_items": all_rework_items,
         "static_failures": all_static_failures,
+        "eval_findings": eval_findings,
         "workdir": workdir.display().to_string(),
         "harness_dir": harness_dir.display().to_string()
     });
@@ -457,6 +465,42 @@ fn log_info(config: &RunConfig, msg: &str) {
             eprintln!("harness: {msg}");
         }
     }
+}
+
+/// Collect eval findings from eval.governance.jsonl written during this harness run.
+///
+/// Reads entries written after `run_start` to pick up findings from eval subprocesses.
+fn collect_eval_findings(harness_dir: &Path, run_start: &chrono::DateTime<Utc>) -> Vec<Value> {
+    let eval_log = harness_dir.join("eval.governance.jsonl");
+    let content = match fs::read_to_string(&eval_log) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut findings = Vec::new();
+    for line in content.lines().rev().take(10) {
+        let record: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        // Only collect entries written after this harness run started
+        if let Some(ts) = record.get("timestamp").and_then(|v| v.as_str()) {
+            if let Ok(entry_time) = chrono::DateTime::parse_from_rfc3339(ts) {
+                if entry_time < *run_start {
+                    continue;
+                }
+            }
+        }
+        // Extract the findings array and eval metadata
+        let entry = json!({
+            "instance_id": record.get("instance_id"),
+            "benchmark": record.get("benchmark"),
+            "resolved": record.get("resolved"),
+            "findings": record.get("findings").unwrap_or(&json!([])),
+        });
+        findings.push(entry);
+    }
+    findings
 }
 
 fn resolve_harness_dir(repo_root: &Path) -> Result<PathBuf> {
@@ -504,11 +548,12 @@ fn git_rev_parse(workdir: &Path, refspec: &str) -> Option<String> {
         })
 }
 
-fn run_agent(cmd: &[String], workdir: &Path, log_path: &Path) -> Result<i32> {
+fn run_agent(cmd: &[String], workdir: &Path, log_path: &Path, repo_root: &Path) -> Result<i32> {
     let log_file = fs::File::create(log_path)?;
     let status = Command::new(&cmd[0])
         .args(&cmd[1..])
         .current_dir(workdir)
+        .env("SYNODIC_ROOT", repo_root)
         .stdout(log_file.try_clone()?)
         .stderr(log_file)
         .status()
@@ -516,11 +561,12 @@ fn run_agent(cmd: &[String], workdir: &Path, log_path: &Path) -> Result<i32> {
     Ok(status.code().unwrap_or(1))
 }
 
-fn run_agent_with_stdin(cmd: &[String], workdir: &Path, input: &str, log_path: &Path) -> Result<i32> {
+fn run_agent_with_stdin(cmd: &[String], workdir: &Path, input: &str, log_path: &Path, repo_root: &Path) -> Result<i32> {
     let log_file = fs::File::create(log_path)?;
     let mut child = Command::new(&cmd[0])
         .args(&cmd[1..])
         .current_dir(workdir)
+        .env("SYNODIC_ROOT", repo_root)
         .stdin(std::process::Stdio::piped())
         .stdout(log_file.try_clone()?)
         .stderr(log_file)
