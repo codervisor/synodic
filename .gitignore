@@ -12,10 +12,8 @@ Thumbs.db
 *.swp
 *.swo
 
-# Claude Code — track docs and skills, ignore runtime settings
-/.claude/settings.json
-/.claude/settings.local.json
-/.claude/todos.json
+# Project
+/.claude
 
 # Rust
 cli/target/
