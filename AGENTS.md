@@ -23,6 +23,7 @@ npx skills add codervisor/lean-spec@leanspec-sdd -g -y
 
 - **Specs first**: Create a spec before starting non-trivial work
 - **LeanSpec format**: All specs use YAML frontmatter (status, created, tags, priority)
+- **Spec writes via MCP**: Always use LeanSpec MCP tools (`create`, `update`) — never write spec files directly. The MCP server enforces validation rules from `.lean-spec/config.json`
 - **Governance**: All agent operations follow [HARNESS.md](./HARNESS.md)
 
 ## Governance

@@ -31,7 +31,7 @@ When invoked, execute the following steps **exactly**:
 
 ### Step 1 — Initialize
 
-1. Read the spec at `<spec-path>`.
+1. Read the spec at `<spec-path>`. Prefer the LeanSpec MCP `view` tool when available, falling back to direct file read.
 2. Generate a work ID: `factory-{unix-timestamp}` (e.g., `factory-1710600000`).
 3. Create the manifest directory: `.factory/{work-id}/`.
 4. Initialize the manifest file at `.factory/{work-id}/manifest.json` with:

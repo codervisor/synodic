@@ -66,10 +66,39 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 - Set `GH_TOKEN` env var in Claude Code settings for authenticated access (5000 req/hr + private repos + writes)
 - `gh` CLI installed by `.github/setup-env.sh` SessionStart hook
 
+## Spec Management via MCP
+
+**All spec creation and mutation MUST go through the LeanSpec MCP server tools.** Do NOT use Write/Edit tools to create or modify spec files directly. The MCP server enforces validation rules (size limits, required frontmatter, dependency integrity) that prevent invalid specs from reaching disk.
+
+**Available MCP tools (from `@leanspec/mcp`):**
+
+| Tool | Purpose |
+|------|---------|
+| `create` | Create a new spec — validates before writing |
+| `update` | Update spec metadata — re-validates before writing |
+| `validate` | Dry-run validation without writing |
+| `view` | Read a spec's content |
+| `list` | List specs with filtering |
+| `search` | Search across specs |
+| `deps` | Show dependency graph |
+| `link` / `unlink` | Manage dependency relationships |
+| `board` | Kanban-style project board |
+| `stats` | Project statistics |
+| `tokens` | Token counting for context management |
+
+**Why MCP instead of direct file writes:**
+- `.lean-spec/config.json` defines validation rules (400-line max, 5000-token max, required frontmatter) but nothing enforces them with direct writes
+- MCP tools are the **gatekeeper** — agents cannot bypass validation
+- Dependency links are validated (dangling `depends_on` references rejected)
+- Scope overlap detection via tag similarity
+
+**Configuration:** `.mcp.json` at repo root registers the server. No manual setup needed.
+
 ## Conventions
 
 - **Specs first**: Create a spec before starting non-trivial work
 - **LeanSpec format**: All specs use YAML frontmatter (status, created, tags, priority)
+- **Spec writes via MCP**: Always use LeanSpec MCP tools (`create`, `update`) — never write spec files directly
 - **Governance**: All agent operations follow [HARNESS.md](./HARNESS.md)
 
 ## Skills
