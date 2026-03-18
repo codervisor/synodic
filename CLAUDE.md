@@ -76,16 +76,17 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 
 | Tool | Purpose |
 |------|---------|
-| `create` | Create a new spec — validates before writing |
-| `update` | Update spec metadata — re-validates before writing |
-| `validate` | Dry-run validation without writing |
-| `view` | Read a spec's content |
-| `list` | List specs with filtering |
-| `search` | Search across specs |
-| `deps` | Show dependency graph |
-| `link` / `unlink` | Manage dependency relationships |
-| `board` | Kanban-style project board |
-| `stats` | Project statistics |
+| `create` | Create a new spec — auto-generates number + frontmatter, validates before writing |
+| `update` | Update metadata/content via replacements, section updates, checklist toggles |
+| `validate` | Validate frontmatter, structure, dependencies (dry-run or check existing) |
+| `view` | Read a spec's full content and metadata |
+| `list` | List specs with filtering by status, tags, priority |
+| `search` | Full-text search with AND/OR/NOT, field filters, fuzzy matching |
+| `relationships` | View/add/remove parent, child, and depends_on relationships |
+| `children` | List direct child specs of a parent |
+| `deps` | Show upstream/downstream dependency graph |
+| `board` | Project board grouped by status, priority, assignee, or tag |
+| `stats` | Project statistics and insights |
 | `tokens` | Token counting for context management |
 
 **Why MCP instead of direct file writes:**
