@@ -85,7 +85,7 @@ if task.get('test_patch'):
         f.write(task['test_patch'])
 
 for key in ['FAIL_TO_PASS', 'PASS_TO_PASS']:
-    val = task.get(key)
+    val = task.get(key) or task.get(key.lower())
     if val:
         with open(f'{task_dir}/{key.lower()}.json', 'w') as f:
             f.write(val if isinstance(val, str) else json.dumps(val))
