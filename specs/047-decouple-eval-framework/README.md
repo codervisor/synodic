@@ -9,117 +9,145 @@ tags:
 created_at: 2026-03-18T22:30:33.987624411Z
 updated_at: 2026-03-18T22:30:33.987624411Z
 ---
-
 # Decouple Eval as Standalone Testing Framework
 
 ## Overview
 
-The eval framework (setup → agent → score pipeline) is a general-purpose AI coding evaluation tool that should work independently of synodic's governance harness. Today they share a single binary, a single Cargo.toml, and a shared util.rs — making it impossible to use eval without pulling in harness code and conventions.
+The eval framework (setup → agent → score pipeline) is a general-purpose AI coding evaluation tool that should work independently of synodic's governance harness. Today eval directly writes to `.harness/eval.governance.jsonl` and reads `SYNODIC_ROOT` — it has no business knowing about governance at all.
 
-**Why now:** Eval is mature enough (29 tests, 3 benchmarks, batch mode) to stand alone. Decoupling enables:
+**Why now:** Eval is mature enough (29 tests, 3 benchmarks, batch mode) to stand alone. Complete separation enables:
+- Eval as a zero-dependency testing framework — no governance concepts leak in
 - Independent versioning and release cycles
 - Use by external teams without adopting synodic governance
-- Cleaner dependency graphs (eval doesn't need harness's rule engine)
-- Synodic can dogfood eval as a consumer, not as a co-resident
+- Synodic consumes eval output (JSON on stdout/files) and writes its own governance logs
 
 ## Design
 
-### Current coupling points (none are deep)
+### Separation principle: eval knows nothing about governance
 
-| Coupling | Mechanism | Severity |
-|----------|-----------|----------|
-| Single binary | `Cli { Harness, Eval }` in main.rs | Low — just dispatch |
-| Shared util.rs | `find_repo_root()`, `exec_script()` | Low — 2 functions, ~40 lines |
-| Governance logs | eval writes `.harness/eval.governance.jsonl` | Medium — format assumption |
-| SYNODIC_ROOT env var | harness sets → eval reads via util.rs | Medium — naming/convention |
-| Shared Cargo.toml | One crate, all deps mixed | Low — no conflicting deps |
+Eval produces **structured output** (JSON verdict + score reports). Period. It does not:
+- Write to `.harness/` or any governance directory
+- Read `SYNODIC_ROOT` or any synodic-specific env var
+- Reference HARNESS.md, cross-run learning, or governance concepts
+- Know it's being orchestrated by anything
 
-### Target architecture: Cargo workspace with two crates
+Synodic's harness is the **consumer** — it invokes eval, reads its stdout/exit code, and writes governance logs itself.
+
+### Current coupling to remove
+
+| What | Where | Action |
+|------|-------|--------|
+| `append_governance_log()` | eval/run.rs:486-534 | **Delete entirely** — eval doesn't write gov logs |
+| `extract_findings()` | eval/run.rs (helper for gov log) | **Delete** — governance categorization is harness's job |
+| `.harness/` directory creation | eval/run.rs:494-497 | **Delete** — eval never touches .harness/ |
+| `SYNODIC_ROOT` env var read | util.rs:9-13 | **Remove from eval** — eval uses its own project root discovery |
+| Gov log comments | eval/run.rs:321 referencing "HARNESS.md §6-7" | **Remove** — no harness references in eval |
+| `find_repo_root()` looking for `.harness/` | util.rs | **Split** — eval version looks for `evals/` or `.git`, not `.harness/` |
+
+### Target architecture: Cargo workspace
 
 ```
 cli/
-├── Cargo.toml              # [workspace] members = ["synodic", "synodic-eval"]
-├── synodic/                # Harness binary crate
-│   ├── Cargo.toml          # depends on synodic-eval (optional, for `synodic eval` passthrough)
+├── Cargo.toml                  # [workspace] members = ["synodic", "synodic-eval"]
+├── synodic/                    # Governance binary
+│   ├── Cargo.toml              # depends on synodic-eval as library
 │   └── src/
-│       ├── main.rs         # Cli { Harness, Eval } — eval delegates to synodic-eval
+│       ├── main.rs             # Cli { Harness, Eval }
 │       ├── cmd/harness.rs
-│       ├── harness/        # unchanged
-│       └── util.rs         # harness-specific utils only
-├── synodic-eval/           # Eval library + binary crate
-│   ├── Cargo.toml          # standalone deps (serde, regex, quick-xml, chrono)
+│       ├── harness/
+│       │   ├── run.rs          # Invokes eval, reads output, writes gov logs
+│       │   ├── log.rs          # Reads .harness/*.governance.jsonl
+│       │   └── rules.rs
+│       ├── governance.rs       # NEW: writes eval results → .harness/eval.governance.jsonl
+│       └── util.rs             # find_repo_root() — looks for .harness/
+├── synodic-eval/               # Standalone eval framework
+│   ├── Cargo.toml              # Zero synodic dependencies
 │   └── src/
-│       ├── lib.rs          # Public API: run(), score(), setup(), list(), batch()
-│       ├── main.rs         # Standalone binary: `synodic-eval run`, `synodic-eval score`
-│       ├── run.rs
+│       ├── lib.rs              # Public API: run(), score(), list(), batch()
+│       ├── main.rs             # Binary: `synodic-eval run|score|list|batch|report`
+│       ├── run.rs              # Orchestrate: setup → agent → score → JSON output
 │       ├── batch.rs
 │       ├── list.rs
 │       ├── report.rs
-│       ├── score/          # parser, runner, verdict, report — unchanged
-│       ├── setup/          # swebench, featurebench, devbench — unchanged
-│       └── util.rs         # eval-specific: find_project_root() (no .harness assumption)
+│       ├── score/              # parser, runner, verdict, report — unchanged
+│       ├── setup/              # swebench, featurebench, devbench — unchanged
+│       └── util.rs             # find_project_root() — looks for evals/ or .git
 ```
 
-### Key design decisions
+### Eval output contract
 
-**1. Governance log integration becomes a plugin/callback, not hardcoded**
+Eval communicates results through two channels only:
 
-Currently `eval/run.rs` directly writes to `.harness/eval.governance.jsonl`. Instead:
+**1. Exit code** — `0` = resolved, `1` = not resolved, `2` = error
+**2. Structured JSON output** — written to `--output <path>` or stdout:
 
-```rust
-// synodic-eval exposes a trait
-pub trait EvalReporter {
-    fn on_verdict(&self, verdict: &EvalVerdict, metrics: &RunMetrics) -> Result<()>;
+```json
+{
+  "instance_id": "django__django-16379",
+  "benchmark": "swebench",
+  "skill": "factory",
+  "resolved": true,
+  "duration_s": 142,
+  "f2p": { "group": "FAIL_TO_PASS", "expected": 3, "passed": 3 },
+  "p2p": { "group": "PASS_TO_PASS", "expected": 47, "passed": 47 },
+  "score_report": "path/to/score_report.json"
 }
-
-// Default: JSON to stdout (standalone mode)
-pub struct StdoutReporter;
-
-// Synodic provides: JSONL to .harness/ (governance mode)
-pub struct GovernanceReporter { harness_dir: PathBuf }
 ```
 
-This way eval doesn't know about `.harness/` at all. Synodic wires in its own reporter when invoking eval.
+**Harness side (governance.rs — NEW file in synodic crate):**
+```rust
+// synodic reads eval's JSON output and writes governance log
+fn record_eval_result(harness_dir: &Path, eval_output: &EvalOutput) {
+    let record = json!({
+        "work_id": format!("eval-{}-{}-{}", eval_output.instance_id, eval_output.skill, timestamp),
+        "source": "eval",
+        "timestamp": Utc::now().to_rfc3339(),
+        "status": if eval_output.resolved { "resolved" } else { categorize(&eval_output) },
+        "findings": extract_findings(&eval_output),
+        // ... same schema as today, but owned by harness
+    });
+    append_jsonl(harness_dir.join("eval.governance.jsonl"), &record);
+}
+```
 
-**2. SYNODIC_ROOT → EVAL_PROJECT_ROOT (generic naming)**
+### Project root discovery
 
-Eval should use a generic env var like `EVAL_PROJECT_ROOT` to find the project root. Synodic's harness can set both `SYNODIC_ROOT` and `EVAL_PROJECT_ROOT` for backwards compatibility.
+Eval needs to find the project root (for `evals/evals.json`). Currently it piggybacks on `find_repo_root()` which looks for `.harness/`. After decoupling:
 
-**3. `synodic eval` becomes a thin passthrough**
-
-The synodic binary keeps the `eval` subcommand for convenience but delegates to `synodic-eval` (either as a library dependency or subprocess). This preserves the `synodic eval run` UX while eval is independently usable as `synodic-eval run`.
-
-**4. evals/ directory stays with synodic (task registry is project-specific)**
-
-The `evals/evals.json` task registry and `evals/tasks/` definitions are project-specific. synodic-eval reads them from a configurable path (default: `./evals/evals.json`), not from a hardcoded location.
+- **synodic-eval**: `find_project_root()` walks up looking for `evals/evals.json` or `.git`. Overridable via `EVAL_ROOT` env var.
+- **synodic**: `find_repo_root()` walks up looking for `.harness/` or `.git`. Sets `EVAL_ROOT` when spawning eval subprocess.
 
 ## Plan
 
 - [ ] Create Cargo workspace with `synodic` and `synodic-eval` member crates
-- [ ] Move eval modules (run, batch, list, report, score/, setup/) to synodic-eval crate
-- [ ] Extract eval-specific util functions into synodic-eval/src/util.rs
-- [ ] Define EvalReporter trait; replace hardcoded governance log writes with trait calls
-- [ ] Implement StdoutReporter (default) and GovernanceReporter (synodic-specific)
-- [ ] Rename SYNODIC_ROOT to EVAL_PROJECT_ROOT in eval crate; add compat in harness
-- [ ] Wire synodic binary to depend on synodic-eval as library for `synodic eval` passthrough
-- [ ] Update evals.json path to be configurable (--evals-file flag, env var, default)
-- [ ] Verify all 29 existing tests pass in the new synodic-eval crate
-- [ ] Update CLAUDE.md and docs to reflect new architecture
+- [ ] Move eval modules to synodic-eval crate (run, batch, list, report, score/, setup/)
+- [ ] Delete `append_governance_log()` and `extract_findings()` from eval/run.rs entirely
+- [ ] Remove all `.harness/` references from eval code
+- [ ] Remove `SYNODIC_ROOT` reads from eval; add `EVAL_ROOT` env var for project root
+- [ ] Create `synodic/src/governance.rs` — reads eval JSON output, writes gov JSONL
+- [ ] Update harness/run.rs to capture eval stdout, pass to governance.rs
+- [ ] Add `--output <path>` flag to eval for structured JSON output
+- [ ] Ensure eval works standalone: no .harness/ needed, no synodic env vars
+- [ ] Verify all 29 existing tests pass in synodic-eval crate
+- [ ] Update CLAUDE.md to reflect two-crate architecture
 
 ## Test
 
 - [ ] `cd cli/synodic-eval && cargo test` — all 29 tests pass standalone
-- [ ] `cd cli/synodic-eval && cargo build` — produces standalone `synodic-eval` binary
-- [ ] `synodic-eval run` works without .harness/ directory present
-- [ ] `synodic eval run` still works (passthrough from main binary)
-- [ ] GovernanceReporter writes correct JSONL when invoked through synodic harness
-- [ ] EVAL_PROJECT_ROOT env var respected; SYNODIC_ROOT still works as fallback
+- [ ] `cd cli/synodic-eval && cargo build` — standalone binary, no synodic deps
+- [ ] `synodic-eval run` works in a directory with no `.harness/`
+- [ ] `synodic eval run` still works (synodic invokes eval, writes gov log itself)
+- [ ] Governance log schema unchanged (harness consumers unaffected)
+- [ ] `grep -r "harness\|governance\|SYNODIC" synodic-eval/src/` returns zero matches
 
 ## Notes
 
-**Alternatives considered:**
-- **Feature flags instead of workspace:** Could use `#[cfg(feature = "harness")]` to conditionally compile governance integration. Rejected — doesn't give eval its own binary or independent release.
-- **Separate repo:** Too aggressive for now. Workspace keeps them co-developed while allowing independent builds. Can extract to separate repo later if needed.
-- **Git subtree/submodule:** Adds git complexity without clear benefit at this stage.
+**What moves where:**
+- `append_governance_log()` → deleted from eval, rewritten in `synodic/src/governance.rs`
+- `extract_findings()` → deleted from eval, rewritten in governance.rs
+- `find_repo_root()` → split: eval gets `find_project_root()` (no .harness), harness keeps original
+- `SYNODIC_ROOT` → harness-only; eval uses `EVAL_ROOT`
 
-**Migration path:** This is a pure refactor — no behavioral changes. All existing `synodic eval` commands continue working. New `synodic-eval` binary is an addition, not a replacement.
+**Alternatives considered:**
+- **EvalReporter trait (previous design):** Still couples eval to the concept of "reporting to something". Rejected — eval should just produce output, not call callbacks.
+- **Separate repo:** Too aggressive. Workspace keeps co-development while allowing independent builds.
