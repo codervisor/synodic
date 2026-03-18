@@ -20,7 +20,6 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 
 def parse_test_list(filepath: str) -> list[str]:
@@ -164,6 +163,11 @@ def run_django_tests(
         #   test_foo (myapp.tests.TestBar) ... ok
         #   test_bar (myapp.tests.TestBar) ... FAIL
         #   test_baz (myapp.tests.TestBar) ... ERROR
+        #
+        # IMPORTANT: Only count tests that are in our input list.
+        # Django may run & output more tests than we asked for (e.g., entire
+        # test classes), so we must filter to avoid passed > total.
+        expected_ids = {f"{name} ({module_class})" for name in test_names}
         output = result.stdout + "\n" + result.stderr
         seen = set()
         for line in output.splitlines():
@@ -189,6 +193,9 @@ def run_django_tests(
             name, mod, status_word = m.groups()
             orig_id = f"{name} ({mod})"
             if orig_id in seen:
+                continue
+            # Skip tests not in our input list
+            if orig_id not in expected_ids:
                 continue
             seen.add(orig_id)
             if status_word.lower() == "ok":
@@ -252,38 +259,73 @@ def run_pytest_tests(
         return 0, 0, len(tests), details
 
     # Try parsing JUnit XML for detailed results
+    # Build a set of expected test IDs for filtering.
+    # Pytest node IDs: "tests/test_foo.py::TestBar::test_baz"
+    # JUnit XML uses classname + name: "tests.test_foo.TestBar::test_baz"
+    # We normalize both to dotted form for matching.
+    def _normalize_pytest_id(tid: str) -> str:
+        """Normalize a pytest node ID for comparison."""
+        # Convert path separators to dots and strip .py
+        return tid.replace("/", ".").replace(".py::", "::")
+
+    expected_normalized = {_normalize_pytest_id(t): t for t in tests}
+
     if os.path.exists(result_file):
         try:
             import xml.etree.ElementTree as ET
             tree = ET.parse(result_file)
-            seen = set()
+            seen_input = set()  # track which input tests we've matched
             for tc in tree.iter("testcase"):
-                name = tc.get("classname", "") + "::" + tc.get("name", "")
-                seen.add(name)
+                junit_id = tc.get("classname", "") + "::" + tc.get("name", "")
+                junit_normalized = _normalize_pytest_id(junit_id)
+
+                # Find the matching input test, skip if not in our list
+                input_test = expected_normalized.get(junit_normalized)
+                if not input_test:
+                    # Try matching by suffix (classname may differ)
+                    test_method = "::" + tc.get("name", "")
+                    for norm_id, orig in expected_normalized.items():
+                        if norm_id.endswith(test_method) and orig not in seen_input:
+                            input_test = orig
+                            break
+                if not input_test or input_test in seen_input:
+                    continue
+                seen_input.add(input_test)
+
                 failure = tc.find("failure")
                 error = tc.find("error")
                 skipped = tc.find("skipped")
                 if failure is not None:
                     failed += 1
                     details.append({
-                        "test": name,
+                        "test": input_test,
                         "status": "FAIL",
                         "reason": (failure.get("message", ""))[:200],
                     })
                 elif error is not None:
                     errors += 1
                     details.append({
-                        "test": name,
+                        "test": input_test,
                         "status": "ERROR",
                         "reason": (error.get("message", ""))[:200],
                     })
                 elif skipped is not None:
                     # Count skipped as passed for now
                     passed += 1
-                    details.append({"test": name, "status": "PASS"})
+                    details.append({"test": input_test, "status": "PASS"})
                 else:
                     passed += 1
-                    details.append({"test": name, "status": "PASS"})
+                    details.append({"test": input_test, "status": "PASS"})
+
+            # Any input tests not seen in JUnit results
+            for t in tests:
+                if t not in seen_input:
+                    if result.returncode == 0:
+                        passed += 1
+                        details.append({"test": t, "status": "PASS"})
+                    else:
+                        errors += 1
+                        details.append({"test": t, "status": "ERROR", "reason": "Not found in JUnit XML"})
         except Exception:
             pass  # Fall through to exit code check
         finally:
@@ -348,10 +390,10 @@ def main():
     print()
 
     # Compute verdict
-    # passed >= total handles cases where the runner detects more test results
-    # than the test list specifies (e.g., same test in both parsed and unparsed formats)
-    f2p_all_pass = f2p_passed >= f2p_total and f2p_total > 0 and f2p_failed == 0 and f2p_errors == 0
-    p2p_all_pass = p2p_passed >= p2p_total and p2p_failed == 0 and p2p_errors == 0
+    # Runners now filter to only count tests from the input list, so
+    # passed + failed + errors should equal total exactly.
+    f2p_all_pass = f2p_passed == f2p_total and f2p_total > 0
+    p2p_all_pass = p2p_passed == p2p_total
     resolved = f2p_all_pass and p2p_all_pass
 
     # Write report
