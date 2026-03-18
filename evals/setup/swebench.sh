@@ -42,7 +42,7 @@ fi
 case "$SPLIT" in
   verified) HF_DATASET="princeton-nlp/SWE-bench_Verified"; HF_SPLIT="test" ;;
   lite)     HF_DATASET="princeton-nlp/SWE-bench_Lite"; HF_SPLIT="test" ;;
-  pro)      HF_DATASET="scale-labs/SWE-bench_Pro_public"; HF_SPLIT="test" ;;
+  pro)      HF_DATASET="ScaleAI/SWE-bench_Pro"; HF_SPLIT="test" ;;
   full)     HF_DATASET="princeton-nlp/SWE-bench"; HF_SPLIT="test" ;;
   *)        echo "Unknown split: $SPLIT (use verified, lite, pro, or full)" >&2; exit 1 ;;
 esac

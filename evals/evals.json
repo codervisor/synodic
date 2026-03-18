@@ -4,19 +4,19 @@
   "description": "Benchmark task registry for e2e evaluation. Each task can be run through any skill (fractal, factory, baseline) via: ./evals/run.sh <alias> --skill <name>",
   "evals": [
     {
-      "id": "swebench-pro-scikit-learn-25747",
-      "name": "SWE-bench Pro: scikit-learn #25747 (multi-file, ML pipeline)",
-      "description": "SWE-bench Pro task requiring multi-file changes in scikit-learn. Tests orchestration on ML library internals spanning estimator, validation, and pipeline modules.",
-      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
+      "id": "swebench-pro-qutebrowser-f91ace",
+      "name": "SWE-bench Pro: qutebrowser (Python, browser)",
+      "description": "SWE-bench Pro task in qutebrowser — a keyboard-driven Python browser. Tests orchestration on a real-world Python project.",
+      "tags": ["swebench", "e2e", "code", "pytest", "primary"],
       "source": {
         "benchmark": "SWE-bench Pro",
-        "instance_id": "scikit-learn__scikit-learn-25747",
-        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "instance_id": "instance_qutebrowser__qutebrowser-f91ace96223cac8161c16dd061907e138fe85111-v059c6fdc75567943479b23ebca7c07b5e9a7f34c",
+        "dataset": "ScaleAI/SWE-bench_Pro",
         "split": "pro"
       },
       "e2e": {
         "runner": "run.sh",
-        "alias": "swe:scikit-learn-25747",
+        "alias": "swe:qutebrowser-f91ace",
         "setup": "setup/swebench.sh",
         "score": "score.sh",
         "requires": ["git", "python3", "pip", "pytest", "datasets"]
@@ -28,19 +28,19 @@
       ]
     },
     {
-      "id": "swebench-pro-flask-5063",
-      "name": "SWE-bench Pro: Flask #5063 (routing + error handling)",
-      "description": "SWE-bench Pro task in Flask involving routing and error handling changes across multiple modules.",
+      "id": "swebench-pro-ansible-f327e6",
+      "name": "SWE-bench Pro: ansible (Python, infra automation)",
+      "description": "SWE-bench Pro task in Ansible — infrastructure automation. Tests multi-file changes in a large Python codebase.",
       "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
       "source": {
         "benchmark": "SWE-bench Pro",
-        "instance_id": "pallets__flask-5063",
-        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "instance_id": "instance_ansible__ansible-f327e65d11bb905ed9f15996024f857a95592629-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+        "dataset": "ScaleAI/SWE-bench_Pro",
         "split": "pro"
       },
       "e2e": {
         "runner": "run.sh",
-        "alias": "swe:flask-5063",
+        "alias": "swe:ansible-f327e6",
         "setup": "setup/swebench.sh",
         "score": "score.sh",
         "requires": ["git", "python3", "pip", "pytest", "datasets"]
@@ -52,22 +52,22 @@
       ]
     },
     {
-      "id": "swebench-pro-django-16379",
-      "name": "SWE-bench Pro: Django #16379 (multi-file bug fix)",
-      "description": "SWE-bench Pro task requiring multi-file changes in Django. SOTA: 23.1% (Claude Opus 4.1).",
-      "tags": ["swebench", "e2e", "code", "pytest", "multi-file", "primary"],
+      "id": "swebench-pro-teleport-3fa690",
+      "name": "SWE-bench Pro: teleport (Go, security)",
+      "description": "SWE-bench Pro task in Gravitational Teleport — a Go security infrastructure project. Tests cross-language capability.",
+      "tags": ["swebench", "e2e", "code", "go", "multi-file", "primary"],
       "source": {
         "benchmark": "SWE-bench Pro",
-        "instance_id": "django__django-16379",
-        "dataset": "scale-labs/SWE-bench_Pro_public",
+        "instance_id": "instance_gravitational__teleport-3fa6904377c006497169945428e8197158667910-v626ec2a48416b10a88641359a169d99e935ff037",
+        "dataset": "ScaleAI/SWE-bench_Pro",
         "split": "pro"
       },
       "e2e": {
         "runner": "run.sh",
-        "alias": "swe:django-16379",
+        "alias": "swe:teleport-3fa690",
         "setup": "setup/swebench.sh",
         "score": "score.sh",
-        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+        "requires": ["git", "go", "datasets"]
       },
       "assertions": [
         "All F2P tests pass (bug correctly fixed)",
@@ -76,20 +76,22 @@
       ]
     },
     {
-      "id": "swebench-verified-sample",
-      "name": "SWE-bench Verified: Control group (baseline comparison)",
-      "description": "SWE-bench Verified task as a control group. SOTA is 80.9% — orchestration should NOT hurt performance on simpler tasks.",
-      "tags": ["swebench", "e2e", "code", "pytest", "control"],
+      "id": "swebench-verified-django-10097",
+      "name": "SWE-bench Verified: Django #10097 (URL validator fix)",
+      "description": "SWE-bench Verified task as a control group. Simple Django URLValidator fix — orchestration should NOT hurt performance on simpler tasks.",
+      "tags": ["swebench", "e2e", "code", "django", "control"],
       "source": {
         "benchmark": "SWE-bench Verified",
+        "instance_id": "django__django-10097",
         "dataset": "princeton-nlp/SWE-bench_Verified",
         "split": "verified"
       },
       "e2e": {
         "runner": "run.sh",
+        "alias": "swe:django-10097",
         "setup": "setup/swebench.sh",
         "score": "score.sh",
-        "requires": ["git", "python3", "pip", "pytest", "datasets"]
+        "requires": ["git", "python3", "pip", "datasets"]
       },
       "assertions": [
         "Simple tasks detected as LEAF (no unnecessary decomposition)",
