@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
+use chrono::Utc;
+use serde_json::json;
 
 use super::score;
 
@@ -134,6 +137,8 @@ pub fn execute(opts: RunOptions) -> Result<()> {
     println!("Testbed:   {}", testbed_dir);
     println!();
 
+    let run_start = std::time::Instant::now();
+
     // --- Phase 1: Setup ---
     if !opts.skip_setup {
         println!("━━━ Phase 1: Testbed Setup ━━━");
@@ -251,14 +256,14 @@ pub fn execute(opts: RunOptions) -> Result<()> {
     println!("━━━ Phase 3: Scoring ━━━");
     println!();
 
-    match target.benchmark.as_str() {
+    let verdict = match target.benchmark.as_str() {
         "featurebench" | "swebench" => {
             let output_path = opts.output.as_ref().map(PathBuf::from);
-            score::verdict::score(
+            Some(score::verdict::score(
                 &target.instance_id,
                 &testbed_path,
                 output_path.as_deref(),
-            )?;
+            )?)
         }
         "devbench" => {
             // DevBench scoring uses a separate script for now
@@ -273,20 +278,250 @@ pub fn execute(opts: RunOptions) -> Result<()> {
             } else {
                 bail!("DevBench scoring not yet ported to Rust; evals/score-devbench.sh not found");
             }
+            None
         }
         "synodic" => {
-            score::verdict::score_synodic(
+            Some(score::verdict::score_synodic(
                 &target.instance_id,
                 &testbed_path,
                 opts.output.as_ref().map(PathBuf::from).as_deref(),
-            )?;
+            )?)
         }
         other => bail!("Unknown benchmark type: {}", other),
-    }
+    };
+
+    // --- Governance Log ---
+    let duration_s = run_start.elapsed().as_secs();
+    append_governance_log(
+        &opts.repo_root,
+        &target,
+        &opts.skill,
+        &opts.split,
+        duration_s,
+        verdict.as_ref(),
+    );
 
     println!();
     println!("━━━ Done ━━━");
     Ok(())
+}
+
+/// Extract categorized, synthesized findings from a verdict.
+///
+/// Instead of dumping every failed test, this groups failures by pattern and
+/// produces actionable summaries that feed cross-run learning (HARNESS.md §6–7).
+fn extract_findings(verdict: &score::EvalVerdict) -> (Vec<serde_json::Value>, &'static str) {
+    let mut findings: Vec<serde_json::Value> = Vec::new();
+    let mut category = "resolved";
+
+    // --- F2P analysis: did the agent solve the task? ---
+    let f2p_failed: Vec<&score::TestResult> = verdict
+        .f2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Failed))
+        .collect();
+    let f2p_errors: Vec<&score::TestResult> = verdict
+        .f2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Error))
+        .collect();
+
+    if !f2p_failed.is_empty() {
+        category = "correctness";
+        // Collect distinct failure reasons
+        let reasons: Vec<&str> = f2p_failed
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let unique_reasons: Vec<&str> = {
+            let mut seen = std::collections::HashSet::new();
+            reasons.into_iter().filter(|r| seen.insert(*r)).collect()
+        };
+
+        findings.push(json!({
+            "category": "correctness",
+            "summary": format!(
+                "{}/{} F2P tests still failing — agent patch incomplete",
+                f2p_failed.len(),
+                verdict.f2p.expected.len()
+            ),
+            "tests": f2p_failed.iter().map(|r| &r.name).collect::<Vec<_>>(),
+            "reasons": unique_reasons,
+        }));
+    }
+
+    if !f2p_errors.is_empty() {
+        if category == "resolved" {
+            category = "infrastructure";
+        }
+        let reasons: Vec<&str> = f2p_errors
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        findings.push(json!({
+            "category": "infrastructure",
+            "summary": format!(
+                "{}/{} F2P tests errored — test environment broken",
+                f2p_errors.len(),
+                verdict.f2p.expected.len()
+            ),
+            "tests": f2p_errors.iter().map(|r| &r.name).collect::<Vec<_>>(),
+            "reasons": reasons,
+        }));
+    }
+
+    // --- P2P analysis: did the agent break existing behavior? ---
+    let p2p_failed: Vec<&score::TestResult> = verdict
+        .p2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Failed))
+        .collect();
+    let p2p_errors: Vec<&score::TestResult> = verdict
+        .p2p
+        .results
+        .iter()
+        .filter(|r| matches!(r.status, score::TestStatus::Error))
+        .collect();
+    let p2p_total = verdict.p2p.expected.len();
+
+    if !p2p_failed.is_empty() {
+        if category != "correctness" {
+            category = "regression";
+        }
+        let ratio = if p2p_total > 0 {
+            p2p_failed.len() as f64 / p2p_total as f64
+        } else {
+            0.0
+        };
+
+        // Synthesize: bulk failure vs selective regression
+        let summary = if ratio > 0.8 {
+            format!(
+                "{}/{} P2P tests failed — likely environment/setup issue, not selective regression",
+                p2p_failed.len(),
+                p2p_total
+            )
+        } else {
+            // Group by test file to find the blast radius
+            let mut by_file: HashMap<&str, usize> = HashMap::new();
+            for r in &p2p_failed {
+                let file = r.name.split("::").next().unwrap_or(&r.name);
+                *by_file.entry(file).or_default() += 1;
+            }
+            let hotspots: Vec<String> = by_file
+                .iter()
+                .map(|(f, n)| format!("{} ({})", f, n))
+                .collect();
+            format!(
+                "{}/{} P2P regressions in: {}",
+                p2p_failed.len(),
+                p2p_total,
+                hotspots.join(", ")
+            )
+        };
+
+        let reasons: Vec<&str> = p2p_failed
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let unique_reasons: Vec<&str> = {
+            let mut seen = std::collections::HashSet::new();
+            reasons.into_iter().filter(|r| seen.insert(*r)).take(5).collect()
+        };
+
+        findings.push(json!({
+            "category": if ratio > 0.8 { "infrastructure" } else { "regression" },
+            "summary": summary,
+            "failed_count": p2p_failed.len(),
+            "total_count": p2p_total,
+            "reasons": unique_reasons,
+        }));
+    }
+
+    if !p2p_errors.is_empty() {
+        if category == "resolved" {
+            category = "infrastructure";
+        }
+        let reasons: Vec<&str> = p2p_errors
+            .iter()
+            .filter_map(|r| r.reason.as_deref())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        findings.push(json!({
+            "category": "infrastructure",
+            "summary": format!(
+                "{}/{} P2P tests errored — test harness broken",
+                p2p_errors.len(),
+                p2p_total
+            ),
+            "reasons": reasons,
+        }));
+    }
+
+    (findings, category)
+}
+
+/// Append a governance record to `.harness/eval.governance.jsonl`.
+///
+/// Best-effort — failures are logged but do not abort the eval.
+/// Unlike score_report.json (raw test data), this captures categorized findings
+/// that feed the cross-run learning substrate (HARNESS.md §6–7).
+fn append_governance_log(
+    repo_root: &PathBuf,
+    target: &Target,
+    skill: &str,
+    split: &str,
+    duration_s: u64,
+    verdict: Option<&score::EvalVerdict>,
+) {
+    let harness_dir = repo_root.join(".harness");
+    if std::fs::create_dir_all(&harness_dir).is_err() {
+        return;
+    }
+
+    let (findings, category, resolved) = match verdict {
+        Some(v) => {
+            let (findings, cat) = extract_findings(v);
+            (findings, cat, v.resolved)
+        }
+        None => (vec![], "unknown", false),
+    };
+
+    let record = json!({
+        "work_id": format!("eval-{}-{}-{}", target.instance_id, skill, Utc::now().timestamp()),
+        "source": "eval",
+        "timestamp": Utc::now().to_rfc3339(),
+        "status": if resolved { "resolved" } else { category },
+        "instance_id": target.instance_id,
+        "benchmark": target.benchmark,
+        "split": split,
+        "skill": skill,
+        "resolved": resolved,
+        "findings": findings,
+        "metrics": {
+            "duration_s": duration_s,
+        }
+    });
+
+    let gov_log = harness_dir.join("eval.governance.jsonl");
+    let result = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&gov_log)
+        .and_then(|mut f| writeln!(f, "{}", serde_json::to_string(&record).unwrap_or_default()));
+
+    match result {
+        Ok(_) => eprintln!("Governance log: {}", gov_log.display()),
+        Err(e) => eprintln!("WARNING: Could not write governance log: {}", e),
+    }
 }
 
 #[cfg(test)]
