@@ -71,6 +71,36 @@ fractal:
   output_mode: code               # code | design | analysis
 ```
 
+## Design Principle: Algorithmic Spine
+
+> **AI for semantics, algorithms for structure.**
+>
+> If the operation can be expressed as a function over syntax trees, diffs,
+> dependency graphs, or set operations — it's an algorithm, not a subagent call.
+
+The orchestration protocol uses **classical algorithms** for all structurally-decidable
+operations, reserving AI subagents exclusively for semantic input→output transformation:
+
+| Operation | Method | Algorithm |
+|-----------|--------|-----------|
+| Leaf detection (pre-filter) | Deterministic | Weighted feature scoring (decision tree criterion) |
+| Orthogonality check | Deterministic | TF-IDF cosine similarity + Jaccard pre-filter |
+| Cycle detection | Deterministic | Kahn's topological sort |
+| Solve scheduling | Deterministic | DAG BFS layer decomposition (MapReduce shuffle) |
+| Budget allocation | Deterministic | Proportional distribution by complexity score |
+| Code reunification | Deterministic | 3-way merge (git merge-tree) |
+| Conflict detection | Deterministic | Set intersection on file paths + symbol exports |
+| Redundancy pruning | Deterministic | Greedy set cover + diff subset analysis |
+| Decompose (semantic) | AI subagent | Understands task meaning → produces sub-specs |
+| Solve (semantic) | AI subagent | Understands sub-spec → writes code/design |
+| Conflict resolution (semantic) | AI subagent | Resolves ambiguous interface mismatches |
+
+Scripts implementing the algorithmic spine live in `.harness/scripts/`:
+- `decompose_gate.py` — TF-IDF orthogonality, cycle detection, complexity scoring, budget allocation
+- `solve_scheduler.py` — DAG-based critical path scheduling into parallel waves
+- `reunify_merge.py` — git merge-tree reunification + structural conflict detection
+- `prune_gate.py` — set cover redundancy analysis
+
 ## Orchestration Protocol
 
 When invoked, execute the following steps **exactly**:
@@ -98,6 +128,25 @@ When invoked, execute the following steps **exactly**:
    }
    ```
 6. Read `.fractal.yaml` from the repo root if it exists and override defaults.
+
+### Step 1.5 — Complexity Pre-Filter (algorithmic)
+
+Before invoking AI for decomposition, compute a **complexity score** deterministically using `decompose_gate.py`:
+
+```
+echo '{"parent_spec": "<spec text>", "children": [], "current_depth": 0, "max_depth": 3, "total_nodes": 0, "max_total_nodes": 20}' | python3 scripts/decompose_gate.py
+```
+
+The script returns a `complexity_score` (0.0–1.0) based on weighted feature scoring:
+- **line_count** (0.15) — longer specs describe more complex tasks
+- **term_diversity** (0.25) — more unique concepts = more complex
+- **cross_cutting** (0.35) — architectural terms (auth, caching, validation) predict decomposition need
+- **enumeration** (0.25) — bullet points / numbered items suggest multiple parts
+
+**If `complexity_score` < `min_complexity` threshold:** auto-LEAF. Skip AI decompose entirely.
+**If above threshold:** proceed to Step 2, passing the score as context to the AI.
+
+This is the same principle as a **decision tree split criterion** — a deterministic feature-weighted score decides whether to recurse.
 
 ### Step 2 — Decompose (top-down, level by level)
 
@@ -129,6 +178,8 @@ Agent(
 > - Maximum children: {max_children}
 > - Current depth: {current_depth} / {max_depth}
 > - Remaining node budget: {remaining_nodes}
+> - Complexity score: {complexity_score} (algorithmic pre-assessment)
+> - Budget allocation: {per-child budget from algorithmic allocation}
 >
 > ## Instructions
 >
@@ -183,20 +234,24 @@ After each decompose subagent returns:
 
 **Budget enforcement:** If `max_total_nodes` would be exceeded, mark the current node as a leaf regardless of the decompose verdict.
 
-### Step 2.5 — DECOMPOSE GATE
+### Step 2.5 — DECOMPOSE GATE (algorithmic)
 
 After parsing a SPLIT verdict, **before** writing child spec files, validate the decomposition structurally. This does NOT require a subagent — it's a deterministic check.
 
 1. **Run the gate script.** Pipe the decomposition data to `scripts/decompose_gate.py`:
    ```
-   echo '{"parent_spec": "<parent spec text>", "children": [{"slug": "...", "scope": "..."}], "current_depth": N, "max_depth": N, "total_nodes": N, "max_total_nodes": N}' | python3 scripts/decompose_gate.py
+   echo '{"parent_spec": "<parent spec text>", "children": [{"slug": "...", "scope": "...", "inputs": "...", "outputs": "..."}], "current_depth": N, "max_depth": N, "total_nodes": N, "max_total_nodes": N}' | python3 scripts/decompose_gate.py
    ```
-   The script returns JSON with a `flags` array. Each flag has a `category` and `description`.
+   The script returns JSON with:
+   - `flags` — advisory warnings (array of `{category, description}`)
+   - `complexity_score` — parent complexity (0.0–1.0)
+   - `budget_allocation` — per-child node budget (proportional to complexity)
+   - `dependency_order` — solve waves (parallel groups from topological sort)
 
 2. **Flag categories:**
-   - `[orthogonality]` — scope overlap between children (>30% Jaccard keyword similarity)
+   - `[orthogonality]` — scope overlap between children (>30% TF-IDF cosine similarity, Jaccard pre-filter)
    - `[coverage]` — parent requirements not covered by any child (>20% parent terms missing)
-   - `[granularity]` — splitting too fine or too coarse
+   - `[cycle]` — circular dependencies between children (detected by Kahn's topological sort)
    - `[budget]` — node budget under pressure (>80% used with depth remaining)
 
 3. **If any flags raised:**
@@ -212,11 +267,29 @@ After parsing a SPLIT verdict, **before** writing child spec files, validate the
 
 4. **If no flags:** proceed normally.
 
-This gate is fast and deterministic — no LLM cost. It catches common decomposition failures (overlapping scopes, missing coverage, budget exhaustion) before they propagate down the tree.
+5. **Store algorithmic outputs** in the manifest for downstream steps:
+   - `budget_allocation` → used in child decomposition (Step 2 recursion)
+   - `dependency_order` → used in solve scheduling (Step 3)
 
-### Step 3 — Solve (leaves, bottom-up)
+This gate is fast and deterministic — no LLM cost. It catches common decomposition failures (overlapping scopes, missing coverage, circular dependencies, budget exhaustion) before they propagate down the tree.
 
-Process all leaf nodes. If `solve_mode` is `parallel`, spawn all leaf subagents concurrently. If `sequential`, process them in dependency order.
+### Step 3 — Solve (leaves, dependency-ordered waves)
+
+Schedule leaf nodes for solving using the **DAG-based solve scheduler** (`scripts/solve_scheduler.py`):
+
+```
+cat .fractal/{work-id}/manifest.json | python3 scripts/solve_scheduler.py
+```
+
+The scheduler returns:
+- `waves` — groups of leaves that can run concurrently (topological sort layers)
+- `critical_path` — the longest dependency chain (determines minimum sequential waves)
+- `max_parallelism` — peak concurrent leaves in any wave
+
+**Execute waves sequentially, leaves within each wave concurrently.** This replaces the binary parallel/sequential choice with dependency-aware scheduling:
+- All independent leaves → single wave (= fully parallel)
+- All dependent leaves → one per wave (= fully sequential)
+- Mixed → multiple waves with maximal parallelism per wave
 
 For each leaf node, spawn a **general-purpose subagent**:
 
@@ -302,11 +375,36 @@ This creates two tiers of governance for SOLVE:
 - **Lightweight** (default): static checks only, fast, no AI cost
 - **Full** (`solve_mode: factory`): Factory's complete pipeline per leaf
 
-### Step 4 — Reunify (bottom-up)
+### Step 4 — Reunify (bottom-up, algorithm-first)
 
 Once all leaves at a level are solved, reunify them into their parent. Walk the tree bottom-up.
 
-For each non-leaf node whose children are all solved, spawn a **general-purpose subagent**:
+**For `output_mode: code` — algorithmic reunification first:**
+
+Run `scripts/reunify_merge.py` to attempt deterministic merging via git:
+
+```
+echo '{"base_ref": "main", "children": [...], "dependency_order": [...], "node_slug": "root"}' | python3 scripts/reunify_merge.py
+```
+
+The script performs:
+1. **Structural conflict detection** (deterministic, no AI):
+   - `[boundary]` — child modified files outside its declared scope (set intersection on file paths)
+   - `[redundancy]` — multiple children modified the same file (file owner map)
+   - `[gap]` — child declares inputs not produced by any sibling (set difference on contracts)
+
+2. **Git 3-way merge** for each child branch in dependency order:
+   - `git merge-tree --write-tree <base> <ours> <theirs>`
+   - Clean merges proceed automatically
+   - Textual conflicts classified: rename, modify/delete, content
+
+3. **Auto-resolution** for mechanical conflicts (rename, additive changes)
+
+4. **Output**: `{status, auto_resolved, conflicts, merge_order, needs_ai}`
+
+**If `needs_ai` is false:** reunification is complete. Write `result.md`, mark MERGED, continue bottom-up. No AI subagent needed.
+
+**If `needs_ai` is true:** spawn AI subagent ONLY for the specific unresolved conflicts:
 
 ```
 Agent(
@@ -315,6 +413,10 @@ Agent(
   prompt: <REUNIFY_PROMPT below>
 )
 ```
+
+**For `output_mode: design` or `analysis` — AI reunification:**
+
+Spawn a **general-purpose subagent** (no algorithmic shortcut for prose merging):
 
 **REUNIFY_PROMPT:**
 
@@ -325,6 +427,10 @@ Agent(
 > {content of this node's spec.md}
 >
 > ## Reunification strategy: {reunification}
+>
+> ## Structural analysis (from algorithmic pre-check)
+> {conflicts detected by reunify_merge.py, if any}
+> {auto-resolved items, if any}
 >
 > ## Child solutions
 > {for each child: slug, spec.md content, result.md content}
@@ -342,7 +448,7 @@ Agent(
 >
 > Steps:
 > 1. Review each child's solution against its declared scope and output contract.
-> 2. Identify interface mismatches or boundary conflicts between siblings.
+> 2. Focus on the **unresolved conflicts** identified by the structural analysis.
 > 3. Resolve conflicts — prefer the solution that better matches the parent scope.
 > 4. Produce the merged result.
 > 5. If output_mode is "code": integrate code, resolve import conflicts, run tests.
@@ -365,7 +471,7 @@ Agent(
 > - [redundancy] — multiple children solved the same thing differently
 > - [gap] — something needed for integration was not produced by any child
 
-After each reunify subagent returns:
+After reunification (algorithmic or AI):
 - Write `result.md` in the node's directory.
 - Update the manifest.
 - If STATUS is MERGED: continue bottom-up. No additional action.
@@ -373,26 +479,37 @@ After each reunify subagent returns:
 
 ### Step 4.5 — REUNIFY REWORK
 
-When a REUNIFY subagent returns CONFLICT or PARTIAL status, attempt bounded rework:
+When reunification returns CONFLICT or PARTIAL status, attempt bounded rework:
 
-1. Parse the CONFLICTS list from the REUNIFY REPORT.
+1. Parse the CONFLICTS list from the reunification output.
 2. Identify which child solutions are in conflict.
 3. Re-spawn SOLVE subagents for **only** the conflicting children, with:
    - The original spec
    - The conflict description as additional context
    - The non-conflicting sibling results as fixed constraints
 4. After re-solve, run Step 3.5 (SOLVE GATE) on the re-solved leaves.
-5. Retry REUNIFY once with the updated child solutions.
+5. Retry reunification (algorithmic first, then AI if needed) once with the updated child solutions.
 6. If still CONFLICT after one retry: mark this node as PARTIAL in the manifest and continue bottom-up. The parent reunification will see a PARTIAL child and can attempt resolution at its level.
 
 Track `reunify_rework_count` per node in the manifest. Maximum 1 rework per reunify node — trees compound, so keep it bounded.
 
 After rework (or if no rework needed), continue bottom-up until the root is reunified.
 
-### Step 5 — Prune & Finalize
+### Step 5 — Prune & Finalize (algorithmic)
 
-1. Review the tree for redundancy: any child whose output was fully absorbed by a sibling can be marked pruned.
-2. Write `output.md` in the work directory with the final reunified result.
+1. **Run the prune gate** (`scripts/prune_gate.py`) to detect redundancy algorithmically:
+   ```
+   echo '{"tree": <manifest tree>}' | python3 scripts/prune_gate.py
+   ```
+   The script performs:
+   - **Subset detection**: is a node's output files a strict subset of a sibling's?
+   - **Identical output detection**: did multiple nodes change the same file set?
+   - **Greedy set cover**: find the minimal set of nodes that covers all output files
+
+   Returns: `{prunable, reasons, kept, minimal_covering_set}`
+
+2. Mark prunable nodes in the manifest. No AI needed — this is a deterministic set operation.
+3. Write `output.md` in the work directory with the final reunified result.
 3. Update `manifest.json` with final metrics:
    ```json
    {
@@ -459,13 +576,18 @@ After appending, commit the updated `governance.jsonl` as part of the fractal ru
 ## Important Notes
 
 - **No nested subagents.** The orchestrator (you) walks the tree level by level, spawning flat subagents at each step. The spec files on disk ARE the recursion.
+- **Algorithmic spine.** Most orchestration logic is deterministic — AI is only invoked for semantic operations (decompose, solve, conflict resolution). The scripts in `.harness/scripts/` implement classical algorithms: TF-IDF similarity, topological sort, 3-way merge, set cover.
 - `.fractal/` directory is gitignored (per-run manifests are local artifacts). Governance infrastructure lives in `.harness/` (rules, scripts, governance logs) and is committed to version control.
 - SOLVE subagents with `output_mode: code` run in `isolation: worktree` to avoid conflicts.
 - SOLVE subagents receive sibling specs as read-only context for interface alignment.
-- The decompose phase is inherently sequential (each level depends on the previous). The solve phase can be parallel.
+- The decompose phase is inherently sequential (each level depends on the previous). The solve phase uses **DAG-based wave scheduling** — neither purely parallel nor sequential, but dependency-aware.
 - Each fractal run is independent — concurrent runs use different work IDs.
-- Budget enforcement is strict: if `max_total_nodes` is hit, remaining nodes become forced leaves.
-- **DECOMPOSE GATE** (Step 2.5) runs `scripts/decompose_gate.py` to catch structural decomposition issues (overlap, coverage gaps, budget pressure) before they propagate down the tree. Deterministic and fast — no LLM cost.
+- Budget enforcement is strict: if `max_total_nodes` is hit, remaining nodes become forced leaves. Budget is **allocated proportionally** to children by complexity score (not first-come-first-served).
+- **COMPLEXITY PRE-FILTER** (Step 1.5) uses weighted feature scoring to auto-LEAF trivial tasks without invoking AI. Same principle as decision tree split criteria.
+- **DECOMPOSE GATE** (Step 2.5) runs `scripts/decompose_gate.py` with TF-IDF cosine similarity (not raw Jaccard), dependency cycle detection via Kahn's algorithm, and per-child budget allocation. Deterministic and fast — no LLM cost.
+- **SOLVE SCHEDULER** (Step 3) runs `scripts/solve_scheduler.py` to compute parallel execution waves via topological sort. Critical path analysis determines minimum sequential depth.
+- **REUNIFY MERGE** (Step 4) runs `scripts/reunify_merge.py` to attempt deterministic git merge-tree reunification. AI subagents are only spawned for semantic conflicts that algorithms can't resolve.
+- **PRUNE GATE** (Step 5) runs `scripts/prune_gate.py` for algorithmic redundancy detection via set cover and diff subset analysis. No AI needed.
 - **SOLVE GATE** (Step 3.5) applies static checks to leaf solutions. Two tiers: lightweight (static checks only) for default mode, full Factory pipeline for `solve_mode: factory`.
 - **REUNIFY REWORK** (Step 4.5) re-solves conflicting children once when reunification fails. Bounded to 1 retry per node to prevent exponential cost in deep trees.
 - **GovernanceLog** (`.harness/fractal.governance.jsonl`) accumulates a summary record from every fractal run, enabling cross-run pattern analysis. Shared static rules with Factory via `.harness/rules/`.
