@@ -1,6 +1,8 @@
 ---
 name: fractal
 description: "Fractal decomposition — recursively split a complex task into orthogonal sub-specs, solve each leaf independently via subagents, then reunify results bottom-up. Use when a task is too large for a single agent pass, when you need to decompose a problem into independently-solvable pieces, or when the user invokes /fractal decompose <task-or-spec-path>."
+user-invocable: true
+argument-hint: "decompose <task-or-spec-path>"
 ---
 
 # Fractal Decomposition Skill

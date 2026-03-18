@@ -12,8 +12,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# Project
-/.claude
+# Claude Code — track symlinks and skills, ignore runtime settings
+/.claude/settings.json
+/.claude/settings.local.json
+/.claude/todos.json
 
 # Rust
 cli/target/

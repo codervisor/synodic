@@ -1,6 +1,8 @@
 ---
 name: factory
 description: "Coding factory — transforms a spec into a reviewed PR via BUILD → INSPECT pipeline with adversarial review. Use when you need to implement a spec end-to-end with independent code review, or when the user invokes /factory run <spec-path>."
+user-invocable: true
+argument-hint: "run <spec-path>"
 ---
 
 # Factory Skill
