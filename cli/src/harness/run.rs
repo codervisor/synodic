@@ -64,6 +64,7 @@ pub fn execute(config: RunConfig) -> Result<()> {
     // --- Governance loop ---
     let mut attempt: u32 = 0;
     let mut status = "running".to_string();
+    let mut last_agent_exit: i32 = 0;
     let feedback_file = run_dir.join("feedback.md");
     let mut all_rework_items: Vec<Value> = Vec::new();
     let mut all_static_failures: Vec<String> = Vec::new();
@@ -88,11 +89,12 @@ pub fn execute(config: RunConfig) -> Result<()> {
                  {feedback}\n\n\
                  Re-read the original task and fix the issues above.\n"
             );
-            run_agent_with_stdin(&config.agent_cmd, &workdir, &rework_input, &agent_log)?
+            run_agent_with_stdin(&config.agent_cmd, &workdir, &rework_input, &agent_log, &repo_root)?
         } else {
-            run_agent(&config.agent_cmd, &workdir, &agent_log)?
+            run_agent(&config.agent_cmd, &workdir, &agent_log, &repo_root)?
         };
 
+        last_agent_exit = agent_exit;
         log_info(&config, &format!("Agent finished (exit code: {agent_exit})"));
 
         // --- Observe: what changed? ---
@@ -383,6 +385,14 @@ pub fn execute(config: RunConfig) -> Result<()> {
     // =================================================================
     // Finalize — record governance log
     // =================================================================
+
+    // Agent exit code is authoritative: if the agent reports failure (e.g.
+    // eval resolved=false), governance approval alone doesn't override that.
+    if status == "passed" && last_agent_exit != 0 {
+        log_info(&config, &format!("Agent exited with code {last_agent_exit} — overriding governance pass"));
+        status = "error".to_string();
+    }
+
     let end_time = Utc::now();
     let duration = (end_time - start_time).num_seconds();
 
@@ -504,11 +514,12 @@ fn git_rev_parse(workdir: &Path, refspec: &str) -> Option<String> {
         })
 }
 
-fn run_agent(cmd: &[String], workdir: &Path, log_path: &Path) -> Result<i32> {
+fn run_agent(cmd: &[String], workdir: &Path, log_path: &Path, repo_root: &Path) -> Result<i32> {
     let log_file = fs::File::create(log_path)?;
     let status = Command::new(&cmd[0])
         .args(&cmd[1..])
         .current_dir(workdir)
+        .env("SYNODIC_ROOT", repo_root)
         .stdout(log_file.try_clone()?)
         .stderr(log_file)
         .status()
@@ -516,11 +527,12 @@ fn run_agent(cmd: &[String], workdir: &Path, log_path: &Path) -> Result<i32> {
     Ok(status.code().unwrap_or(1))
 }
 
-fn run_agent_with_stdin(cmd: &[String], workdir: &Path, input: &str, log_path: &Path) -> Result<i32> {
+fn run_agent_with_stdin(cmd: &[String], workdir: &Path, input: &str, log_path: &Path, repo_root: &Path) -> Result<i32> {
     let log_file = fs::File::create(log_path)?;
     let mut child = Command::new(&cmd[0])
         .args(&cmd[1..])
         .current_dir(workdir)
+        .env("SYNODIC_ROOT", repo_root)
         .stdin(std::process::Stdio::piped())
         .stdout(log_file.try_clone()?)
         .stderr(log_file)
