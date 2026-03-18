@@ -1,7 +1,8 @@
 ---
-version: 0.1.0
-last_amended: 2026-03-17
+version: 0.2.0
+last_amended: 2026-03-18
 changelog:
+  - "0.2.0: Refactor to post-session governance model — review after session, not inline"
   - "0.1.0: Initial governance protocol"
 ---
 
@@ -13,13 +14,17 @@ This document is the governance protocol for all Synodic agent operations.
 It is mandatory reading for any skill or agent operating within this repository.
 It defines the control plane that is orthogonal to execution topologies.
 
-**"Code what you can. Judge what you must. Escalate what you can't."**
+**"Observe what happened. Judge the output. Learn for next time."**
 
-## §2 — Three-Layer Evaluation Model
+Governance is **non-intrusive**. It does not wrap, interrupt, or inject feedback
+into agent sessions. Instead, it runs **after** a session completes, analyzing
+the output (diffs, logs) and producing governance records that feed into rule
+crystallization.
 
-Every governance checkpoint uses this evaluation chain. Resolve at the lowest
-layer possible. Never invoke Layer 2 for what Layer 1 can catch. Never invoke
-Layer 3 for what Layer 2 can decide.
+## §2 — Two-Layer Evaluation Model
+
+Every governance review uses this evaluation chain. Resolve at the lowest
+layer possible. Never invoke Layer 2 for what Layer 1 can catch.
 
 ### Layer 1 — Static Rules
 
@@ -37,68 +42,53 @@ Independent LLM, ~1s latency.
 
 - Semantic review: does the output match the intent?
 - Adversarial inspection: logic flaws, security issues, spec violations
-- MUST use a separate subagent from the producer (context isolation)
+- MUST use a separate context from the producer (context isolation)
 - Judge prompt MUST reference applicable sections of this document
 
-### Layer 3 — Human Escalation
+### Human Review
 
-Async, minutes-to-hours latency.
+Governance logs surface issues for human attention when needed. Humans review
+governance reports at their own pace — there is no automated escalation or
+blocking. Governance findings inform future sessions, not the current one.
 
-- Triggered when: AI judge confidence is low, operation is destructive +
-  irreversible, or rework limit is exhausted
-- Implementation: pause execution, persist thread state, surface to user
-  with full context
-- Human decision is final for that run but becomes input to future
-  crystallization
+## §3 — Governance Review Protocol
 
-## §3 — Governance Checkpoint Protocol
-
-Universal interface for all checkpoints, regardless of skill or topology:
+Post-session review interface:
 
 ```
-evaluate(action, context, state) → Allow | Deny(reason) | Modify(revised_action)
+review(diff, context) → Clean | Issues(items)
 ```
 
-- `action`: what is about to happen (code diff, decomposition plan, merge result)
-- `context`: the spec, parent scope, sibling outputs, prior feedback
-- `state`: which phase of which topology is requesting evaluation
-- `Allow`: proceed as-is
-- `Deny(reason)`: reject with explanation; caller decides rework or escalate
-- `Modify(revised_action)`: proceed with corrected version
+- `diff`: the git diff between the session's base ref and HEAD
+- `context`: the spec being implemented, governance rules in effect
+- `Clean`: no issues found — session output is acceptable
+- `Issues(items)`: categorized findings recorded for learning
 
-This protocol is the SAME regardless of topology. Factory's INSPECT, Fractal's
-DECOMPOSE GATE, and any future topology's quality gates all use this interface.
+This protocol is the SAME regardless of topology. Factory, Fractal, and any
+future topology's post-session reviews all use this interface.
 
-## §4 — Checkpoint Placement Rules
+## §4 — Review Placement
 
-Every execution topology MUST place checkpoints at these points:
+Governance reviews happen at these points:
 
-1. **Post-production checkpoint.** After any subagent produces output (code,
-   plan, merge result), before that output is used downstream.
-2. **Pre-delivery checkpoint.** Before any output leaves the system (PR
-   creation, final output). Last line of defense.
-3. **Rework-limit checkpoint.** When rework attempts are exhausted, escalate
-   rather than loop forever.
-
-Default rework limits (overridable per-skill via config):
-
-- Linear topologies (Factory-like): max 3 rework cycles at the review stage
-- Tree topologies (Fractal-like): max 1 rework cycle per node
-
-Skills MUST document their checkpoints and Layer assignments in their SKILL.md
-header.
+1. **Post-session review.** After any agent session completes, review the
+   diff against the base ref. This is the primary governance mechanism.
+2. **Pre-merge review.** Before a PR is merged, governance review confirms
+   the final state. This is the last line of defense.
+3. **Periodic review.** Governance logs are periodically analyzed for
+   patterns that should be crystallized into Layer 1 rules.
 
 ## §5 — Structured Feedback Protocol
 
 All governance feedback MUST be:
 
 1. **Categorized** — tagged with a category from the taxonomy below
-2. **Actionable** — specific enough that the rework agent knows what to fix
-3. **Recorded** — written to the manifest AND the persistent governance log
+2. **Actionable** — specific enough that a developer knows what to fix
+3. **Recorded** — written to the persistent governance log
 
 ### Category Taxonomy
 
-**Code-producing checkpoints (Factory BUILD, Fractal SOLVE):**
+**Code-producing reviews (Factory BUILD, Fractal SOLVE):**
 
 - `[completeness]` — missing functionality described in spec
 - `[correctness]` — logic errors, bugs, off-by-one
@@ -106,14 +96,14 @@ All governance feedback MUST be:
 - `[conformance]` — doesn't match spec intent (works but wrong approach)
 - `[quality]` — maintainability, structure, naming
 
-**Decomposition checkpoints (Fractal DECOMPOSE):**
+**Decomposition reviews (Fractal DECOMPOSE):**
 
 - `[orthogonality]` — scope overlap between children
 - `[coverage]` — parent requirements not covered
 - `[granularity]` — too fine or too coarse
 - `[budget]` — node/depth budget pressure
 
-**Integration checkpoints (Fractal REUNIFY):**
+**Integration reviews (Fractal REUNIFY):**
 
 - `[interface]` — contract mismatches between components
 - `[boundary]` — component exceeded its declared scope
@@ -124,21 +114,21 @@ Skills MAY extend this taxonomy but MUST NOT redefine existing categories.
 
 ## §6 — Persistence and Learning
 
-### Tier 1 — Manifest (per-run, local)
+### Tier 1 — Manifest (per-review, local)
 
-- Location: `.factory/{work-id}/manifest.json` or `.fractal/{work-id}/manifest.json`
-- Content: full run state, attempt history, checkpoint results
-- Lifecycle: created at run start, finalized at run end, gitignored
-- Purpose: operational state for the current run
+- Location: `.harness/.runs/{review-id}/manifest.json`
+- Content: review results, L1/L2 reports, diff snapshot
+- Lifecycle: created at review start, finalized at review end, gitignored
+- Purpose: detailed record of a single review
 
-### Tier 2 — GovernanceLog (cross-run, persistent)
+### Tier 2 — GovernanceLog (cross-review, persistent)
 
-- Location: `.harness/factory.governance.jsonl` and `.harness/fractal.governance.jsonl`
-- Content: one summary record per run (status, categorized feedback, metrics)
+- Location: `.harness/harness.governance.jsonl` (and per-topology variants)
+- Content: one summary record per review (status, categorized issues, metrics)
 - Lifecycle: append-only, version-controlled (NOT gitignored)
 - Purpose: learning substrate for rule crystallization
 
-Both tiers are required. A skill that runs governance checkpoints but does not
+Both tiers are required. A skill that runs governance reviews but does not
 persist results is non-compliant.
 
 ## §7 — Rule Crystallization
@@ -146,12 +136,12 @@ persist results is non-compliant.
 Governance feedback becomes static rules through this lifecycle:
 
 ```
-Layer 2/3 feedback → GovernanceLog → Pattern Detection → Rule Synthesis → Backtest → Human Review → Layer 1 rule
+Layer 2 feedback → GovernanceLog → Pattern Detection → Rule Synthesis → Backtest → Human Review → Layer 1 rule
 ```
 
 - **Pattern Detection**: aggregate GovernanceLog entries by category +
   description similarity. A pattern is "crystallization-ready" when it
-  appears in ≥3 independent runs.
+  appears in ≥3 independent reviews.
 - **Rule Synthesis**: generate a deterministic check (script or config)
   that catches the pattern without AI.
 - **Backtest**: replay the candidate rule against historical GovernanceLog
@@ -159,7 +149,7 @@ Layer 2/3 feedback → GovernanceLog → Pattern Detection → Rule Synthesis �
 - **Human Review**: candidate rules are surfaced as PRs. A human approves
   or rejects.
 - **Deployment**: approved rules go into `.harness/rules/` and are
-  automatically loaded by Layer 1 in all topologies.
+  automatically loaded by Layer 1 in all reviews.
 
 This process is not yet automated — documented protocol for manual execution
 now, with hooks for future automation.
@@ -170,8 +160,8 @@ now, with hooks for future automation.
 |---------------------|------------------------|----------------------------------|
 | Static rules        | `.harness/rules/`      | All topologies (Layer 1)         |
 | GovernanceLog       | `.harness/*.governance.jsonl` | All topologies (separate files, shared schema) |
-| Category taxonomy   | This document (§5)     | All checkpoints in all topologies |
-| Checkpoint protocol | This document (§3)     | All governance checkpoints       |
+| Category taxonomy   | This document (§5)     | All reviews in all topologies    |
+| Review protocol     | This document (§3)     | All governance reviews           |
 
 `.harness/rules/` is the canonical location for crystallized rules. Rules
 apply to all topologies regardless of which topology first triggered their
@@ -182,12 +172,12 @@ crystallization.
 Any new execution topology skill added to Synodic MUST:
 
 - [ ] Reference `HARNESS.md` in its SKILL.md header
-- [ ] Place governance checkpoints per §4 (post-production, pre-delivery, rework-limit)
-- [ ] Use the `evaluate()` protocol from §3 at each checkpoint
+- [ ] Run post-session governance review after execution completes
+- [ ] Use the `review()` protocol from §3
 - [ ] Categorize all feedback per §5 taxonomy
 - [ ] Persist to both Manifest (Tier 1) and GovernanceLog (Tier 2) per §6
 - [ ] Load and apply rules from `.harness/rules/` in its Layer 1 checks
-- [ ] Document its checkpoint map in SKILL.md
+- [ ] Document its review integration in SKILL.md
 
 ## §10 — Amending This Document
 
@@ -201,13 +191,13 @@ under the existing §5 taxonomy, a new category MAY be proposed:
 1. Open an issue titled `harness: propose category [{new-category}]` with:
    - ≥3 governance log entries that demonstrate the gap
    - Proposed category name and definition
-   - Which checkpoint type it applies to (code-producing / decomposition / integration)
+   - Which review type it applies to (code-producing / decomposition / integration)
 2. PR the taxonomy change to HARNESS.md with version bump (minor).
 3. PR MUST be human-reviewed. Agents MUST NOT auto-merge HARNESS.md changes.
 
 ### Protocol-level amendments
 
-Changes to §2 (evaluation model), §3 (checkpoint protocol), or §4 (placement rules)
+Changes to §2 (evaluation model), §3 (review protocol), or §4 (review placement)
 are breaking changes (major version bump). These require:
 
 1. A spec in `specs/` describing the rationale and migration path.
