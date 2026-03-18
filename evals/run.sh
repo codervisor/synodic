@@ -80,14 +80,23 @@ resolve_target() {
       benchmark="${benchmark:-featurebench}"
       instance="mwaskom__seaborn.7001ebe7.test_regression.ce8c62e2.lv1"
       ;;
-    # SWE-bench common aliases
-    django-16379)
+    # SWE-bench Verified aliases
+    django-10097)
       benchmark="${benchmark:-swebench}"
-      instance="django__django-16379"
+      instance="django__django-10097"
       ;;
-    astropy-14995)
+    # SWE-bench Pro aliases
+    qutebrowser-f91ace)
       benchmark="${benchmark:-swebench}"
-      instance="astropy__astropy-14995"
+      instance="instance_qutebrowser__qutebrowser-f91ace96223cac8161c16dd061907e138fe85111-v059c6fdc75567943479b23ebca7c07b5e9a7f34c"
+      ;;
+    ansible-f327e6)
+      benchmark="${benchmark:-swebench}"
+      instance="instance_ansible__ansible-f327e65d11bb905ed9f15996024f857a95592629-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5"
+      ;;
+    teleport-3fa690)
+      benchmark="${benchmark:-swebench}"
+      instance="instance_gravitational__teleport-3fa6904377c006497169945428e8197158667910-v626ec2a48416b10a88641359a169d99e935ff037"
       ;;
     *)
       instance="$raw"
@@ -96,11 +105,14 @@ resolve_target() {
 
   # Auto-detect benchmark from instance ID format if not specified
   if [[ -z "$benchmark" ]]; then
-    if [[ "$instance" == *"."*"."*"."*"."* ]]; then
+    if [[ "$instance" == instance_* ]]; then
+      # SWE-bench Pro: instance_org__repo-commit-version
+      benchmark="swebench"
+    elif [[ "$instance" == *"."*"."*"."*"."* ]]; then
       # FeatureBench: org__repo.commit.test_module.hash.level
       benchmark="featurebench"
     elif [[ "$instance" == *"__"*"-"* ]]; then
-      # SWE-bench: org__repo-number
+      # SWE-bench Verified/Lite: org__repo-number
       benchmark="swebench"
     else
       # Assume DevBench project name
@@ -237,7 +249,8 @@ if [[ "$SKIP_AGENT" == "false" ]]; then
 
   cd "$REPO_DIR"
   if command -v "$AGENT_CMD" &>/dev/null; then
-    "$AGENT_CMD" --print "$(cat "$PROMPT_FILE")" \
+    cat "$PROMPT_FILE" | "$AGENT_CMD" --print \
+      --allowedTools "Edit Write Bash Read Glob Grep Agent" \
       2>&1 | tee "${TASK_DIR}/agent_output.log" || true
   else
     echo "WARNING: Agent command '$AGENT_CMD' not found."
