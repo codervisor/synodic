@@ -7,7 +7,7 @@ tags:
 - eval
 - refactor
 created_at: 2026-03-18T22:30:33.987624411Z
-updated_at: 2026-03-18T22:30:33.987624411Z
+updated_at: 2026-03-18T23:20:32.726Z
 ---
 # Decouple Eval as Standalone Testing Framework
 
@@ -16,7 +16,7 @@ updated_at: 2026-03-18T22:30:33.987624411Z
 The eval framework (setup → agent → score pipeline) is a general-purpose AI coding evaluation tool that should work independently of synodic's governance harness. Today eval directly writes to `.harness/eval.governance.jsonl` and reads `SYNODIC_ROOT` — it has no business knowing about governance at all.
 
 **Why now:** Eval is mature enough (29 tests, 3 benchmarks, batch mode) to stand alone. Complete separation enables:
-- Eval as a zero-dependency testing framework — no governance concepts leak in
+- Eval as a zero-synodic-dependency testing framework — no governance concepts leak in (eval may still depend on third-party crates for HTTP, JSON, etc.)
 - Independent versioning and release cycles
 - Use by external teams without adopting synodic governance
 - Synodic consumes eval output (JSON on stdout/files) and writes its own governance logs
@@ -42,7 +42,7 @@ Synodic's harness is the **consumer** — it invokes eval, reads its stdout/exit
 | `.harness/` directory creation | eval/run.rs:494-497 | **Delete** — eval never touches .harness/ |
 | `SYNODIC_ROOT` env var read | util.rs:9-13 | **Remove from eval** — eval uses its own project root discovery |
 | Gov log comments | eval/run.rs:321 referencing "HARNESS.md §6-7" | **Remove** — no harness references in eval |
-| `find_repo_root()` looking for `.harness/` | util.rs | **Split** — eval version looks for `evals/` or `.git`, not `.harness/` |
+| `find_repo_root()` looking for `.harness/` | util.rs | **Split** — eval version looks for `evals/evals.json` or `.git`, not `.harness/` |
 
 ### Target architecture: Cargo workspace
 
@@ -71,7 +71,7 @@ cli/
 │       ├── report.rs
 │       ├── score/              # parser, runner, verdict, report — unchanged
 │       ├── setup/              # swebench, featurebench, devbench — unchanged
-│       └── util.rs             # find_project_root() — looks for evals/ or .git
+│       └── util.rs             # find_project_root() — looks for evals/evals.json or .git
 ```
 
 ### Eval output contract
@@ -80,6 +80,8 @@ Eval communicates results through two channels only:
 
 **1. Exit code** — `0` = resolved, `1` = not resolved, `2` = error
 **2. Structured JSON output** — written to `--output <path>` or stdout:
+
+This is a new `EvalOutput` summary schema, **distinct from the existing `ScoreReport`** (which captures raw test counts and per-test details). `EvalOutput` is the top-level result envelope that references the score report:
 
 ```json
 {
@@ -93,6 +95,8 @@ Eval communicates results through two channels only:
   "score_report": "path/to/score_report.json"
 }
 ```
+
+The referenced `score_report.json` retains the existing `ScoreReport` schema unchanged (`instance_id`, `timestamp`, `resolved`, `test_format`, `f2p`, `p2p` with full test-level details).
 
 **Harness side (governance.rs — NEW file in synodic crate):**
 ```rust
