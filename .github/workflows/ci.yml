@@ -29,3 +29,27 @@ jobs:
 
       - name: Validate specs
         run: node -e "console.log('Spec validation placeholder')"
+
+  build:
+    name: Build & Test (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cli/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('cli/Cargo.lock') }}
+
+      - name: Build
+        run: cd cli && cargo build
+
+      - name: Test
+        run: cd cli && cargo test
