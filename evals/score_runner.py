@@ -110,11 +110,16 @@ def run_django_tests(
 ) -> tuple[int, int, int, list[dict]]:
     """Run Django-format tests using Django's test runner.
 
+    Runs whole test classes (not individual methods) to ensure description-style
+    tests execute. Filters results to only count tests from the input list.
+
     Returns (passed, failed, errors, details).
     """
+    # Resolve to absolute so subprocess cwd doesn't create double paths
+    repo_dir = os.path.abspath(repo_dir)
     runner_type, base_cmd = detect_django_test_runner(repo_dir)
 
-    # Group tests by module.class for efficient batch runs
+    # Group tests by module.class for batch runs
     groups = group_django_tests(tests)
 
     passed = 0
@@ -122,26 +127,33 @@ def run_django_tests(
     errors = 0
     details = []
 
-    for module_class, test_names in groups.items():
-        if module_class == "__unparsed__":
-            # For unparsable tests, skip them (these are description-style test IDs
-            # that Django outputs but aren't addressable as test labels)
-            for t in test_names:
-                details.append({"test": t, "status": "SKIP", "reason": "Description-style test ID"})
-            continue
+    # Separate description-style (unparsed) test IDs from method-name tests.
+    # Description-style IDs come from Django tests with docstrings — SWE-bench
+    # stores the first line of the docstring as the test ID.
+    unparsed_tests = set(groups.pop("__unparsed__", []))
+    matched_unparsed = set()
 
-        # Build Django test labels
-        if runner_type == "runtests":
-            # runtests.py uses dotted module path: "auth_tests.test_validators.TestClass.test_name"
-            test_labels = [f"{module_class}.{name}" for name in test_names]
-        else:
-            test_labels = [f"{module_class}.{name}" for name in test_names]
+    # Build expected method-name IDs for filtering.
+    # SWE-bench stores: "test_name (module.TestClass)"
+    # Django may output: "test_name (module.TestClass.test_name) ... ok"
+    # So we match by test method name + class prefix, not exact ID.
+    expected_by_class: dict[str, set[str]] = {}
+    for module_class, test_names in groups.items():
+        expected_by_class[module_class] = set(test_names)
+
+    # Collect unique test classes to run. Run whole classes (not individual
+    # methods) so that description-style tests also execute.
+    test_classes = set(groups.keys())
+
+    for module_class in test_classes:
+        test_names = groups[module_class]
+        n_expected = len(test_names) + len(unparsed_tests - matched_unparsed)
 
         env = os.environ.copy()
+        # Run the whole test class, not individual methods
+        cmd = base_cmd + [module_class]
 
-        cmd = base_cmd + test_labels
-
-        print(f"  [{label}] Running {len(test_labels)} tests in {module_class}...")
+        print(f"  [{label}] Running class {module_class} ({len(test_names)} method tests + unparsed)...")
 
         try:
             result = subprocess.run(
@@ -158,62 +170,62 @@ def run_django_tests(
             errors += len(test_names)
             continue
 
-        # Parse Django test runner output for individual test results
-        # Django outputs lines like:
-        #   test_foo (myapp.tests.TestBar) ... ok
-        #   test_bar (myapp.tests.TestBar) ... FAIL
-        #   test_baz (myapp.tests.TestBar) ... ERROR
-        #
-        # IMPORTANT: Only count tests that are in our input list.
-        # Django may run & output more tests than we asked for (e.g., entire
-        # test classes), so we must filter to avoid passed > total.
-        expected_ids = {f"{name} ({module_class})" for name in test_names}
+        # Parse Django test runner output.
+        # Django --verbosity=2 outputs two formats:
+        #   test_name (module.TestClass.test_name) ... ok   (newer Django)
+        #   test_name (module.TestClass) ... ok              (older Django)
+        #   Docstring first line ... ok                      (test with docstring)
         output = result.stdout + "\n" + result.stderr
-        seen = set()
+        seen_methods = set()  # track which input method-name tests matched
         for line in output.splitlines():
+            # Try standard format: "test_name (dotted.path) ... status"
             m = re.match(r"^([\w_]+) \(([\w.]+)\) \.\.\. (\w+)", line)
-            if not m:
-                # Also try: "description ... ok" format
-                m2 = re.match(r"^(.+?) \.\.\. (\w+)\s*$", line)
-                if m2:
-                    test_desc = m2.group(1).strip()
-                    status_word = m2.group(2)
-                    for name in test_names:
-                        orig_id = f"{name} ({module_class})"
-                        if name in test_desc and orig_id not in seen:
-                            seen.add(orig_id)
-                            if status_word.lower() == "ok":
-                                passed += 1
-                                details.append({"test": orig_id, "status": "PASS"})
-                            else:
-                                failed += 1
-                                details.append({"test": orig_id, "status": "FAIL"})
-                            break
+            if m:
+                method_name, mod_path, status_word = m.groups()
+                # Check if this method is one we're looking for.
+                # Handle both "test_x (mod.Class)" and "test_x (mod.Class.test_x)".
+                if method_name in expected_by_class.get(module_class, set()):
+                    orig_id = f"{method_name} ({module_class})"
+                    if orig_id not in seen_methods:
+                        seen_methods.add(orig_id)
+                        status = _classify_django_status(status_word)
+                        if status == "PASS":
+                            passed += 1
+                        elif status == "FAIL":
+                            failed += 1
+                        else:
+                            errors += 1
+                        details.append({"test": orig_id, "status": status})
                 continue
-            name, mod, status_word = m.groups()
-            orig_id = f"{name} ({mod})"
-            if orig_id in seen:
-                continue
-            # Skip tests not in our input list
-            if orig_id not in expected_ids:
-                continue
-            seen.add(orig_id)
-            if status_word.lower() == "ok":
-                passed += 1
-                details.append({"test": orig_id, "status": "PASS"})
-            elif status_word.lower() in ("fail", "error"):
-                failed += 1
-                details.append({"test": orig_id, "status": "FAIL"})
-            else:
-                errors += 1
-                details.append({"test": orig_id, "status": "ERROR"})
 
-        # Any tests not seen in output
+            # Try description/fallback format: "anything ... status"
+            m2 = re.match(r"^(.+?) \.\.\. (\w+)\s*$", line)
+            if not m2:
+                continue
+            test_desc = m2.group(1).strip()
+            status_word = m2.group(2)
+
+            # Match against description-style (unparsed) test IDs.
+            # Django outputs "Docstring text ... ok" and SWE-bench stores
+            # just "Docstring text" (truncated to first line).
+            for ut in list(unparsed_tests - matched_unparsed):
+                if ut == test_desc or test_desc.startswith(ut):
+                    matched_unparsed.add(ut)
+                    status = _classify_django_status(status_word)
+                    if status == "PASS":
+                        passed += 1
+                    elif status == "FAIL":
+                        failed += 1
+                    else:
+                        errors += 1
+                    details.append({"test": ut, "status": status})
+                    break
+
+        # Any method-name tests not seen in output
         for name in test_names:
             orig_id = f"{name} ({module_class})"
-            if orig_id not in seen:
+            if orig_id not in seen_methods:
                 if result.returncode == 0:
-                    # Test suite passed — assume this test passed too
                     passed += 1
                     details.append({"test": orig_id, "status": "PASS"})
                 else:
@@ -221,7 +233,22 @@ def run_django_tests(
                     reason = result.stderr[-200:] if result.stderr else "Not found in output"
                     details.append({"test": orig_id, "status": "ERROR", "reason": reason})
 
+    # Any unparsed (description-style) tests not matched in any output
+    for ut in unparsed_tests - matched_unparsed:
+        errors += 1
+        details.append({"test": ut, "status": "ERROR", "reason": "Description-style test not found in any output"})
+
     return passed, failed, errors, details
+
+
+def _classify_django_status(status_word: str) -> str:
+    """Classify a Django test status word into PASS/FAIL/ERROR."""
+    s = status_word.lower()
+    if s == "ok":
+        return "PASS"
+    if s in ("fail", "error"):
+        return "FAIL"
+    return "ERROR"
 
 
 def run_pytest_tests(
@@ -231,6 +258,7 @@ def run_pytest_tests(
 
     Returns (passed, failed, errors, details).
     """
+    repo_dir = os.path.abspath(repo_dir)
     if not tests:
         return 0, 0, 0, []
 
