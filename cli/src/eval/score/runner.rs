@@ -193,12 +193,15 @@ pub fn run_django_tests(
                                 reason: None,
                             });
                         } else {
-                            let reason = if stderr.len() > 200 {
-                                stderr.chars().rev().take(200).collect::<String>().chars().rev().collect()
-                            } else if !stderr.is_empty() {
-                                stderr.to_string()
+                            let tail: String = if stderr.len() > 300 {
+                                stderr.chars().rev().take(300).collect::<String>().chars().rev().collect()
                             } else {
-                                "Not found in output".into()
+                                stderr.to_string()
+                            };
+                            let reason = if tail.trim().is_empty() {
+                                "Not found in test output".into()
+                            } else {
+                                tail
                             };
                             all_results.push(TestResult {
                                 name: orig_id,
@@ -292,13 +295,20 @@ pub fn run_pytest_tests(
                         });
                     }
                 } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    let reason: String = stdout.chars().rev().take(200).collect::<String>().chars().rev().collect();
+                    let combined = if !stderr.is_empty() { &stderr } else { &stdout };
+                    let tail: String = combined.chars().rev().take(300).collect::<String>().chars().rev().collect();
+                    let reason = if tail.trim().is_empty() {
+                        None
+                    } else {
+                        Some(tail)
+                    };
                     for t in tests {
                         results.push(TestResult {
                             name: t.clone(),
                             status: TestStatus::Failed,
-                            reason: Some(reason.clone()),
+                            reason: reason.clone(),
                         });
                     }
                 }
