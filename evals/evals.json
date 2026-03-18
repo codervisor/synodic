@@ -214,6 +214,30 @@
       ]
     },
     {
+      "id": "synodic-dogfood-syn-support",
+      "name": "Synodic Dogfood: Add syn: benchmark type (self-referential eval)",
+      "description": "Dogfood eval: use the factory/fractal skill to implement synodic benchmark support in the Synodic CLI itself. Scored by cargo test.",
+      "tags": ["synodic", "dogfood", "rust", "self", "e2e", "primary"],
+      "source": {
+        "benchmark": "synodic",
+        "spec": "specs/046-synodic-dogfood/README.md",
+        "base_commit": "c46b349f3917864dd02b5006bea9c8c59bfe3072",
+        "repo": "codervisor/synodic"
+      },
+      "e2e": {
+        "runner": "run.sh",
+        "alias": "syn:dogfood-syn-support",
+        "setup": "setup/synodic.sh",
+        "score": "score-synodic.sh",
+        "requires": ["git", "cargo", "rust"]
+      },
+      "assertions": [
+        "syn: prefix resolves to benchmark=synodic in resolve_target()",
+        "cargo test passes all tests (including test_resolve_synodic_alias)",
+        "Score report shows resolved: true"
+      ]
+    },
+    {
       "id": "devbench-project-build",
       "name": "DevBench: Full project from PRD (build + acceptance)",
       "description": "DevBench evaluation: build an entire project from a Product Requirements Document. SOTA: <40%.",

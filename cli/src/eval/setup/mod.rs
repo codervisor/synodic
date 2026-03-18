@@ -1,6 +1,7 @@
 pub mod devbench;
 pub mod featurebench;
 pub mod swebench;
+pub mod synodic;
 
 use std::path::Path;
 
@@ -21,6 +22,7 @@ pub fn run_setup(
         "featurebench" => featurebench::setup(instance_id, testbed_dir, skill, repo_root),
         "swebench" => swebench::setup(instance_id, testbed_dir, split, skill, repo_root),
         "devbench" => devbench::setup(instance_id, testbed_dir, skill, repo_root),
+        "synodic" => synodic::setup(instance_id, testbed_dir, skill, repo_root),
         other => bail!("Unknown benchmark: {}", other),
     }
 }

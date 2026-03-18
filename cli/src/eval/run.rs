@@ -42,6 +42,9 @@ pub fn resolve_target(raw: &str) -> Result<Target> {
     } else if let Some(rest) = raw.strip_prefix("dev:") {
         benchmark = "devbench".into();
         raw = rest.to_string();
+    } else if let Some(rest) = raw.strip_prefix("syn:") {
+        benchmark = "synodic".into();
+        raw = rest.to_string();
     }
 
     // Resolve aliases
@@ -271,6 +274,13 @@ pub fn execute(opts: RunOptions) -> Result<()> {
                 bail!("DevBench scoring not yet ported to Rust; evals/score-devbench.sh not found");
             }
         }
+        "synodic" => {
+            score::verdict::score_synodic(
+                &target.instance_id,
+                &testbed_path,
+                opts.output.as_ref().map(PathBuf::from).as_deref(),
+            )?;
+        }
         other => bail!("Unknown benchmark type: {}", other),
     }
 
@@ -340,5 +350,19 @@ mod tests {
     fn test_resolve_auto_detect_devbench() {
         let target = resolve_target("TextCNN").unwrap();
         assert_eq!(target.benchmark, "devbench");
+    }
+
+    #[test]
+    fn test_resolve_synodic_alias() {
+        let target = resolve_target("syn:dogfood-syn-support").unwrap();
+        assert_eq!(target.benchmark, "synodic");
+        assert_eq!(target.instance_id, "dogfood-syn-support");
+    }
+
+    #[test]
+    fn test_resolve_synodic_prefix_arbitrary() {
+        let target = resolve_target("syn:some-instance").unwrap();
+        assert_eq!(target.benchmark, "synodic");
+        assert_eq!(target.instance_id, "some-instance");
     }
 }

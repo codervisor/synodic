@@ -1,0 +1,10 @@
+{
+  "id": "synodic-dogfood-syn-support",
+  "alias": "dogfood-syn-support",
+  "repo": "codervisor/synodic",
+  "base_commit": "c46b349f3917864dd02b5006bea9c8c59bfe3072",
+  "spec_path": "specs/046-synodic-dogfood/README.md",
+  "score_dir": "cli",
+  "score_command": ["cargo", "test"],
+  "description": "Add syn: benchmark type to the Synodic eval system (self-referential dogfood)"
+}
