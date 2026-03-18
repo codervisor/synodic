@@ -12,7 +12,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# Claude Code — track symlinks and skills, ignore runtime settings
+# Claude Code — track docs and skills, ignore runtime settings
 /.claude/settings.json
 /.claude/settings.local.json
 /.claude/todos.json
