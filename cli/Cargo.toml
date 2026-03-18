@@ -16,3 +16,4 @@ anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
 quick-xml = "0.31"
+rust-tfidf = "1"
