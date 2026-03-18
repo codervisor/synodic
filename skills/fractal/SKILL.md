@@ -175,7 +175,7 @@ Agent(
 After each decompose subagent returns:
 - Parse the DECOMPOSE VERDICT.
 - If LEAF: mark this node as a leaf in the manifest. No further action.
-- If SPLIT: create child directories under `tree/{node-path}/` and write each child's `spec.md` from the scope/boundaries/outputs. When creating project-level specs (in `specs/`), use the LeanSpec MCP `create` tool instead of direct file writes to enforce validation rules.
+- If SPLIT: create child directories under `tree/{node-path}/` and write each child's `spec.md` from the scope/boundaries/outputs.
 - Update `manifest.json` with the tree structure.
 - Decrement the remaining node budget.
 
