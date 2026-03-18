@@ -45,56 +45,58 @@ pub fn setup(
     println!("[1/5] Downloading task data from HuggingFace...");
     std::fs::create_dir_all(&task_dir).context("create task data dir")?;
 
-    let download_script = format!(
-        r#"
-import json, sys
+    let download_script = r#"
+import json, os, sys
 try:
     from datasets import load_dataset
 except ImportError:
     print('ERROR: datasets not installed. Run: pip install datasets', file=sys.stderr)
     sys.exit(1)
 
-instance_id = '{instance_id}'
-task_dir = '{task_dir}'
+instance_id = os.environ['SYNODIC_INSTANCE_ID']
+task_dir = os.environ['SYNODIC_TASK_DIR']
+hf_dataset = os.environ['SYNODIC_HF_DATASET']
+hf_split = os.environ['SYNODIC_HF_SPLIT']
+split = os.environ['SYNODIC_SPLIT']
 
-ds = load_dataset('{hf_dataset}', split='{hf_split}')
+ds = load_dataset(hf_dataset, split=hf_split)
 
 matches = [row for row in ds if row['instance_id'] == instance_id]
 if not matches:
     matches = [row for row in ds if instance_id in row['instance_id']]
 
 if not matches:
-    print(f'ERROR: Instance {{instance_id}} not found in {hf_dataset}', file=sys.stderr)
+    print(f'ERROR: Instance {instance_id} not found in {hf_dataset}', file=sys.stderr)
     sys.exit(1)
 
 task = matches[0]
-print(f'Found: {{task["instance_id"]}}')
-print(f'  Repo: {{task["repo"]}}')
-print(f'  Base commit: {{task["base_commit"]}}')
+print(f'Found: {task["instance_id"]}')
+print(f'  Repo: {task["repo"]}')
+print(f'  Base commit: {task["base_commit"]}')
 
-with open(f'{{task_dir}}/task.json', 'w') as f:
+with open(f'{task_dir}/task.json', 'w') as f:
     json.dump(dict(task), f, indent=2, default=str)
 
-with open(f'{{task_dir}}/problem_statement.txt', 'w') as f:
+with open(f'{task_dir}/problem_statement.txt', 'w') as f:
     f.write(task['problem_statement'])
 
 if task.get('test_patch'):
-    with open(f'{{task_dir}}/test_patch.diff', 'w') as f:
+    with open(f'{task_dir}/test_patch.diff', 'w') as f:
         f.write(task['test_patch'])
 
 for key in ['FAIL_TO_PASS', 'PASS_TO_PASS']:
     val = task.get(key)
     if val:
-        with open(f'{{task_dir}}/{{key.lower()}}.json', 'w') as f:
+        with open(f'{task_dir}/{key.lower()}.json', 'w') as f:
             f.write(val if isinstance(val, str) else json.dumps(val))
 
 if task.get('hints_text'):
-    with open(f'{{task_dir}}/hints.txt', 'w') as f:
+    with open(f'{task_dir}/hints.txt', 'w') as f:
         f.write(task['hints_text'])
 
-meta = {{
+meta = {
     'benchmark': 'swebench',
-    'split': '{split}',
+    'split': split,
     'instance_id': task['instance_id'],
     'repo': task['repo'],
     'base_commit': task['base_commit'],
@@ -103,21 +105,20 @@ meta = {{
     'has_hints': bool(task.get('hints_text')),
     'created_at': task.get('created_at', ''),
     'version': task.get('version', ''),
-}}
-with open(f'{{task_dir}}/meta.json', 'w') as f:
+}
+with open(f'{task_dir}/meta.json', 'w') as f:
     json.dump(meta, f, indent=2)
 
 print('Task data saved.')
-"#,
-        instance_id = instance_id,
-        task_dir = task_dir.display(),
-        hf_dataset = hf_dataset,
-        hf_split = hf_split,
-        split = split,
-    );
+"#;
 
     let status = Command::new("python3")
-        .args(["-c", &download_script])
+        .args(["-c", download_script])
+        .env("SYNODIC_INSTANCE_ID", instance_id)
+        .env("SYNODIC_TASK_DIR", task_dir.to_string_lossy().as_ref())
+        .env("SYNODIC_HF_DATASET", hf_dataset)
+        .env("SYNODIC_HF_SPLIT", hf_split)
+        .env("SYNODIC_SPLIT", split)
         .status()
         .context("run HuggingFace download")?;
     if !status.success() {

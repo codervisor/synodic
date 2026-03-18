@@ -171,7 +171,13 @@ impl EvalCmd {
                 output,
             } => {
                 let testbed = testbed_dir.unwrap_or_else(|| {
-                    format!("/tmp/featurebench-testbed/{}", instance_id)
+                    let base = if instance_id.contains("__") {
+                        // SWE-bench IDs use double-underscore (e.g. django__django-10097)
+                        "/tmp/swebench-testbed"
+                    } else {
+                        "/tmp/featurebench-testbed"
+                    };
+                    format!("{}/{}", base, instance_id)
                 });
                 let output_path = output.map(std::path::PathBuf::from);
                 eval_mod::score::verdict::score(
