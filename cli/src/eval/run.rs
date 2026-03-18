@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
+use chrono::Utc;
+use serde_json::json;
 
 use super::score;
 
@@ -134,6 +137,8 @@ pub fn execute(opts: RunOptions) -> Result<()> {
     println!("Testbed:   {}", testbed_dir);
     println!();
 
+    let run_start = std::time::Instant::now();
+
     // --- Phase 1: Setup ---
     if !opts.skip_setup {
         println!("━━━ Phase 1: Testbed Setup ━━━");
@@ -251,14 +256,14 @@ pub fn execute(opts: RunOptions) -> Result<()> {
     println!("━━━ Phase 3: Scoring ━━━");
     println!();
 
-    match target.benchmark.as_str() {
+    let verdict = match target.benchmark.as_str() {
         "featurebench" | "swebench" => {
             let output_path = opts.output.as_ref().map(PathBuf::from);
-            score::verdict::score(
+            Some(score::verdict::score(
                 &target.instance_id,
                 &testbed_path,
                 output_path.as_deref(),
-            )?;
+            )?)
         }
         "devbench" => {
             // DevBench scoring uses a separate script for now
@@ -273,20 +278,101 @@ pub fn execute(opts: RunOptions) -> Result<()> {
             } else {
                 bail!("DevBench scoring not yet ported to Rust; evals/score-devbench.sh not found");
             }
+            None
         }
         "synodic" => {
-            score::verdict::score_synodic(
+            Some(score::verdict::score_synodic(
                 &target.instance_id,
                 &testbed_path,
                 opts.output.as_ref().map(PathBuf::from).as_deref(),
-            )?;
+            )?)
         }
         other => bail!("Unknown benchmark type: {}", other),
-    }
+    };
+
+    // --- Governance Log ---
+    let duration_s = run_start.elapsed().as_secs();
+    append_governance_log(
+        &opts.repo_root,
+        &target,
+        &opts.skill,
+        &opts.split,
+        duration_s,
+        verdict.as_ref(),
+    );
 
     println!();
     println!("━━━ Done ━━━");
     Ok(())
+}
+
+/// Append a governance record to `.harness/eval.governance.jsonl`.
+///
+/// Best-effort — failures are logged but do not abort the eval.
+fn append_governance_log(
+    repo_root: &PathBuf,
+    target: &Target,
+    skill: &str,
+    split: &str,
+    duration_s: u64,
+    verdict: Option<&score::EvalVerdict>,
+) {
+    let harness_dir = repo_root.join(".harness");
+    if std::fs::create_dir_all(&harness_dir).is_err() {
+        return;
+    }
+
+    let (status, resolved, f2p_total, f2p_passed, f2p_failed, f2p_errors, p2p_total, p2p_passed, p2p_failed, p2p_errors) =
+        match verdict {
+            Some(v) => (
+                if v.resolved { "resolved" } else { "failed" },
+                v.resolved,
+                v.f2p.expected.len(),
+                v.f2p.score.passed,
+                v.f2p.score.failed,
+                v.f2p.score.errors,
+                v.p2p.expected.len(),
+                v.p2p.score.passed,
+                v.p2p.score.failed,
+                v.p2p.score.errors,
+            ),
+            None => ("unknown", false, 0, 0, 0, 0, 0, 0, 0, 0),
+        };
+
+    let record = json!({
+        "work_id": format!("eval-{}-{}-{}", target.instance_id, skill, Utc::now().timestamp()),
+        "source": "eval",
+        "timestamp": Utc::now().to_rfc3339(),
+        "status": status,
+        "instance_id": target.instance_id,
+        "benchmark": target.benchmark,
+        "split": split,
+        "skill": skill,
+        "resolved": resolved,
+        "metrics": {
+            "duration_s": duration_s,
+            "f2p_total": f2p_total,
+            "f2p_passed": f2p_passed,
+            "f2p_failed": f2p_failed,
+            "f2p_errors": f2p_errors,
+            "p2p_total": p2p_total,
+            "p2p_passed": p2p_passed,
+            "p2p_failed": p2p_failed,
+            "p2p_errors": p2p_errors,
+        }
+    });
+
+    let gov_log = harness_dir.join("eval.governance.jsonl");
+    let result = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&gov_log)
+        .and_then(|mut f| writeln!(f, "{}", serde_json::to_string(&record).unwrap_or_default()));
+
+    match result {
+        Ok(_) => eprintln!("Governance log: {}", gov_log.display()),
+        Err(e) => eprintln!("WARNING: Could not write governance log: {}", e),
+    }
 }
 
 #[cfg(test)]
