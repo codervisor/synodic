@@ -323,6 +323,9 @@ fn parse_cargo_test_counts(output: &str) -> (usize, usize) {
 }
 
 /// Extract a number before a keyword (e.g. "29 passed" → 29).
+///
+/// This is only called on lines that already contain "test result:", so the
+/// keyword (e.g. "passed", "failed") is unambiguous in that context.
 fn extract_count(line: &str, keyword: &str) -> Option<usize> {
     let idx = line.find(keyword)?;
     let before = line[..idx].trim_end();

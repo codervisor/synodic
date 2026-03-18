@@ -58,10 +58,12 @@ if [[ ! -f "$META_FILE" ]]; then
   exit 1
 fi
 
-REPO=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['repo'])")
-BASE_COMMIT=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['base_commit'])")
-SPEC_PATH=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['spec_path'])")
-SCORE_DIR=$(python3 -c "import json; print(json.load(open('${META_FILE}'))['score_dir'])")
+read -r REPO BASE_COMMIT SPEC_PATH SCORE_DIR < <(python3 - << EOF
+import json, sys
+m = json.load(open('${META_FILE}'))
+print(m['repo'], m['base_commit'], m['spec_path'], m['score_dir'])
+EOF
+)
 
 echo "  Repo:        $REPO"
 echo "  Base commit: ${BASE_COMMIT:0:12}"
