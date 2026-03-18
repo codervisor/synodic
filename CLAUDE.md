@@ -68,7 +68,9 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 
 ## Spec Management via MCP
 
-**All spec creation and mutation MUST go through the LeanSpec MCP server tools.** Do NOT use Write/Edit tools to create or modify spec files directly. The MCP server enforces validation rules (size limits, required frontmatter, dependency integrity) that prevent invalid specs from reaching disk.
+**All spec creation and mutation in `specs/` MUST go through the LeanSpec MCP server tools.** Do NOT use Write/Edit tools to create or modify spec files in `specs/` directly. The MCP server enforces validation rules (size limits, required frontmatter, dependency integrity) that prevent invalid specs from reaching disk.
+
+**Scope:** This applies only to project-level specs in `specs/`. Fractal's internal working artifacts (`.fractal/{work-id}/tree/**/spec.md`) are ephemeral decomposition nodes — they use direct file writes and are not LeanSpec-managed.
 
 **Available MCP tools (from `@leanspec/mcp`):**
 
