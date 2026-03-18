@@ -306,9 +306,64 @@ pub fn execute(opts: RunOptions) -> Result<()> {
     Ok(())
 }
 
+/// Extract categorized findings from a verdict — the actual value of governance logging.
+///
+/// Returns `(findings, failure_category)` where findings are actionable observations
+/// matching the harness taxonomy: `[correctness]`, `[regression]`, `[infrastructure]`.
+fn extract_findings(verdict: &score::EvalVerdict) -> (Vec<serde_json::Value>, &'static str) {
+    let mut findings: Vec<serde_json::Value> = Vec::new();
+    let mut category = "resolved";
+
+    // F2P failures → [correctness]: agent didn't solve the task
+    for r in &verdict.f2p.results {
+        if matches!(r.status, score::TestStatus::Failed) {
+            findings.push(json!({
+                "category": "correctness",
+                "test": r.name,
+                "detail": r.reason.as_deref().unwrap_or("F2P test still failing after agent patch"),
+            }));
+            category = "correctness";
+        }
+    }
+
+    // F2P/P2P errors → [infrastructure]: test couldn't even run
+    for group in [&verdict.f2p, &verdict.p2p] {
+        for r in &group.results {
+            if matches!(r.status, score::TestStatus::Error) {
+                findings.push(json!({
+                    "category": "infrastructure",
+                    "test": r.name,
+                    "detail": r.reason.as_deref().unwrap_or("test errored (import failure, env issue, or timeout)"),
+                }));
+                if category == "resolved" {
+                    category = "infrastructure";
+                }
+            }
+        }
+    }
+
+    // P2P failures → [regression]: agent broke existing behavior
+    for r in &verdict.p2p.results {
+        if matches!(r.status, score::TestStatus::Failed) {
+            findings.push(json!({
+                "category": "regression",
+                "test": r.name,
+                "detail": r.reason.as_deref().unwrap_or("P2P test broken by agent patch"),
+            }));
+            if category != "correctness" {
+                category = "regression";
+            }
+        }
+    }
+
+    (findings, category)
+}
+
 /// Append a governance record to `.harness/eval.governance.jsonl`.
 ///
 /// Best-effort — failures are logged but do not abort the eval.
+/// Unlike score_report.json (raw test data), this captures categorized findings
+/// that feed the cross-run learning substrate (HARNESS.md §6–7).
 fn append_governance_log(
     repo_root: &PathBuf,
     target: &Target,
@@ -322,43 +377,27 @@ fn append_governance_log(
         return;
     }
 
-    let (status, resolved, f2p_total, f2p_passed, f2p_failed, f2p_errors, p2p_total, p2p_passed, p2p_failed, p2p_errors) =
-        match verdict {
-            Some(v) => (
-                if v.resolved { "resolved" } else { "failed" },
-                v.resolved,
-                v.f2p.expected.len(),
-                v.f2p.score.passed,
-                v.f2p.score.failed,
-                v.f2p.score.errors,
-                v.p2p.expected.len(),
-                v.p2p.score.passed,
-                v.p2p.score.failed,
-                v.p2p.score.errors,
-            ),
-            None => ("unknown", false, 0, 0, 0, 0, 0, 0, 0, 0),
-        };
+    let (findings, category, resolved) = match verdict {
+        Some(v) => {
+            let (findings, cat) = extract_findings(v);
+            (findings, cat, v.resolved)
+        }
+        None => (vec![], "unknown", false),
+    };
 
     let record = json!({
         "work_id": format!("eval-{}-{}-{}", target.instance_id, skill, Utc::now().timestamp()),
         "source": "eval",
         "timestamp": Utc::now().to_rfc3339(),
-        "status": status,
+        "status": if resolved { "resolved" } else { category },
         "instance_id": target.instance_id,
         "benchmark": target.benchmark,
         "split": split,
         "skill": skill,
         "resolved": resolved,
+        "findings": findings,
         "metrics": {
             "duration_s": duration_s,
-            "f2p_total": f2p_total,
-            "f2p_passed": f2p_passed,
-            "f2p_failed": f2p_failed,
-            "f2p_errors": f2p_errors,
-            "p2p_total": p2p_total,
-            "p2p_passed": p2p_passed,
-            "p2p_failed": p2p_failed,
-            "p2p_errors": p2p_errors,
         }
     });
 
