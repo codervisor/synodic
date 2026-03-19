@@ -134,6 +134,7 @@ synodic/
 
 | Document | Description |
 |----------|-------------|
+| [factory-design.md](./docs/design/factory-design.md) | Factory skill design — BUILD → INSPECT pipeline, adversarial review, metrics |
 | [fractal-design.md](./docs/design/fractal-design.md) | Fractal decomposition design — algorithmic spine, 8-step protocol, CLI reference |
 | [scope-review.md](./docs/architecture/scope-review.md) | March 2026 scope review — rationale for the skill-first pivot |
 | [evaluation-strategy.md](./docs/evaluation/evaluation-strategy.md) | Evaluation strategy — SWE-bench Pro as primary benchmark |
