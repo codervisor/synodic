@@ -246,7 +246,7 @@ fn render_table(manifest: &Value) -> Result<()> {
     // Skill deltas
     if let Some(deltas) = summary.get("skill_deltas").and_then(|v| v.as_object()) {
         if !deltas.is_empty() {
-            println!("Harness Impact (vs baseline):");
+            println!("Skill Impact (vs baseline):");
             println!();
             for (skill, delta) in deltas {
                 let net = delta
