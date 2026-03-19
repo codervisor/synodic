@@ -165,8 +165,8 @@ pub fn setup(
             .context("git init")?;
         Command::new("git")
             .args([
-                "-c", "user.name=Synodic",
-                "-c", "user.email=synodic@eval",
+                "-c", "user.name=synodic-eval",
+                "-c", "user.email=eval@synodic-eval",
                 "commit",
                 "--allow-empty",
                 "-m",
