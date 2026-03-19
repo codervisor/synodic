@@ -116,9 +116,12 @@ synodic/
 │   └── synodic/             # Governance CLI (harness + eval integration)
 ├── specs/                   # Actionable requirements (LeanSpec format)
 ├── docs/                    # Project documentation
-│   ├── FRACTAL.md           # Fractal design — algorithmic spine, protocol, CLI reference
-│   ├── SCOPE-REVIEW.md      # Scope review — rationale for skill-first approach
-│   └── BENCHMARKS.md        # Evaluation strategy — SWE-bench Pro, FeatureBench, DevBench
+│   ├── architecture/
+│   │   └── scope-review.md      # Scope review — rationale for skill-first approach
+│   ├── design/
+│   │   └── fractal-design.md    # Fractal design — algorithmic spine, protocol, CLI reference
+│   └── evaluation/
+│       └── evaluation-strategy.md # Evaluation strategy — SWE-bench Pro, FeatureBench, DevBench
 ├── evals/                   # Evaluation tasks and benchmarks
 ├── .harness/                # Governance infrastructure and logs
 ├── .lean-spec/              # LeanSpec configuration
@@ -131,9 +134,9 @@ synodic/
 
 | Document | Description |
 |----------|-------------|
-| [docs/FRACTAL.md](./docs/FRACTAL.md) | Fractal decomposition design — algorithmic spine, 8-step protocol, CLI reference |
-| [docs/SCOPE-REVIEW.md](./docs/SCOPE-REVIEW.md) | March 2026 scope review — rationale for the skill-first pivot |
-| [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) | Evaluation strategy — SWE-bench Pro as primary benchmark |
+| [fractal-design.md](./docs/design/fractal-design.md) | Fractal decomposition design — algorithmic spine, 8-step protocol, CLI reference |
+| [scope-review.md](./docs/architecture/scope-review.md) | March 2026 scope review — rationale for the skill-first pivot |
+| [evaluation-strategy.md](./docs/evaluation/evaluation-strategy.md) | Evaluation strategy — SWE-bench Pro as primary benchmark |
 | [HARNESS.md](./HARNESS.md) | Governance protocol — evaluation model, feedback taxonomy, rule crystallization |
 | [specs/](./specs/) | Actionable specifications in LeanSpec format |
 
@@ -151,7 +154,7 @@ cd cli && cargo test           # run all tests
 - **FeatureBench** — Feature implementation from PRDs
 - **DevBench** — Full-project development from requirements
 
-See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for the full evaluation strategy.
+See [evaluation-strategy.md](./docs/evaluation/evaluation-strategy.md) for the full evaluation strategy.
 
 ## License
 

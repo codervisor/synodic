@@ -4,13 +4,23 @@ Project documentation for understanding Synodic — its architecture, decisions,
 
 **Docs vs Specs:** Documentation (`docs/`) is guidance for understanding the project. Specs (`specs/`) are actionable requirements for developers and AI agents to implement.
 
-## Contents
+## Architecture
 
 | Document | Description |
 |----------|-------------|
-| [FRACTAL.md](./FRACTAL.md) | Fractal decomposition design — algorithmic spine philosophy, 8-step protocol with visual diagrams, complexity scoring, orthogonality checking, DAG scheduling, and CLI reference |
-| [SCOPE-REVIEW.md](./SCOPE-REVIEW.md) | March 2026 scope review — rationale for pivoting from a Rust platform to a Claude Code skill package, spec disposition decisions, and the skill-first roadmap |
-| [BENCHMARKS.md](./BENCHMARKS.md) | Evaluation strategy — SWE-bench Pro as primary benchmark (1,865 tasks), complementary benchmarks (FeatureBench, DevBench), scoring protocol (F2P/P2P), and infrastructure |
+| [scope-review.md](./architecture/scope-review.md) | March 2026 scope review — rationale for pivoting from a Rust platform to a Claude Code skill package, spec disposition decisions, and the skill-first roadmap |
+
+## Design
+
+| Document | Description |
+|----------|-------------|
+| [fractal-design.md](./design/fractal-design.md) | Fractal decomposition design — algorithmic spine philosophy, 8-step protocol with visual diagrams, complexity scoring, orthogonality checking, DAG scheduling, and CLI reference |
+
+## Evaluation
+
+| Document | Description |
+|----------|-------------|
+| [evaluation-strategy.md](./evaluation/evaluation-strategy.md) | Evaluation strategy — SWE-bench Pro as primary benchmark (1,865 tasks), complementary benchmarks (FeatureBench, DevBench), scoring protocol (F2P/P2P), and infrastructure |
 
 ## Related
 
