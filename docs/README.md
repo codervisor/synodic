@@ -14,6 +14,7 @@ Project documentation for understanding Synodic — its architecture, decisions,
 
 | Document | Description |
 |----------|-------------|
+| [factory-design.md](./design/factory-design.md) | Factory skill design — BUILD → INSPECT pipeline, adversarial review, static gates, rework loop, metrics and crystallization |
 | [fractal-design.md](./design/fractal-design.md) | Fractal decomposition design — algorithmic spine philosophy, 8-step protocol with visual diagrams, complexity scoring, orthogonality checking, DAG scheduling, and CLI reference |
 
 ## Evaluation
