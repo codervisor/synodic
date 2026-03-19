@@ -21,7 +21,7 @@ Spec-driven development for Synodic. Each spec is a numbered directory containin
 
 Specs 001–043 (excluding 037) are archived. They were designed for a platform architecture
 (Rust binary, fleet execution, coordination theory) that was superseded by the skill-first
-approach. See [SCOPE-REVIEW.md](../docs/SCOPE-REVIEW.md) for the rationale.
+approach. See [scope-review.md](../docs/architecture/scope-review.md) for the rationale.
 
 | Range | Category | Count |
 |-------|----------|-------|
