@@ -131,6 +131,8 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 |-------|-------------|-------|
 | `factory` | Coding factory — transforms a spec into a reviewed PR via BUILD → INSPECT pipeline | `/factory run <spec-path>` |
 | `fractal` | Fractal decomposition — recursively splits complex tasks into sub-specs, solves leaves independently, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` |
+| `swarm` | Speculative swarm — forks N agents to explore divergent strategies, cross-pollinates, prunes convergent branches, fuses best fragments | `/swarm run <spec-path>` |
+| `adversarial` | Generative-adversarial — locks generator + critic in escalating quality loop for deep hardening | `/adversarial run <spec-path>` |
 
 ### Skill installation
 
