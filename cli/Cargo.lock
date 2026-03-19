@@ -409,6 +409,7 @@ dependencies = [
  "chrono",
  "clap",
  "regex",
+ "rust-tfidf",
  "serde",
  "serde_json",
  "synodic-eval",
@@ -423,7 +424,6 @@ dependencies = [
  "clap",
  "quick-xml",
  "regex",
- "rust-tfidf",
  "serde",
  "serde_json",
 ]
