@@ -310,6 +310,22 @@ After finalizing the manifest:
 - **GovernanceLog** (`.harness/factory.governance.jsonl`) accumulates a summary record from every factory run, enabling cross-run pattern analysis.
 - **Custom rules** can be added to `.harness/rules/` as executable scripts. Each script receives the diff on stdin and should exit 0 on pass, non-zero on failure.
 
+## Post-PR: CI Auto-Fix Feedback Loop
+
+After Step 5 (Create PR), the factory's job is done. But CI may still fail.
+The **CI auto-fix workflow** (`.github/workflows/ci-fix.yml`) closes this gap:
+
+1. GitHub CI runs on the PR branch.
+2. If CI fails, the `ci-fix.yml` workflow triggers automatically.
+3. It extracts actionable errors from CI logs.
+4. Claude Code makes a targeted fix and pushes to the same branch.
+5. CI re-runs. Repeat up to 3 times.
+
+This is **decoupled from the factory session** — the factory doesn't need to
+stay alive waiting for CI. The workflow is event-driven and runs independently.
+
+See [CI_FIX_ADOPTION.md](../../.github/CI_FIX_ADOPTION.md) for setup in other projects.
+
 ## Future: Crystallization
 
 When `.harness/factory.governance.jsonl` accumulates enough data (target: 10+ runs),
