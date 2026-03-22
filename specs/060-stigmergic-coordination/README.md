@@ -170,16 +170,34 @@ The watcher is a lightweight process (`synodic watch`) that monitors `.harness/m
 
 ### Logical Correctness Evaluation (2026-03-22)
 
-**Issues found:**
+#### Correctness Issues
 
 1. **O(n²) claim is incorrect**: Overview claims centralized orchestration scales O(n²). Centralized dispatch is O(n) — one message per agent. O(n²) applies to fully-connected peer-to-peer topologies, the opposite of centralized. Undermines the motivating argument.
 
 2. **"Millisecond perception" contradicts "not always-on"**: Overview claims "Millisecond environment perception... under a second." Notes section says the watcher "does NOT need to be always-on" and processes markers "whenever the watcher next runs." Cannot have millisecond perception with lazy/periodic polling.
 
-3. **TTL expiration silently drops requirements**: "needs-test markers expire after 24h (if no test agent consumed them, the code was likely tested manually)" — assumption is unfounded. Marker may be unconsumed because no test agent was running or watcher wasn't active. Silently drops testing requirement.
+3. **TTL expiration silently drops requirements**: "needs-test markers expire after 24h (if no test agent consumed them, the code was likely tested manually)" — assumption is unfounded. Marker may be unconsumed because no test agent was running or watcher wasn't active. Silently drops testing requirement without verification.
 
 4. **Debounce + TTL interaction gap**: Markers could expire during debounce windows. mesh-gap-filler has 5-minute debounce — a short-TTL marker could expire before the debounced reaction fires. Interaction not addressed.
 
 5. **"Not a message queue" is semantic, not architectural**: File-watching daemon polling a directory, matching patterns, spawning reactions IS functionally a message queue with filesystem-backed persistence. Distinction obscures real tradeoffs (polling latency, no ordering guarantees, no delivery acknowledgment).
 
 6. **Cascade depth limit lacks justification**: Depth-3 limit stated without analysis. Legitimate chain: code change → needs-test → test fails → needs-fix → fix → needs-test. Already depth 3 before re-test is consumed. May truncate valid workflows.
+
+#### Systematic / Design Issues
+
+7. **Over-engineering: entire event-driven architecture for simple triggers.** The core problem is "when X happens, do Y" — CI fails, fix it; code written, test it. Spec 057 solved this with a GitHub Action. Spec 058 absorbs it as a pipeline step. Spec 060 adds markers, watchers, debounce, TTL, cascade limits, and a daemon process. This is a full event-driven architecture for what amounts to a handful of if-then rules. The complexity budget is wildly disproportionate to the problem.
+
+8. **Biological metaphor obscures the actual mechanism and creates false expectations.** "Pheromone markers," "stigmergy," "ant trails" — the actual mechanism is: YAML files in a directory trigger shell commands via a polling daemon. Real stigmergy has continuous evaporation (not discrete TTL), emergent optimization (not static rule matching), and reinforcement (not one-shot consumption). The metaphor creates expectations the implementation can't meet, making the design harder to reason about, not easier.
+
+9. **Reinventing existing primitives poorly.** The marker types map directly to GitHub's native system: `needs-test` → GitHub check run, `needs-fix` → issue/label, `needs-review` → PR review request, `blocked` → issue label. GitHub already has webhooks for event-driven reactions. The spec creates a parallel shadow system that must be kept in sync with GitHub's native system but provides no integration path. Similarly, the watcher daemon reinvents inotify/fswatch but less reliably (polling vs kernel notifications).
+
+10. **Scope-based dedup loses information.** "If the same marker type exists on the same artifact, the newer marker replaces the older one." Two agents could create `needs-fix` markers for *different issues* on the same artifact. The dedup rule silently drops one. This is data loss disguised as deduplication.
+
+11. **Event-driven architecture without event sourcing.** Markers are mutable (replaced by dedup, expired by TTL, archived). There's no append-only event log. You can't reconstruct the sequence of events that led to the current state. This defeats a primary benefit of event-driven design (auditability) and makes debugging production issues nearly impossible.
+
+12. **No priority inversion handling.** A critical `needs-fix` (security vulnerability) could be waiting behind a 5-minute debounce window for `mesh-gap-filler`. The debounce and cascade systems don't consider priority. A time-sensitive reaction is delayed by a non-urgent watcher's debounce timer if they share any resource.
+
+13. **"Automatic conveyor belt" metaphor breaks down.** A conveyor belt has a fixed sequence. Stigmergic coordination is supposed to be emergent and flexible. But watchers are statically defined in YAML with fixed trigger→reaction mappings. There's no emergence — it's a static rule engine. If the rules are static and known at design time, they should be pipeline steps (which 058 already provides), not a separate event system.
+
+14. **Layer 1 classification is aspirational, not structural.** Same as 059: 058's four pipeline YAMLs are complete without stigmergic coordination. No pipeline step references markers or watchers. If Layer 1 is optional, it's not infrastructure — it's a feature. The three-layer framing in 058 presents 059/060 as foundational when they're additive.
