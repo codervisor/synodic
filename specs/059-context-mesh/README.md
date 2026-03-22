@@ -108,14 +108,32 @@ Each project has its own mesh in `.harness/mesh/`. Cross-project mesh sharing is
 
 ### Logical Correctness Evaluation (2026-03-22)
 
-**Issues found:**
+#### Correctness Issues
 
 1. **"Routerless, managerless" contradicted by design**: The overview claims a "routerless, managerless global data bus." The design then describes the harness guarding DAG integrity, periodically scanning for gaps, and auto-spawning agents. The harness IS the manager — the claim is misleading.
 
-2. **Circular dependency in auto-spawn**: Gap detection auto-spawns pipelines, but pipeline spawning requires the pipeline engine (058). The mesh is Layer 1 infrastructure that pipelines run ON, yet auto-spawn depends on the pipeline engine (Layer 2). Layer 1 depends on Layer 2 which depends on Layer 1.
+2. **Circular dependency in auto-spawn**: Gap detection auto-spawns pipelines, but spawning requires the pipeline engine (058). The mesh is Layer 1 that pipelines run ON, yet auto-spawn depends on the pipeline engine (Layer 2). Layer 1 depends on Layer 2 which depends on Layer 1.
 
-3. **"Zero context transfer cost" is incorrect**: Reading mesh nodes into an agent's context window consumes tokens proportional to node content. The cost is not zero — it's shifted from inter-agent relay to mesh reads. Correct claim: "zero summarization loss," not "zero cost."
+3. **"Zero context transfer cost" is incorrect**: Reading mesh nodes into an agent context window consumes tokens proportional to node content. The cost is not zero — it's shifted from relay to mesh reads. Correct claim: "zero summarization loss," not "zero cost."
 
-4. **mesh.json concurrency hazard**: Single JSON file for the DAG adjacency list. Multiple parallel agents (enabled by 058's `parallel` step type) writing simultaneously will cause file-level conflicts. Conflict resolution section addresses semantic conflicts but ignores file-level contention on the index file.
+4. **mesh.json concurrency hazard**: Single JSON file for the DAG. Multiple parallel agents writing simultaneously will cause file-level conflicts. Conflict resolution addresses semantic conflicts but ignores file-level contention.
 
-5. **Missing test for auto-spawn**: Auto-spawn on gap detection is a key feature with no corresponding test case.
+5. **Missing test for auto-spawn**: Auto-spawn on gap detection is a key feature with no test case.
+
+#### Systematic / Design Issues
+
+6. **Over-engineering: solves a problem that doesn't exist yet.** The current codebase has no evidence that information loss between agents is a real bottleneck. Factory (044/058) works by reading specs directly. Fractal passes context through manifests. The mesh is a full knowledge graph with gap detection, auto-spawning, and conflict resolution for a problem nobody has demonstrated. This is classic YAGNI — build the DAG when you have concrete evidence of context loss, not before.
+
+7. **God-object coupling pattern.** The mesh captures everything: constraints, findings, artifacts, decisions. Every pipeline writes to it, every agent reads from it. This makes the mesh a single point of coupling even if not a single point of failure. Any schema change to mesh.json or node format ripples across all pipelines and agent prompts. A simpler per-pipeline artifact store with optional cross-references would achieve the same coordination with less coupling.
+
+8. **Gap detection assumes omniscience it can't have.** "Coverage gaps: Spec requirements not traced to any artifact node → flag as unimplemented." This requires either (a) manual linking of every spec requirement to artifact nodes (defeating automation) or (b) semantic understanding of whether an artifact satisfies a requirement. The spec explicitly rejects semantic search ("not a vector database"). Structural graph traversal alone cannot determine whether artifact X satisfies requirement Y — the gap detection promise is undeliverable with the stated approach.
+
+9. **"Stale nodes" heuristic is unsound.** "Artifact node older than its constraint → flag for re-evaluation." An artifact can predate a constraint and still satisfy it (constraint added after compliant code already existed). Temporal ordering does not imply staleness. This will generate false positives that erode trust in the system.
+
+10. **Auto-spawn is dangerous without throttling.** A poorly connected DAG could trigger cascading auto-spawns (gap found → spawn pipeline → pipeline writes nodes → new gaps detected → more spawns). There's no budget limit, approval gate, or rate limiting on auto-spawns. Combined with the circular L1/L2 dependency (#2), this is a runaway resource consumption risk.
+
+11. **Query language undefined.** Pipeline YAML examples use `mesh.query("tag:auth AND type:constraint")` but no query language is specified. Is it boolean tag filtering? Graph traversal? Regex? Without a defined query semantics, pipeline authors can't reason about what their queries will return.
+
+12. **Node type system is both too rigid and too vague.** Only 4 types: constraint, finding, artifact, decision. Missing: questions, risks, alternatives, trade-offs, hypotheses. Meanwhile, the boundary between types is fuzzy — what's the difference between a "finding" and a "constraint" that was discovered rather than specified? The type system will either be extended repeatedly (schema churn) or worked around (everything becomes "finding").
+
+13. **Layer 1 classification is aspirational, not structural.** The mesh is called "always-on infrastructure" but 058's four pipeline YAMLs are complete without any mesh interaction. The mesh is bolted on, not foundational. Nothing in factory.yml, fractal.yml, swarm.yml, or adversarial.yml requires the mesh to function. If Layer 1 is optional, it's not infrastructure — it's a feature.
