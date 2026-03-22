@@ -310,21 +310,13 @@ After finalizing the manifest:
 - **GovernanceLog** (`.harness/factory.governance.jsonl`) accumulates a summary record from every factory run, enabling cross-run pattern analysis.
 - **Custom rules** can be added to `.harness/rules/` as executable scripts. Each script receives the diff on stdin and should exit 0 on pass, non-zero on failure.
 
-## Post-PR: CI Auto-Fix Feedback Loop
+## Post-PR: CI Monitoring (Planned — Spec 058)
 
-After Step 5 (Create PR), the factory's job is done. But CI may still fail.
-The **CI auto-fix workflow** (`.github/workflows/ci-fix.yml`) closes this gap:
-
-1. GitHub CI runs on the PR branch.
-2. If CI fails, the `ci-fix.yml` workflow triggers automatically.
-3. It extracts actionable errors from CI logs.
-4. Claude Code makes a targeted fix and pushes to the same branch.
-5. CI re-runs. Repeat up to 3 times.
-
-This is **decoupled from the factory session** — the factory doesn't need to
-stay alive waiting for CI. The workflow is event-driven and runs independently.
-
-See [CI_FIX_ADOPTION.md](../../.github/CI_FIX_ADOPTION.md) for setup in other projects.
+After Step 5 (Create PR), CI may still fail. Spec 058 moves CI monitoring
+into the factory pipeline itself as a code-controlled step in the Rust CLI,
+replacing the previous `ci-fix.yml` GitHub Action approach. The factory
+orchestrator will monitor `gh pr checks`, extract failure logs, and invoke
+a BUILD fix with full session context — no amnesiac agent handoff.
 
 ## Future: Crystallization
 

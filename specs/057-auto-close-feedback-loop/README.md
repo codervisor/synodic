@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: archived
 created: 2026-03-22
 priority: high
 tags:
@@ -8,10 +8,12 @@ tags:
 - github-actions
 - factory
 created_at: 2026-03-22T14:47:11.571307991Z
-updated_at: 2026-03-22T14:53:04.816483986Z
+updated_at: 2026-03-22T16:43:10.155396306Z
 transitions:
 - status: in-progress
   at: 2026-03-22T14:53:04.816483986Z
+- status: archived
+  at: 2026-03-22T16:43:10.155396306Z
 ---
 
 # Auto-Close Feedback Loop: CI Failure → Fix → Re-run
@@ -150,3 +152,15 @@ Could add a "Step 5.5 — Monitor CI" to factory. Rejected because:
 ### Claude Code GitHub Action
 
 This design assumes availability of a Claude Code GitHub Action (e.g., `anthropics/claude-code-action`) or equivalent mechanism to run Claude in a GitHub Actions context. If not available, the workflow would use the Claude API directly with a script.
+
+### Superseded by 058
+
+This spec's approach (GitHub Action dispatching a new amnesiac agent) was rejected after analysis. The fire-and-forget delegation pattern — spawning a new agent with no context about why the code was written — is fundamentally unreliable. Industry research (OpenAI harness engineering, Elastic self-healing CI, Dagger, OpenDev arXiv paper) confirms that coding agents need deterministic code-based orchestration, not prompt-based pipelines.
+
+Spec 058 replaces this with a code-based harness where:
+- CI monitoring is a pipeline step in the Rust CLI, not a separate GitHub Action
+- The same agent session handles CI failures (context preserved via `--session-id`)
+- A pre-PR CI Gate catches ~80% of failures before they reach GitHub
+- Retry logic is enforced in code, not suggested in prompts
+
+The `ci-fix.yml` workflow and `CI_FIX_ADOPTION.md` created by this spec should be removed as part of 058 implementation.
