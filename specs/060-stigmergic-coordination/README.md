@@ -12,7 +12,6 @@ parent: '058'
 created_at: 2026-03-22T21:03:56.723244355Z
 updated_at: 2026-03-22T21:03:56.723244355Z
 ---
-
 # Stigmergic Coordination: Artifact-Driven Event Bus for Agent Handoffs
 
 ## Overview
@@ -168,3 +167,19 @@ This is NOT RabbitMQ/Kafka for agents. Markers are environment modifications (fi
 ### The watcher daemon
 
 The watcher is a lightweight process (`synodic watch`) that monitors `.harness/markers/` and artifact directories. It can run as a background process during development or as a CI step. It does NOT need to be always-on — markers persist on disk and are processed whenever the watcher next runs.
+
+### Logical Correctness Evaluation (2026-03-22)
+
+**Issues found:**
+
+1. **O(n²) claim is incorrect**: Overview claims centralized orchestration scales O(n²). Centralized dispatch is O(n) — one message per agent. O(n²) applies to fully-connected peer-to-peer topologies, the opposite of centralized. Undermines the motivating argument.
+
+2. **"Millisecond perception" contradicts "not always-on"**: Overview claims "Millisecond environment perception... under a second." Notes section says the watcher "does NOT need to be always-on" and processes markers "whenever the watcher next runs." Cannot have millisecond perception with lazy/periodic polling.
+
+3. **TTL expiration silently drops requirements**: "needs-test markers expire after 24h (if no test agent consumed them, the code was likely tested manually)" — assumption is unfounded. Marker may be unconsumed because no test agent was running or watcher wasn't active. Silently drops testing requirement.
+
+4. **Debounce + TTL interaction gap**: Markers could expire during debounce windows. mesh-gap-filler has 5-minute debounce — a short-TTL marker could expire before the debounced reaction fires. Interaction not addressed.
+
+5. **"Not a message queue" is semantic, not architectural**: File-watching daemon polling a directory, matching patterns, spawning reactions IS functionally a message queue with filesystem-backed persistence. Distinction obscures real tradeoffs (polling latency, no ordering guarantees, no delivery acknowledgment).
+
+6. **Cascade depth limit lacks justification**: Depth-3 limit stated without analysis. Legitimate chain: code change → needs-test → test fails → needs-fix → fix → needs-test. Already depth 3 before re-test is consumed. May truncate valid workflows.
