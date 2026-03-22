@@ -15,7 +15,6 @@ transitions:
 - status: draft
   at: 2026-03-22T21:46:53.926586339Z
 ---
-
 # Stigmergic Coordination: Artifact-Driven Event Bus for Agent Handoffs
 
 ## Overview
@@ -204,4 +203,3 @@ The watcher is a lightweight process (`synodic watch`) that monitors `.harness/m
 
 13. **"Automatic conveyor belt" metaphor breaks down.** A conveyor belt has a fixed sequence. Stigmergic coordination is supposed to be emergent and flexible. But watchers are statically defined in YAML with fixed trigger→reaction mappings. There's no emergence — it's a static rule engine. If the rules are static and known at design time, they should be pipeline steps (which 058 already provides), not a separate event system.
 
-14. **Layer 1 classification is aspirational, not structural.** Same as 059: 058's four pipeline YAMLs are complete without stigmergic coordination. No pipeline step references markers or watchers. If Layer 1 is optional, it's not infrastructure — it's a feature. The three-layer framing in 058 presents 059/060 as foundational when they're additive.
