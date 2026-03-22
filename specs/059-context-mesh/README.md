@@ -12,7 +12,6 @@ parent: '058'
 created_at: 2026-03-22T21:03:06.121406604Z
 updated_at: 2026-03-22T21:03:06.121406604Z
 ---
-
 # Context Mesh: DAG-Based Knowledge Substrate for Agent Coordination
 
 ## Overview
@@ -106,3 +105,17 @@ The mesh is a typed DAG with explicit edges, not an embedding-based retrieval sy
 ### Scope: project-level, not global
 
 Each project has its own mesh in `.harness/mesh/`. Cross-project mesh sharing is out of scope for now.
+
+### Logical Correctness Evaluation (2026-03-22)
+
+**Issues found:**
+
+1. **"Routerless, managerless" contradicted by design**: The overview claims a "routerless, managerless global data bus." The design then describes the harness guarding DAG integrity, periodically scanning for gaps, and auto-spawning agents. The harness IS the manager — the claim is misleading.
+
+2. **Circular dependency in auto-spawn**: Gap detection auto-spawns pipelines, but pipeline spawning requires the pipeline engine (058). The mesh is Layer 1 infrastructure that pipelines run ON, yet auto-spawn depends on the pipeline engine (Layer 2). Layer 1 depends on Layer 2 which depends on Layer 1.
+
+3. **"Zero context transfer cost" is incorrect**: Reading mesh nodes into an agent's context window consumes tokens proportional to node content. The cost is not zero — it's shifted from inter-agent relay to mesh reads. Correct claim: "zero summarization loss," not "zero cost."
+
+4. **mesh.json concurrency hazard**: Single JSON file for the DAG adjacency list. Multiple parallel agents (enabled by 058's `parallel` step type) writing simultaneously will cause file-level conflicts. Conflict resolution section addresses semantic conflicts but ignores file-level contention on the index file.
+
+5. **Missing test for auto-spawn**: Auto-spawn on gap detection is a key feature with no corresponding test case.
