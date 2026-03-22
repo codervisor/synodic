@@ -1,5 +1,5 @@
 ---
-status: planned
+status: draft
 created: 2026-03-22
 priority: high
 tags:
@@ -10,8 +10,12 @@ tags:
 - substrate
 parent: '058'
 created_at: 2026-03-22T21:03:06.121406604Z
-updated_at: 2026-03-22T21:03:06.121406604Z
+updated_at: 2026-03-22T21:46:53.778438186Z
+transitions:
+- status: draft
+  at: 2026-03-22T21:46:53.778438186Z
 ---
+
 # Context Mesh: DAG-Based Knowledge Substrate for Agent Coordination
 
 ## Overview
