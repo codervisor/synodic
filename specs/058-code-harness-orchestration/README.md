@@ -5,124 +5,258 @@ priority: critical
 tags:
 - harness
 - orchestration
-- factory
 - architecture
-- rust
+- runtime
+- pipeline
+- middleware
 created_at: 2026-03-22T16:42:58.873730006Z
-updated_at: 2026-03-22T16:42:58.873730006Z
+updated_at: 2026-03-22T20:41:42.952829462Z
 ---
 
-# Code-Based Harness: Move Factory Orchestration from SKILL.md to Rust CLI
+# Harness Runtime: Configurable Pipeline Engine with Composable Gates and Middleware
 
 ## Overview
 
 The factory skill (044) encodes its entire BUILD → INSPECT pipeline as a 340-line SKILL.md — markdown instructions that Claude interprets at runtime. This is fundamentally unreliable: retry logic is a prompt the LLM may miscount, tool constraints are honor-system, structured output is free-text parsing, and state management is delegated to the LLM.
 
-Industry consensus (OpenAI harness engineering, OpenDev arXiv paper, Elastic/Dagger/Nx self-healing CI) confirms: **the agent isn't the hard part — the harness is**. Five independent teams converged on the same pattern: coding agents become reliable only when deterministic code controls the pipeline and the LLM handles only creative work.
+Industry consensus (OpenAI harness engineering, OpenDev arXiv paper, Elastic/Dagger/Nx self-healing CI, Open SWE middleware pattern) confirms: **the agent isn't the hard part — the harness is**. Deterministic code must control the pipeline while the LLM handles only creative work.
 
-**Current (prompt-as-orchestration):**
-SKILL.md says "run cargo check" → LLM decides whether to comply
-
-**Target (code-as-orchestration):**
-Rust CLI runs `cargo check` deterministically → LLM implements/reviews code
+This spec defines a **general-purpose harness runtime** — not a factory-specific orchestrator. Factory is the first pipeline; fractal, swarm, and adversarial define their own pipelines on the same runtime.
 
 ## Design
 
-### Architecture: Rust CLI + `claude -p` headless
+### Core primitives
 
-The `synodic` Rust CLI becomes the harness. It calls `claude -p` (headless mode) for creative work (BUILD, INSPECT) and handles everything else in deterministic Rust code. Zero new framework dependencies.
+The harness has four step types and one cross-cutting mechanism:
+
+**Step types:**
+
+| Type | What it does | Example |
+|------|-------------|---------|
+| `agent` | Invoke `claude -p` with constrained tools and structured output | BUILD, INSPECT, CI fix |
+| `gate` | Run commands, check exit codes, collect failures | cargo test, clippy, eslint |
+| `shell` | Run a command for side effects | gh pr create, git push |
+| `watch` | Poll a condition until pass/timeout | gh pr checks --watch |
+
+**Middleware** (composable, wraps any step):
+- `retry(n)` — retry a step up to N times on failure
+- `timeout(ms)` — kill step after duration
+- `log(path)` — record step outcome to governance JSONL
+- `manifest(path)` — update manifest after step completes
+- `on_fail(action)` — route failures (rework, escalate, skip)
+
+### Pipeline definitions
+
+Pipelines are declared in config, not hardcoded. Each skill defines its pipeline:
+
+```yaml
+# .harness/pipelines/factory.yml
+name: factory
+steps:
+  - name: build
+    type: agent
+    prompt: skills/factory/prompts/build.md
+    tools: [Read, Edit, Write, Bash, Glob, Grep]
+    max_turns: 50
+    isolation: worktree
+    output_schema: schemas/build-report.json
+
+  - name: gates
+    type: gate
+    run: [static, ci]           # references .harness/gates.yml
+    retry: 2                    # max rework cycles (shared across all gates)
+    on_fail: rework(build)      # route failures back to build step
+
+  - name: inspect
+    type: agent
+    prompt: skills/factory/prompts/inspect.md
+    tools: [Read, Glob, Grep]   # read-only — enforced, not suggested
+    max_turns: 20
+    output_schema: schemas/inspect-verdict.json
+
+  - name: route
+    type: route
+    input: inspect.verdict
+    approve: create-pr
+    rework: build               # max 3 iterations
+    max_iterations: 3
+    exhaust: escalate
+
+  - name: create-pr
+    type: shell
+    command: gh pr create --title "factory: ${spec.title}" --body "${manifest.summary}"
+
+  - name: ci-monitor
+    type: watch
+    command: gh pr checks ${pr.number} --watch --fail-fast
+    timeout: 900000             # 15 min
+    on_fail:
+      step: ci-fix
+      max_attempts: 2
+
+  - name: ci-fix
+    type: agent
+    prompt: skills/factory/prompts/ci-fix.md
+    tools: [Read, Edit, Write, Bash, Glob, Grep]
+    session: build.session_id   # reuse BUILD session — full context preserved
+    max_turns: 30
+```
+
+### Gate definitions (project-level, not skill-level)
+
+Gates are configured per-project, not hardcoded per-language:
+
+```yaml
+# .harness/gates.yml
+gates:
+  static:
+    - name: rust-check
+      match: "*.rs"
+      command: cd cli && cargo check
+    - name: rust-lint
+      match: "*.rs"
+      command: cd cli && cargo clippy -- -D warnings
+    - name: ts-typecheck
+      match: "*.ts,*.tsx"
+      command: npx tsc --noEmit
+    - name: ts-lint
+      match: "*.ts,*.tsx"
+      command: npx eslint .
+    - name: python-typecheck
+      match: "*.py"
+      command: pyright
+    - name: custom-rules
+      match: "*"
+      command: .harness/scripts/run-rules.sh
+
+  ci:
+    - name: rust-test
+      match: "*.rs"
+      command: cd cli && cargo test
+    - name: node-test
+      match: "*.ts,*.tsx,*.js"
+      command: npm test
+```
+
+The `match` field filters by changed files. Only relevant gates run. Projects add/remove/modify gates without touching skill code or the harness runtime.
+
+### Harness runtime
+
+The runtime is a Rust binary in the `synodic` CLI:
 
 ```
-synodic factory run <spec-path>
-        │
-  ┌─────▼──────────────────────────────┐
-  │  Rust orchestrator (deterministic)  │
-  │                                     │
-  │  1. Initialize    — Rust code       │
-  │  2. BUILD         — claude -p       │
-  │  3. Static Gate   — cargo/clippy    │
-  │  4. CI Gate       — cargo test      │
-  │  5. INSPECT       — claude -p       │
-  │  6. Route         — if/else         │
-  │  7. Create PR     — gh pr create    │
-  │  8. CI Monitor    — gh pr checks    │
-  │  9. CI Fix        — claude -p       │
-  │  10. Finalize     — write JSONL     │
-  └─────────────────────────────────────┘
+synodic harness run --pipeline factory --spec <spec-path>
 ```
 
-### Key mechanisms
+It reads the pipeline YAML, resolves gate definitions, and executes steps sequentially. Agent steps call `claude -p` as subprocess. Gate steps run commands and collect exit codes. The runtime owns all state (manifest, governance log).
 
-**Structured output**: `claude -p --output-format json --json-schema '{...}'` returns typed JSON, not free-text `=== BUILD REPORT ===` blocks.
+### Provider abstraction
 
-**Tool enforcement**: `--allowedTools "Read,Edit,Write,Bash"` for BUILD; `--allowedTools "Read,Glob,Grep"` for INSPECT. INSPECT literally cannot edit files.
+Agent steps invoke `claude -p` by default, but the runtime abstracts the invocation:
 
-**Session continuity**: `--session-id` for multi-turn. CI fix reuses the BUILD session so the agent retains context about what it built and why.
+```yaml
+# .harness/config.yml
+provider:
+  type: claude-cli          # or: agent-sdk, api, custom
+  model: claude-sonnet-4-6
+  # type: agent-sdk would use @anthropic-ai/claude-agent-sdk
+  # type: custom would invoke a user-defined command
+```
 
-**Cost control**: `--max-turns 50` for BUILD, `--max-turns 20` for INSPECT.
+This keeps the door open for Agent SDK, other LLMs, or custom providers without changing pipeline definitions.
 
-**Retry budget (code-enforced)**:
-- Gate reworks: max 2 (shared between static + CI gate)
-- INSPECT loop: max 3 attempts
-- CI monitoring fixes: max 2 attempts
+### How skills use the harness
 
-### What stays as markdown
+Each skill defines:
+1. **Pipeline YAML** — step sequence, retry policies, routing
+2. **Prompt templates** — what the agent does at each step (markdown files)
+3. **Output schemas** — JSON schemas for structured agent output
 
-BUILD_PROMPT and INSPECT_PROMPT remain as templates (loaded from files). They define WHAT the agent does. The Rust code controls HOW the pipeline flows.
+SKILL.md becomes a thin shim:
+```
+/factory run <spec> → synodic harness run --pipeline factory --spec <spec>
+```
 
-### SKILL.md role after migration
+### Extensibility for other skills
 
-SKILL.md becomes a thin shim that describes the skill for discovery and invokes `synodic factory run`. It no longer encodes pipeline logic.
+Fractal pipeline (different steps, same runtime):
 
-### Graduation path
+```yaml
+# .harness/pipelines/fractal.yml
+steps:
+  - name: decompose
+    type: agent
+    prompt: skills/fractal/prompts/decompose.md
+    tools: [Read, Glob, Grep]
+    output_schema: schemas/decomposition.json
+  - name: solve-leaves
+    type: agent
+    prompt: skills/fractal/prompts/solve.md
+    tools: [Read, Edit, Write, Bash]
+    parallel: true              # run leaf solves concurrently
+    isolation: worktree
+  - name: reunify
+    type: agent
+    prompt: skills/fractal/prompts/reunify.md
+    tools: [Read, Edit, Write, Bash]
+  - name: gates
+    type: gate
+    run: [static, ci]
+    retry: 2
+    on_fail: rework(reunify)
+```
 
-If `claude -p` subprocess model hits limits (need hooks, complex session management), graduate to Claude Agent SDK (TypeScript). The pipeline structure stays identical — only the invocation mechanism changes.
+Same gate definitions, same runtime, different pipeline.
 
 ## Plan
 
-- [ ] Add `factory` subcommand to `synodic` CLI with `run` action
-- [ ] Implement manifest initialization (create `.factory/{id}/`, write manifest.json)
-- [ ] Implement BUILD step: call `claude -p` with structured JSON schema for build report
-- [ ] Implement Static Gate: detect languages, run cargo check/clippy/tsc/eslint
-- [ ] Implement CI Gate: run full test suite (cargo test / npm test) in worktree
-- [ ] Implement INSPECT step: call `claude -p` with read-only tools, parse verdict JSON
-- [ ] Implement routing logic (approve → PR, rework → loop, exhaust → escalate)
-- [ ] Implement PR creation via `gh pr create`
-- [ ] Implement CI monitoring: `gh pr checks --watch` with timeout, log extraction
-- [ ] Implement CI fix: call `claude -p` with failure context + session continuity
-- [ ] Implement governance log write (`.harness/factory.governance.jsonl`)
-- [ ] Migrate SKILL.md to thin shim that invokes `synodic factory run`
-- [ ] Add integration tests for pipeline happy path and failure modes
+- [ ] Define pipeline YAML schema (step types, middleware, routing)
+- [ ] Define gate YAML schema (match patterns, commands)
+- [ ] Implement harness runtime in `synodic` CLI: YAML parser + step executor
+- [ ] Implement `agent` step: `claude -p` subprocess with structured output + tool constraints
+- [ ] Implement `gate` step: file-match filtering, command execution, failure collection
+- [ ] Implement `shell` step: command execution with variable interpolation
+- [ ] Implement `watch` step: polling loop with timeout
+- [ ] Implement `route` step: verdict-based branching with iteration cap
+- [ ] Implement middleware: retry, timeout, governance logging, manifest updates
+- [ ] Implement provider abstraction (claude-cli default, agent-sdk upgrade path)
+- [ ] Create factory pipeline YAML + prompt templates + output schemas
+- [ ] Create default gate definitions for Synodic project
+- [ ] Migrate factory SKILL.md to thin shim invoking `synodic harness run`
+- [ ] Integration tests: mock agent responses, verify pipeline execution
 
 ## Test
 
-- [ ] Unit tests for manifest creation, gate execution, verdict parsing
-- [ ] Integration test: mock `claude -p` responses, verify full pipeline flow
-- [ ] Verify tool constraints: INSPECT with write tools must be impossible
-- [ ] Verify retry caps: gate reworks stop at 2, INSPECT at 3, CI fixes at 2
-- [ ] Verify structured output parsing: malformed JSON handled gracefully
-- [ ] End-to-end: run on a trivial spec, verify PR created with CI green
+- [ ] Pipeline YAML parsing: valid configs load, invalid configs produce clear errors
+- [ ] Gate execution: only matching gates run based on changed files
+- [ ] Agent step: tool constraints enforced via --allowedTools
+- [ ] Retry caps: gate reworks stop at configured limit
+- [ ] Route step: approve/rework/exhaust branches work correctly
+- [ ] Watch step: timeout triggers on_fail handler
+- [ ] Provider swap: switching claude-cli → agent-sdk doesn't change pipeline behavior
+- [ ] End-to-end: factory pipeline on trivial spec produces PR
 
 ## Notes
 
-### Why Rust CLI, not Agent SDK or Ruflo?
+### Why YAML pipelines, not code-defined pipelines?
 
-- **Zero new deps**: `synodic` CLI already exists, `claude` CLI already installed
-- **Fits architecture**: Synodic is Rust-first; adding TS orchestrator creates split-brain
-- **Subprocess is proven**: Elastic's production system uses `claude` as subprocess
-- **Graduation path**: If we outgrow `claude -p`, Agent SDK migration is mechanical (same pipeline, different invocation)
+Code pipelines (Rust functions) are powerful but require recompilation. YAML pipelines:
+- Can be modified without rebuilding the binary
+- Are readable by agents (an agent can reason about a pipeline definition)
+- Can be validated statically (schema check before execution)
+- Match industry patterns (GitHub Actions, Dagger, CI systems)
 
-### Industry references
+### Why not Ruflo or Open SWE?
 
-- OpenAI harness engineering: AGENTS.md as table of contents, code controls pipeline
-- OpenDev (arXiv 2603.05344): six-phase ReAct loop + seven subsystems, all in code
-- Elastic: shell script orchestrates `claude` subprocess, 24 PRs fixed, 20 dev-days saved
-- Dagger: Go code defines constrained workspace, agent iterates in tight loop
-- Nx: `npx nx fix-ci` — code command, not prompt
+- Ruflo: 250K lines, 55 alpha iterations, massive dependency for our needs
+- Open SWE: Python-centric, LangChain dependency chain
+- Our harness is ~1-2K lines of Rust reading YAML and calling subprocesses
+- If we outgrow it, migration to a framework is mechanical
 
 ### Relationship to existing specs
 
-- **Supersedes 057** (auto-close feedback loop): CI monitoring is now a pipeline step, not a separate GitHub Action
-- **Implements 044** (factory skill MVP): Same pipeline, deterministic orchestration
-- **Enables 049** (factory test harness): Code-based pipeline is testable; SKILL.md is not
-- **Enables 052** (fractal + factory composition): Code orchestrator can compose with fractal
+- **Supersedes 057** (auto-close feedback loop): CI monitoring is a pipeline step
+- **Evolves 044** (factory skill MVP): Same pipeline, deterministic orchestration
+- **Enables 049** (factory test harness): Code pipelines are testable
+- **Enables 052** (fractal + factory composition): Both are pipelines on the same runtime
+- **Enables 056** (harness bug fixes): Gates replace brittle static_gate.sh
