@@ -498,3 +498,17 @@ The harness is NOT just a pipeline engine. Three layers:
 Child specs:
 - **059**: Context Mesh — DAG storage, gap detection, spawn triggers, conflict resolution
 - **060**: Stigmergic Coordination — watchers, pheromone markers, debounce, TTL, cascade control
+
+### Logical Correctness Evaluation (2026-03-22)
+
+**Issues found:**
+
+1. **CRITICAL — Architectural contradiction with Spec 044**: Spec 044 (in-progress, critical priority) explicitly rejected Rust binary + `claude -p` subprocess orchestration in favor of Claude Code's built-in subagents. Spec 058 reverses to exactly the approach 044 rejected (Rust CLI invoking `claude -p`). The claim that 058 "Evolves 044" is false — it contradicts 044's core decision. One of these specs must yield.
+
+2. **Four vs five patterns inconsistency**: Overview says "Five AI-native coordination patterns" and the table lists 5 rows. Body says "all four skill topologies" and step type table maps to 4 pipelines. Stigmergic Flow has no pipeline YAML (marked "event-driven"). Unresolved whether it's a pattern or infrastructure.
+
+3. **Missing dependency declarations**: 059 and 060 are described as "always-on infrastructure" (Layer 1) that pipelines run on, but `depends_on` is empty. The parent-child relationship exists but formal blocking dependency is not declared.
+
+4. **Untracked blocking prerequisites**: 7 CLI commands (`synodic fractal complexity`, `synodic fractal gate`, `synodic swarm checkpoint`, etc.) are required by fractal and swarm pipelines but don't exist and have no specs or dependencies tracking their implementation.
+
+5. **Scope overflow**: At ~3500 tokens (spec max), defines a full runtime engine, 7 step types, middleware, provider abstraction, 4 complete pipeline YAMLs, gate definitions, config schema, 7 CLI commands, and 5+ spec relationships. Should decompose further.
