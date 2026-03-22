@@ -18,28 +18,23 @@ updated_at: 2026-03-22T20:41:42.952829462Z
 
 The factory skill (044) encodes its pipeline as SKILL.md — markdown instructions the LLM interprets unreliably. Industry consensus confirms: **the agent isn't the hard part — the harness is**.
 
-This spec defines the **AI Harness** — not just a pipeline engine, but a full intelligent manufacturing substrate. Five AI-native coordination patterns operate on three architectural layers:
+This spec defines the **AI Harness** — a deterministic pipeline engine that replaces SKILL.md prompt-based orchestration with code-based orchestration.
 
-**Layer 1 — Coordination Substrates** (always-on infrastructure):
-- **Context Mesh** (059): DAG-based knowledge graph — the omniscient nervous system. No routing, no central manager. Harness guards the DAG, detects gaps, spawns agents to fill them.
-- **Stigmergic Coordination** (060): Artifact-driven event bus — the automatic conveyor belt. Agents react to environment changes (file writes, markers, labels), not direct messages. Harness provides debounce and marker TTL.
-
-**Layer 2 — Pipeline Engine** (deterministic orchestration):
+**Pipeline Engine** (deterministic orchestration):
 - 7 step types (`agent`, `gate`, `shell`, `watch`, `route`, `loop`, `parallel`)
 - Declarative YAML pipelines, composable middleware, configurable gates
 - Provider abstraction (claude-cli, agent-sdk, custom)
 
-**Layer 3 — Skill Topologies** (production patterns):
+**Skill Topologies** (production patterns built on the engine):
 
 | Phase | Pattern | Pipeline | Role |
 |-------|---------|----------|------|
-| Design | **Speculative Swarm** | swarm.yml | Divergent exploration on Mesh knowledge base |
+| Design | **Speculative Swarm** | swarm.yml | Divergent exploration |
 | Design | **Fractal Decomposition** | fractal.yml | Orthogonal decomposition with scope isolation |
-| Production | **Stigmergic Flow** | (event-driven) | Artifact-driven handoffs between stages |
 | Production | **Generative-Adversarial** | adversarial.yml | Quality control at each node |
 | Production | **Factory** | factory.yml | Linear BUILD → INSPECT → PR |
 
-The five patterns form a closed loop: Context Mesh provides global state → Swarm explores strategies → Fractal decomposes complexity → Stigmergic flow drives production → Adversarial hardens quality → results feed back into the Mesh.
+Swarm explores strategies → Fractal decomposes complexity → Adversarial hardens quality → Factory ships the result.
 
 ## Design
 
@@ -487,42 +482,26 @@ SKILL.md files become thin shims after migration:
 
 The prompt templates (BUILD_PROMPT, INSPECT_PROMPT, etc.) move to `skills/{name}/prompts/*.md`. The orchestration logic is in the pipeline YAML. The algorithmic spine (`synodic fractal gate`, etc.) stays as Rust CLI commands.
 
-### Three-layer architecture
+### Future: Coordination substrates
 
-The harness is NOT just a pipeline engine. Three layers:
-
-1. **Substrates** (Context Mesh + Stigmergic): Always-on infrastructure that all pipelines share. The Mesh is the knowledge DAG; stigmergy is the event bus.
-2. **Pipeline Engine**: Deterministic YAML-driven orchestration (this spec's core, sections above).
-3. **Skill Topologies**: The five patterns (factory, fractal, swarm, adversarial + stigmergic flow) that compose on the engine.
-
-Child specs:
-- **059**: Context Mesh — DAG storage, gap detection, spawn triggers, conflict resolution
-- **060**: Stigmergic Coordination — watchers, pheromone markers, debounce, TTL, cascade control
+Child specs 059 (Context Mesh) and 060 (Stigmergic Coordination) explore optional coordination layers — a knowledge DAG and an event-driven marker system. Both are currently **draft** status pending evidence that the pipeline engine alone is insufficient. The engine is designed to work without them.
 
 ### Logical Correctness Evaluation (2026-03-22)
 
-#### Correctness Issues
+1. **Over-engineering: 7 step types when 3-4 suffice.** The spec acknowledges this ("Could reduce to 3") and argues semantic types help validation and documentation. But the actual pipelines show: `shell` is just `gate` without file matching; `watch` is `shell` in a polling loop; `route` is an if-statement on structured output. The "7 primitives" framing masks that most are thin wrappers. More types = more parser code, more edge cases, more documentation, more concepts for pipeline authors to learn — for marginal benefit over a smaller set with configuration flags.
 
-1. **Four vs five patterns inconsistency.** Overview says "Five AI-native coordination patterns," table lists 5 rows. Body repeatedly says "all four skill topologies," step type table maps to 4 pipelines. Stigmergic Flow has no pipeline YAML (marked "event-driven"). The spec can't decide whether stigmergy is a pattern or infrastructure.
+2. **Middleware composability is specified but interactions aren't.** `retry(n)`, `timeout(ms)`, `log(path)`, `manifest()`, `on_fail(action)` can wrap any step. But what happens when `retry(3)` wraps a step with `timeout(5000)` and `on_fail(rework)`? Does the timeout reset per retry? Does `on_fail` fire per retry or after all retries exhaust? Does `log` record each retry or just the final outcome? Composable middleware without defined interaction semantics is a debugging nightmare.
 
-#### Systematic / Design Issues
+3. **Variable interpolation is a hidden complexity bomb.** Pipelines use `${spec.title}`, `${manifest.summary}`, `${pr.number}`, `${loop.iteration | index_into(config.critic_modes)}`, `${node.children}`, `${config.max_depth}`. This is a template language — but there's no specification of: scope resolution (where do variables come from?), error handling (what if `${pr.number}` is unset?), type coercion, or the filter syntax (`| index_into`). This will become a DSL that needs its own parser, tests, and documentation. The spec treats it as trivial.
 
-2. **The three-layer architecture is a fiction.** Layer 1 (Context Mesh + Stigmergy) is described as "always-on infrastructure" that all pipelines operate on. But the four pipeline YAMLs in this very spec are complete and self-contained — none reference mesh nodes, mesh queries, markers, or watchers. Layer 2 (pipeline engine) works without Layer 1. If the substrates are optional add-ons, presenting them as foundational infrastructure is misleading architecture. The three-layer framing inflates the design's apparent coherence.
+4. **Provider abstraction is premature.** The spec defines `claude-cli | agent-sdk | custom` as provider types. There's exactly one provider today (`claude -p`). The abstraction adds interface definitions, adapter code, and testing surface for two providers that don't exist. Build the `claude -p` integration directly; add the abstraction when a second provider actually materializes.
 
-3. **Over-engineering: 7 step types when 3-4 suffice.** The spec acknowledges this ("Could reduce to 3") and argues semantic types help validation and documentation. But the actual pipelines show: `shell` is just `gate` without file matching; `watch` is `shell` in a polling loop; `route` is an if-statement on structured output. The "7 primitives" framing masks that most are thin wrappers. More types = more parser code, more edge cases, more documentation, more concepts for pipeline authors to learn — for marginal benefit over a smaller set with configuration flags.
+5. **Pipeline YAML = a new programming language.** The four pipeline YAMLs include: loops with termination conditions, conditional execution (`condition: merge-attempt.needs_ai`), dynamic iteration (`over: active_branches`), variable interpolation with filters, structured output schemas, cross-step references (`session: build.session_id`), and error routing. This is a Turing-incomplete programming language encoded in YAML. The spec argues YAML is better than code because it's "modifiable without recompilation" and "readable by agents" — but agents can also read Rust/Python, and YAML pipelines of this complexity are harder to debug than equivalent code (no stack traces, no breakpoints, no type checking).
 
-4. **Middleware composability is specified but interactions aren't.** `retry(n)`, `timeout(ms)`, `log(path)`, `manifest()`, `on_fail(action)` can wrap any step. But what happens when `retry(3)` wraps a step with `timeout(5000)` and `on_fail(rework)`? Does the timeout reset per retry? Does `on_fail` fire per retry or after all retries exhaust? Does `log` record each retry or just the final outcome? Composable middleware without defined interaction semantics is a debugging nightmare.
+6. **Session continuity assumption is unvalidated.** Factory pipeline has `session: build.session_id` on the `ci-fix` step to "reuse BUILD context." This assumes `claude -p` supports session resumption across separate invocations. If the provider is a subprocess, sessions are process-bound. The spec doesn't address whether this is a real capability or an aspirational feature.
 
-5. **Variable interpolation is a hidden complexity bomb.** Pipelines use `${spec.title}`, `${manifest.summary}`, `${pr.number}`, `${loop.iteration | index_into(config.critic_modes)}`, `${node.children}`, `${config.max_depth}`. This is a template language — but there's no specification of: scope resolution (where do variables come from?), error handling (what if `${pr.number}` is unset?), type coercion, or the filter syntax (`| index_into`). This will become a DSL that needs its own parser, tests, and documentation. The spec treats it as trivial.
+7. **Gate system duplicates CI.** Gates run `cargo check`, `cargo clippy`, `cargo test`, `npm test`, `npx tsc --noEmit` locally before PR creation. GitHub CI runs the same checks. The spec acknowledges this ("complementary, not overlapping") but the gate definitions in `gates.yml` are literally the same commands CI runs. If the local gate passes but CI fails due to environment differences (the exact scenario 057 addressed), the gate provided false confidence. If they always agree, the gate is redundant.
 
-6. **Provider abstraction is premature.** The spec defines `claude-cli | agent-sdk | custom` as provider types. There's exactly one provider today (`claude -p`). The abstraction adds interface definitions, adapter code, and testing surface for two providers that don't exist. Build the `claude -p` integration directly; add the abstraction when a second provider actually materializes.
+8. **Scope: this is 4-6 specs compressed into one.** The spec defines: (a) a pipeline YAML schema with 7 step types, (b) a middleware system, (c) a provider abstraction, (d) a gate system, (e) four complete pipeline definitions, (f) seven CLI commands. Each of these is a non-trivial implementation. Compressing them into one spec means none gets adequate design scrutiny. The plan section has 17 unchecked items — a signal that decomposition is needed.
 
-7. **Pipeline YAML = a new programming language.** The four pipeline YAMLs include: loops with termination conditions, conditional execution (`condition: merge-attempt.needs_ai`), dynamic iteration (`over: active_branches`), variable interpolation with filters, structured output schemas, cross-step references (`session: build.session_id`), and error routing. This is a Turing-incomplete programming language encoded in YAML. The spec argues YAML is better than code because it's "modifiable without recompilation" and "readable by agents" — but agents can also read Rust/Python, and YAML pipelines of this complexity are harder to debug than equivalent code (no stack traces, no breakpoints, no type checking).
-
-8. **Session continuity assumption is unvalidated.** Factory pipeline has `session: build.session_id` on the `ci-fix` step to "reuse BUILD context." This assumes `claude -p` supports session resumption across separate invocations. If the provider is a subprocess, sessions are process-bound. The spec doesn't address whether this is a real capability or an aspirational feature.
-
-9. **Gate system duplicates CI.** Gates run `cargo check`, `cargo clippy`, `cargo test`, `npm test`, `npx tsc --noEmit` locally before PR creation. GitHub CI runs the same checks. The spec acknowledges this ("complementary, not overlapping") but the gate definitions in `gates.yml` are literally the same commands CI runs. If the local gate passes but CI fails due to environment differences (the exact scenario 057 addressed), the gate provided false confidence. If they always agree, the gate is redundant.
-
-10. **Scope: this is 4-6 specs compressed into one.** The spec defines: (a) a pipeline YAML schema with 7 step types, (b) a middleware system, (c) a provider abstraction, (d) a gate system, (e) four complete pipeline definitions, (f) seven CLI commands. Each of these is a non-trivial implementation. Compressing them into one spec means none gets adequate design scrutiny. The plan section has 17 unchecked items — a signal that decomposition is needed.
-
-11. **"Industry consensus" citation is vague.** The overview states "Industry consensus confirms: the agent isn't the hard part — the harness is" without citation. This frames the entire spec's direction. If the claim is based on specific research (OpenAI, Elastic, Dagger, OpenDev — mentioned in 057's notes), those should be cited. If it's the author's interpretation, it should be stated as such. Unattributed authority claims in a design spec create false certainty.
+9. **"Industry consensus" citation is vague.** The overview states "Industry consensus confirms: the agent isn't the hard part — the harness is" without citation. This frames the entire spec's direction. If the claim is based on specific research (OpenAI, Elastic, Dagger, OpenDev — mentioned in 057's notes), those should be cited. If it's the author's interpretation, it should be stated as such. Unattributed authority claims in a design spec create false certainty.
