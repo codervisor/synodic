@@ -1,5 +1,5 @@
 ---
-status: planned
+status: draft
 created: 2026-03-22
 priority: high
 tags:
@@ -10,8 +10,12 @@ tags:
 - substrate
 parent: '058'
 created_at: 2026-03-22T21:03:56.723244355Z
-updated_at: 2026-03-22T21:03:56.723244355Z
+updated_at: 2026-03-22T21:46:53.926586339Z
+transitions:
+- status: draft
+  at: 2026-03-22T21:46:53.926586339Z
 ---
+
 # Stigmergic Coordination: Artifact-Driven Event Bus for Agent Handoffs
 
 ## Overview
