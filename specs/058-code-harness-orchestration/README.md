@@ -12,15 +12,34 @@ tags:
 created_at: 2026-03-22T16:42:58.873730006Z
 updated_at: 2026-03-22T20:41:42.952829462Z
 ---
-# Harness Runtime: Configurable Pipeline Engine with Composable Gates and Middleware
+# AI Harness: Intelligent Manufacturing Network for Autonomous Agent Coordination
 
 ## Overview
 
-The factory skill (044) encodes its entire BUILD → INSPECT pipeline as a 340-line SKILL.md — markdown instructions that Claude interprets at runtime. This is fundamentally unreliable: retry logic is a prompt the LLM may miscount, tool constraints are honor-system, structured output is free-text parsing, and state management is delegated to the LLM.
+The factory skill (044) encodes its pipeline as SKILL.md — markdown instructions the LLM interprets unreliably. Industry consensus confirms: **the agent isn't the hard part — the harness is**.
 
-Industry consensus (OpenAI harness engineering, OpenDev arXiv paper, Elastic/Dagger/Nx self-healing CI, Open SWE middleware pattern) confirms: **the agent isn't the hard part — the harness is**. Deterministic code must control the pipeline while the LLM handles only creative work.
+This spec defines the **AI Harness** — not just a pipeline engine, but a full intelligent manufacturing substrate. Five AI-native coordination patterns operate on three architectural layers:
 
-This spec defines a **general-purpose harness runtime** that all four skill topologies (factory, fractal, swarm, adversarial) run on. Each skill defines its pipeline in YAML; the runtime executes it deterministically.
+**Layer 1 — Coordination Substrates** (always-on infrastructure):
+- **Context Mesh** (059): DAG-based knowledge graph — the omniscient nervous system. No routing, no central manager. Harness guards the DAG, detects gaps, spawns agents to fill them.
+- **Stigmergic Coordination** (060): Artifact-driven event bus — the automatic conveyor belt. Agents react to environment changes (file writes, markers, labels), not direct messages. Harness provides debounce and marker TTL.
+
+**Layer 2 — Pipeline Engine** (deterministic orchestration):
+- 7 step types (`agent`, `gate`, `shell`, `watch`, `route`, `loop`, `parallel`)
+- Declarative YAML pipelines, composable middleware, configurable gates
+- Provider abstraction (claude-cli, agent-sdk, custom)
+
+**Layer 3 — Skill Topologies** (production patterns):
+
+| Phase | Pattern | Pipeline | Role |
+|-------|---------|----------|------|
+| Design | **Speculative Swarm** | swarm.yml | Divergent exploration on Mesh knowledge base |
+| Design | **Fractal Decomposition** | fractal.yml | Orthogonal decomposition with scope isolation |
+| Production | **Stigmergic Flow** | (event-driven) | Artifact-driven handoffs between stages |
+| Production | **Generative-Adversarial** | adversarial.yml | Quality control at each node |
+| Production | **Factory** | factory.yml | Linear BUILD → INSPECT → PR |
+
+The five patterns form a closed loop: Context Mesh provides global state → Swarm explores strategies → Fractal decomposes complexity → Stigmergic flow drives production → Adversarial hardens quality → results feed back into the Mesh.
 
 ## Design
 
@@ -467,3 +486,15 @@ SKILL.md files become thin shims after migration:
 ```
 
 The prompt templates (BUILD_PROMPT, INSPECT_PROMPT, etc.) move to `skills/{name}/prompts/*.md`. The orchestration logic is in the pipeline YAML. The algorithmic spine (`synodic fractal gate`, etc.) stays as Rust CLI commands.
+
+### Three-layer architecture
+
+The harness is NOT just a pipeline engine. Three layers:
+
+1. **Substrates** (Context Mesh + Stigmergic): Always-on infrastructure that all pipelines share. The Mesh is the knowledge DAG; stigmergy is the event bus.
+2. **Pipeline Engine**: Deterministic YAML-driven orchestration (this spec's core, sections above).
+3. **Skill Topologies**: The five patterns (factory, fractal, swarm, adversarial + stigmergic flow) that compose on the engine.
+
+Child specs:
+- **059**: Context Mesh — DAG storage, gap detection, spawn triggers, conflict resolution
+- **060**: Stigmergic Coordination — watchers, pheromone markers, debounce, TTL, cascade control
