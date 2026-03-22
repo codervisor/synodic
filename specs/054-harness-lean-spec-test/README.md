@@ -1,5 +1,5 @@
 ---
-status: complete
+status: archived
 created: 2026-03-22
 priority: medium
 tags:
@@ -7,7 +7,10 @@ tags:
 - harness
 - lean-spec
 created_at: 2026-03-22T09:19:52.428507463Z
-updated_at: 2026-03-22T09:19:52.428507463Z
+updated_at: 2026-03-22T11:27:06.442745708Z
+transitions:
+- status: archived
+  at: 2026-03-22T11:27:06.442745708Z
 ---
 
 # Synodic Harness Test Against lean-spec Project
