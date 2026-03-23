@@ -753,4 +753,143 @@ mod tests {
             .collect();
         assert!(!coverage_flags.is_empty(), "missing coverage should be flagged");
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 064: Additional algorithmic tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_empty_children_no_flags() {
+        let input = DecomposeInput {
+            parent_spec: "Simple task".into(),
+            children: vec![],
+            current_depth: 0,
+            max_depth: 3,
+            total_nodes: 0,
+            max_total_nodes: 20,
+        };
+        let output = run(&input);
+        // No children → no orthogonality/cycle flags
+        let ortho: Vec<_> = output.flags.iter().filter(|f| f.category == "orthogonality").collect();
+        let cycle: Vec<_> = output.flags.iter().filter(|f| f.category == "cycle").collect();
+        assert!(ortho.is_empty());
+        assert!(cycle.is_empty());
+    }
+
+    #[test]
+    fn test_budget_tight_flagged() {
+        let input = DecomposeInput {
+            parent_spec: "Build a system".into(),
+            children: vec![
+                Child { slug: "a".into(), scope: "module a".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+                Child { slug: "b".into(), scope: "module b".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+            ],
+            current_depth: 0,
+            max_depth: 3,
+            total_nodes: 16, // 16 + 2 = 18/20 = 90% > 80%
+            max_total_nodes: 20,
+        };
+        let output = run(&input);
+        let budget_flags: Vec<_> = output.flags.iter().filter(|f| f.category == "budget").collect();
+        assert!(!budget_flags.is_empty(), "budget should be flagged when > 80% used");
+    }
+
+    #[test]
+    fn test_budget_ok_not_flagged() {
+        let input = DecomposeInput {
+            parent_spec: "Build a system".into(),
+            children: vec![
+                Child { slug: "a".into(), scope: "module a".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+            ],
+            current_depth: 0,
+            max_depth: 3,
+            total_nodes: 2, // 2 + 1 = 3/20 = 15%
+            max_total_nodes: 20,
+        };
+        let output = run(&input);
+        let budget_flags: Vec<_> = output.flags.iter().filter(|f| f.category == "budget").collect();
+        assert!(budget_flags.is_empty(), "low budget usage should not be flagged");
+    }
+
+    #[test]
+    fn test_complexity_score_range() {
+        // Trivial
+        let trivial = complexity_score("");
+        assert!(trivial >= 0.0 && trivial <= 1.0, "score must be in [0,1]: {}", trivial);
+
+        // Very complex
+        let complex = complexity_score(&"authentication authorization logging monitoring caching error-handling validation security testing deployment configuration middleware database migration api\n".repeat(20));
+        assert!(complex >= 0.0 && complex <= 1.0, "score must be in [0,1]: {}", complex);
+        assert!(complex > 0.3, "heavily cross-cutting spec should score high: {}", complex);
+    }
+
+    #[test]
+    fn test_allocate_budget_empty_children() {
+        let budget = allocate_budget(&[], 10);
+        assert!(budget.is_empty());
+    }
+
+    #[test]
+    fn test_allocate_budget_all_get_at_least_one() {
+        let children = vec![
+            Child { slug: "a".into(), scope: "tiny".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+            Child { slug: "b".into(), scope: "tiny".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+            Child { slug: "c".into(), scope: "tiny".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+        ];
+        let budget = allocate_budget(&children, 10);
+        for child in &children {
+            assert!(*budget.get(&child.slug).unwrap_or(&0) >= 1, "every child should get at least 1");
+        }
+    }
+
+    #[test]
+    fn test_cosine_similarity_identical() {
+        let mut a = HashMap::new();
+        a.insert("auth".to_string(), 0.5);
+        a.insert("system".to_string(), 0.3);
+        let sim = cosine_similarity(&a, &a);
+        assert!((sim - 1.0).abs() < 1e-6, "identical vectors should have cosine 1.0");
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal() {
+        let mut a = HashMap::new();
+        a.insert("auth".to_string(), 1.0);
+        let mut b = HashMap::new();
+        b.insert("database".to_string(), 1.0);
+        let sim = cosine_similarity(&a, &b);
+        assert!((sim).abs() < 1e-6, "orthogonal vectors should have cosine 0.0");
+    }
+
+    #[test]
+    fn test_three_child_dependency_chain() {
+        // A → B → C chain
+        let children = vec![
+            Child { slug: "a".into(), scope: "foundation".into(), boundaries: String::new(), inputs: "none".into(), outputs: "core-modules".into() },
+            Child { slug: "b".into(), scope: "middleware".into(), boundaries: String::new(), inputs: "core-modules".into(), outputs: "api-layer".into() },
+            Child { slug: "c".into(), scope: "frontend".into(), boundaries: String::new(), inputs: "api-layer".into(), outputs: "ui-components".into() },
+        ];
+        let input = make_input(children);
+        let output = run(&input);
+        // Should produce 3 sequential waves
+        assert_eq!(output.dependency_order.len(), 3);
+    }
+
+    #[test]
+    fn test_diamond_dependency_pattern() {
+        // a → b, a → c, b+c → d
+        let children = vec![
+            Child { slug: "a".into(), scope: "base".into(), boundaries: String::new(), inputs: "none".into(), outputs: "foundation".into() },
+            Child { slug: "b".into(), scope: "left-branch".into(), boundaries: String::new(), inputs: "foundation".into(), outputs: "left-output".into() },
+            Child { slug: "c".into(), scope: "right-branch".into(), boundaries: String::new(), inputs: "foundation".into(), outputs: "right-output".into() },
+            Child { slug: "d".into(), scope: "merge-point".into(), boundaries: String::new(), inputs: "left-output right-output".into(), outputs: "final".into() },
+        ];
+        let input = make_input(children);
+        let output = run(&input);
+        // Wave 1: [a], Wave 2: [b,c], Wave 3: [d]
+        assert_eq!(output.dependency_order.len(), 3);
+        assert!(output.dependency_order[0].contains(&"a".to_string()));
+        assert_eq!(output.dependency_order[1].len(), 2); // b and c parallel
+        assert!(output.dependency_order[2].contains(&"d".to_string()));
+    }
 }

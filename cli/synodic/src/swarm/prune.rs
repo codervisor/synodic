@@ -216,4 +216,117 @@ mod tests {
         assert!(result.pruned.is_empty());
         assert_eq!(result.surviving.len(), 2);
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 064: Additional swarm prune tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_prune_custom_threshold() {
+        // Use low threshold (0.3) — partial overlap should trigger pruning
+        let input = PruneInput {
+            manifest: super::SwarmManifest {
+                id: "test".to_string(),
+                branches: vec![
+                    SwarmBranch {
+                        id: "a".to_string(),
+                        strategy: "s1".to_string(),
+                        files: vec!["shared.rs".to_string(), "a.rs".to_string()],
+                        status: "active".to_string(),
+                    },
+                    SwarmBranch {
+                        id: "b".to_string(),
+                        strategy: "s2".to_string(),
+                        files: vec!["shared.rs".to_string(), "b.rs".to_string()],
+                        status: "active".to_string(),
+                    },
+                    SwarmBranch {
+                        id: "c".to_string(),
+                        strategy: "s3".to_string(),
+                        files: vec!["c.rs".to_string()],
+                        status: "active".to_string(),
+                    },
+                ],
+            },
+            threshold: 0.3, // a:b Jaccard = 1/3 ≈ 0.33 > 0.3
+        };
+        let result = run(&input);
+        // a and b share enough to trigger pruning at threshold 0.3
+        assert_eq!(result.pruned.len(), 1);
+        assert!(result.surviving.len() >= 2);
+    }
+
+    #[test]
+    fn test_prune_high_threshold_no_pruning() {
+        let input = PruneInput {
+            manifest: super::SwarmManifest {
+                id: "test".to_string(),
+                branches: vec![
+                    SwarmBranch {
+                        id: "a".to_string(),
+                        strategy: "s1".to_string(),
+                        files: vec!["shared.rs".to_string(), "a.rs".to_string()],
+                        status: "active".to_string(),
+                    },
+                    SwarmBranch {
+                        id: "b".to_string(),
+                        strategy: "s2".to_string(),
+                        files: vec!["shared.rs".to_string(), "b.rs".to_string()],
+                        status: "active".to_string(),
+                    },
+                    SwarmBranch {
+                        id: "c".to_string(),
+                        strategy: "s3".to_string(),
+                        files: vec!["c.rs".to_string()],
+                        status: "active".to_string(),
+                    },
+                ],
+            },
+            threshold: 0.99, // Very high — only identical branches pruned
+        };
+        let result = run(&input);
+        assert!(result.pruned.is_empty(), "high threshold should not prune partial overlaps");
+    }
+
+    #[test]
+    fn test_prune_many_converging_branches() {
+        // 5 branches all identical — should keep exactly 2
+        let branches: Vec<SwarmBranch> = (0..5)
+            .map(|i| SwarmBranch {
+                id: format!("branch-{}", i),
+                strategy: format!("s{}", i),
+                files: vec!["main.rs".to_string(), "lib.rs".to_string()],
+                status: "active".to_string(),
+            })
+            .collect();
+        let input = PruneInput {
+            manifest: super::SwarmManifest {
+                id: "test".to_string(),
+                branches,
+            },
+            threshold: 0.8,
+        };
+        let result = run(&input);
+        assert!(result.surviving.len() >= 2, "must keep at least 2 survivors");
+        assert_eq!(result.pruned.len() + result.surviving.len(), 5);
+    }
+
+    #[test]
+    fn test_prune_single_branch() {
+        let input = PruneInput {
+            manifest: super::SwarmManifest {
+                id: "test".to_string(),
+                branches: vec![SwarmBranch {
+                    id: "only".to_string(),
+                    strategy: "s1".to_string(),
+                    files: vec!["main.rs".to_string()],
+                    status: "active".to_string(),
+                }],
+            },
+            threshold: 0.8,
+        };
+        let result = run(&input);
+        assert!(result.pruned.is_empty());
+        assert_eq!(result.surviving.len(), 1);
+    }
 }
