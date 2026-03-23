@@ -306,9 +306,9 @@ impl HarnessCmd {
                     "status": result.status,
                     "strategy": result.plan.strategy,
                     "frameworks": result.plan.frameworks,
-                    "tests_proposed": result.plan.tests.len(),
-                    "tests_passed": result.execution.as_ref().map(|e| e.passed),
-                    "tests_failed": result.execution.as_ref().map(|e| e.failed),
+                    "tests_proposed": result.plan.tiers.iter().map(|t| t.tests.len()).sum::<usize>(),
+                    "tests_passed": result.execution.as_ref().map(|e| e.total_passed),
+                    "tests_failed": result.execution.as_ref().map(|e| e.total_failed),
                     "confidence": result.validation.as_ref().map(|v| v.confidence),
                     "run_dir": run_dir.display().to_string(),
                 });
