@@ -2,6 +2,7 @@ mod cmd;
 mod governance;
 mod fractal;
 mod harness;
+mod meta;
 mod pipeline;
 mod swarm;
 mod util;
