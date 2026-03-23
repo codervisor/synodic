@@ -87,42 +87,10 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 - Set `GH_TOKEN` env var in Claude Code settings for authenticated access (5000 req/hr + private repos + writes)
 - `gh` CLI installed by `.github/setup-env.sh` SessionStart hook
 
-## Spec Management via MCP
-
-**All spec creation and mutation in `specs/` MUST go through the LeanSpec MCP server tools.** Do NOT use Write/Edit tools to create or modify spec files in `specs/` directly. The MCP server enforces validation rules (size limits, required frontmatter, dependency integrity) that prevent invalid specs from reaching disk.
-
-**Scope:** This applies only to project-level specs in `specs/`. Fractal's internal working artifacts (`.fractal/{work-id}/tree/**/spec.md`) are ephemeral decomposition nodes — they use direct file writes and are not LeanSpec-managed.
-
-**Available MCP tools (from `@leanspec/mcp`):**
-
-| Tool | Purpose |
-|------|---------|
-| `create` | Create a new spec — auto-generates number + frontmatter, validates before writing |
-| `update` | Update metadata/content via replacements, section updates, checklist toggles |
-| `validate` | Validate frontmatter, structure, dependencies (dry-run or check existing) |
-| `view` | Read a spec's full content and metadata |
-| `list` | List specs with filtering by status, tags, priority |
-| `search` | Full-text search with AND/OR/NOT, field filters, fuzzy matching |
-| `relationships` | View/add/remove parent, child, and depends_on relationships |
-| `children` | List direct child specs of a parent |
-| `deps` | Show upstream/downstream dependency graph |
-| `board` | Project board grouped by status, priority, assignee, or tag |
-| `stats` | Project statistics and insights |
-| `tokens` | Token counting for context management |
-
-**Why MCP instead of direct file writes:**
-- `.lean-spec/config.json` defines validation rules (400-line max, 5000-token max, required frontmatter) but nothing enforces them with direct writes
-- MCP tools are the **gatekeeper** — agents cannot bypass validation
-- Dependency links are validated (dangling `depends_on` references rejected)
-- Scope overlap detection via tag similarity
-
-**Configuration:** `.mcp.json` at repo root registers the server. No manual setup needed.
-
 ## Conventions
 
 - **Specs first**: Create a spec before starting non-trivial work
 - **LeanSpec format**: All specs use YAML frontmatter (status, created, tags, priority)
-- **Spec writes via MCP**: Always use LeanSpec MCP tools (`create`, `update`) — never write spec files directly
 - **Governance**: All agent operations follow [HARNESS.md](./HARNESS.md)
 
 ## Skills
