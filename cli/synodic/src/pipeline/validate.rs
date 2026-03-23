@@ -252,4 +252,224 @@ steps:
         );
         assert!(errors.iter().any(|e| e.contains("rework target")));
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 061: Additional validation tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_empty_step_name() {
+        let errors = parse_and_validate(
+            r#"
+name: test
+steps:
+  - name: ""
+    type: run
+    command: echo ok
+"#,
+        );
+        assert!(errors.iter().any(|e| e.contains("step name is required")));
+    }
+
+    #[test]
+    fn test_empty_pipeline_name() {
+        let errors = parse_and_validate(
+            r#"
+name: ""
+steps:
+  - name: step1
+    type: run
+    command: echo ok
+"#,
+        );
+        assert!(errors.iter().any(|e| e.contains("pipeline name is required")));
+    }
+
+    #[test]
+    fn test_branch_rework_target_missing() {
+        let errors = parse_and_validate(
+            r#"
+name: test
+steps:
+  - name: build
+    type: agent
+    prompt: build.md
+  - name: route
+    type: branch
+    input: verdict
+    approve: build
+    rework: nonexistent
+"#,
+        );
+        assert!(errors.iter().any(|e| e.contains("rework target 'nonexistent'")));
+    }
+
+    #[test]
+    fn test_branch_zero_max_iterations() {
+        let errors = parse_and_validate(
+            r#"
+name: test
+steps:
+  - name: build
+    type: agent
+    prompt: build.md
+  - name: route
+    type: branch
+    input: verdict
+    approve: build
+    rework: build
+    max_iterations: 0
+"#,
+        );
+        assert!(errors.iter().any(|e| e.contains("max_iterations must be > 0")));
+    }
+
+    #[test]
+    fn test_fan_parallel_needs_over_or_steps() {
+        let errors = parse_and_validate(
+            r#"
+name: test
+steps:
+  - name: empty-fan
+    type: fan
+    mode: parallel
+"#,
+        );
+        assert!(errors.iter().any(|e| e.contains("needs 'over' or 'steps'")));
+    }
+
+    #[test]
+    fn test_on_fail_valid_rework_target() {
+        let errors = parse_and_validate(
+            r#"
+name: test
+steps:
+  - name: build
+    type: agent
+    prompt: build.md
+  - name: gates
+    type: run
+    command: cargo check
+    on_fail: rework(build)
+"#,
+        );
+        assert!(errors.is_empty(), "valid on_fail should produce no errors: {:?}", errors);
+    }
+
+    #[test]
+    fn test_on_fail_escalate_no_error() {
+        let errors = parse_and_validate(
+            r#"
+name: test
+steps:
+  - name: step1
+    type: run
+    command: cargo test
+    on_fail: escalate
+"#,
+        );
+        // escalate is a valid on_fail action, not a rework target
+        assert!(
+            !errors.iter().any(|e| e.contains("rework target")),
+            "escalate should not trigger rework target validation"
+        );
+    }
+
+    #[test]
+    fn test_full_factory_pipeline_validates() {
+        // Simulates a factory pipeline per spec 063
+        let errors = parse_and_validate(
+            r#"
+name: factory
+description: Linear BUILD → INSPECT → PR pipeline
+config:
+  max_rework: 3
+steps:
+  - name: build
+    type: agent
+    prompt: skills/factory/prompts/build.md
+    tools: [Read, Edit, Write, Bash, Glob, Grep]
+    max_turns: 50
+    isolation: worktree
+  - name: preflight
+    type: run
+    check: [preflight]
+    match: ["*.rs", "*.ts"]
+    retry: 2
+    on_fail: rework(build)
+  - name: inspect
+    type: agent
+    prompt: skills/factory/prompts/inspect.md
+    tools: [Read, Glob, Grep]
+    max_turns: 10
+  - name: route
+    type: branch
+    input: steps.inspect.verdict
+    approve: create-pr
+    rework: build
+    max_iterations: 3
+    exhaust: escalate
+  - name: create-pr
+    type: run
+    command: gh pr create --title "${spec.title}" --body "${spec.summary}"
+"#,
+        );
+        assert!(errors.is_empty(), "factory pipeline should validate: {:?}", errors);
+    }
+
+    #[test]
+    fn test_adversarial_pipeline_validates() {
+        // Simulates an adversarial pipeline per spec 063
+        let errors = parse_and_validate(
+            r#"
+name: adversarial
+description: Generative-adversarial quality hardening
+config:
+  critic_modes: [syntax-and-types, edge-cases, concurrency-safety]
+steps:
+  - name: generate
+    type: agent
+    prompt: skills/adversarial/prompts/generate.md
+    tools: [Read, Edit, Write, Bash]
+    max_turns: 30
+  - name: gates
+    type: run
+    check: [preflight]
+    retry: 1
+    on_fail: rework(generate)
+  - name: adversarial-loop
+    type: fan
+    mode: loop
+    max_iterations: 5
+    termination:
+      consecutive_clean: 2
+      plateau_rounds: 3
+  - name: create-pr
+    type: run
+    command: gh pr create
+"#,
+        );
+        assert!(errors.is_empty(), "adversarial pipeline should validate: {:?}", errors);
+    }
+
+    #[test]
+    fn test_multiple_errors_collected() {
+        let errors = parse_and_validate(
+            r#"
+name: ""
+steps:
+  - name: ""
+    type: agent
+    prompt: ""
+  - name: bad-branch
+    type: branch
+    input: ""
+    approve: nowhere
+    rework: nowhere
+    max_iterations: 0
+"#,
+        );
+        // Should collect multiple errors, not stop at first
+        assert!(errors.len() >= 3, "should have multiple errors: {:?}", errors);
+    }
 }

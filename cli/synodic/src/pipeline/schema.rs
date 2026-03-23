@@ -381,4 +381,208 @@ steps:
         assert!(pipeline.find_step("inspect").is_some());
         assert!(pipeline.find_step("nonexistent").is_none());
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 058 / 061: Additional schema parsing tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_all_four_step_types_in_one_pipeline() {
+        // Spec 058 defines exactly 4 step types. Verify a pipeline with all 4 parses.
+        let yaml = r#"
+name: full-pipeline
+description: Pipeline exercising all 4 step types
+config:
+  max_rework: 3
+steps:
+  - name: build
+    type: agent
+    prompt: prompts/build.md
+    tools: [Read, Edit, Write, Bash]
+    max_turns: 50
+  - name: gates
+    type: run
+    check: [preflight]
+    match: ["*.rs"]
+    retry: 2
+    on_fail: rework(build)
+  - name: inspect
+    type: agent
+    prompt: prompts/inspect.md
+  - name: route
+    type: branch
+    input: steps.inspect.verdict
+    approve: create-pr
+    rework: build
+    max_iterations: 3
+    exhaust: escalate
+  - name: create-pr
+    type: run
+    command: gh pr create
+  - name: solve-leaves
+    type: fan
+    mode: parallel
+    over: pending_nodes
+  - name: adversarial-loop
+    type: fan
+    mode: loop
+    until: terminated
+    max_iterations: 5
+    termination:
+      consecutive_clean: 2
+      plateau_rounds: 3
+"#;
+        let pipeline = Pipeline::from_yaml(yaml).unwrap();
+        assert_eq!(pipeline.name, "full-pipeline");
+        assert_eq!(pipeline.steps.len(), 7);
+
+        // Verify each step type is present
+        let types: Vec<&str> = pipeline
+            .steps
+            .iter()
+            .map(|s| match &s.kind {
+                StepKind::Agent(_) => "agent",
+                StepKind::Run(_) => "run",
+                StepKind::Branch(_) => "branch",
+                StepKind::Fan(_) => "fan",
+            })
+            .collect();
+        assert!(types.contains(&"agent"));
+        assert!(types.contains(&"run"));
+        assert!(types.contains(&"branch"));
+        assert!(types.contains(&"fan"));
+    }
+
+    #[test]
+    fn test_malformed_yaml_returns_error() {
+        let bad_yaml = "this is not: [valid: yaml: {{{";
+        assert!(Pipeline::from_yaml(bad_yaml).is_err());
+    }
+
+    #[test]
+    fn test_missing_required_fields_error() {
+        // Missing name field
+        let yaml = r#"
+steps:
+  - name: build
+    type: agent
+    prompt: build.md
+"#;
+        assert!(Pipeline::from_yaml(yaml).is_err());
+    }
+
+    #[test]
+    fn test_agent_step_context_map() {
+        let yaml = r#"
+name: test
+steps:
+  - name: ci-fix
+    type: agent
+    prompt: prompts/ci-fix.md
+    context:
+      build_diff: "${steps.build.diff}"
+      error_output: "${steps.gates.failures}"
+"#;
+        let pipeline = Pipeline::from_yaml(yaml).unwrap();
+        match &pipeline.steps[0].kind {
+            StepKind::Agent(a) => {
+                assert_eq!(a.context.len(), 2);
+                assert_eq!(a.context["build_diff"], "${steps.build.diff}");
+                assert_eq!(a.context["error_output"], "${steps.gates.failures}");
+            }
+            _ => panic!("expected agent step"),
+        }
+    }
+
+    #[test]
+    fn test_run_step_with_poll_config() {
+        let yaml = r#"
+name: test
+steps:
+  - name: wait-ci
+    type: run
+    command: gh pr checks --watch
+    poll:
+      interval: 30000
+      timeout: 600000
+"#;
+        let pipeline = Pipeline::from_yaml(yaml).unwrap();
+        match &pipeline.steps[0].kind {
+            StepKind::Run(r) => {
+                let poll = r.poll.as_ref().unwrap();
+                assert_eq!(poll.interval, 30000);
+                assert_eq!(poll.timeout, 600000);
+            }
+            _ => panic!("expected run step"),
+        }
+    }
+
+    #[test]
+    fn test_branch_default_max_iterations() {
+        let yaml = r#"
+name: test
+steps:
+  - name: build
+    type: agent
+    prompt: build.md
+  - name: route
+    type: branch
+    input: verdict
+    approve: build
+    rework: build
+"#;
+        let pipeline = Pipeline::from_yaml(yaml).unwrap();
+        match &pipeline.steps[1].kind {
+            StepKind::Branch(b) => {
+                assert_eq!(b.max_iterations, 3, "default max_iterations should be 3");
+            }
+            _ => panic!("expected branch step"),
+        }
+    }
+
+    #[test]
+    fn test_fan_sequential_mode() {
+        let yaml = r#"
+name: test
+steps:
+  - name: process-nodes
+    type: fan
+    mode: sequential
+    over: leaf_nodes
+"#;
+        let pipeline = Pipeline::from_yaml(yaml).unwrap();
+        match &pipeline.steps[0].kind {
+            StepKind::Fan(f) => {
+                assert!(matches!(f.mode, FanMode::Sequential));
+                assert_eq!(f.over.as_deref(), Some("leaf_nodes"));
+            }
+            _ => panic!("expected fan step"),
+        }
+    }
+
+    #[test]
+    fn test_pipeline_validate_returns_errors() {
+        let yaml = r#"
+name: test
+steps:
+  - name: bad-run
+    type: run
+"#;
+        let pipeline = Pipeline::from_yaml(yaml).unwrap();
+        let errors = pipeline.validate();
+        assert!(!errors.is_empty(), "validation should catch missing command/check");
+    }
+
+    #[test]
+    fn test_pipeline_description_optional() {
+        let yaml = r#"
+name: minimal
+steps:
+  - name: step1
+    type: run
+    command: echo ok
+"#;
+        let pipeline = Pipeline::from_yaml(yaml).unwrap();
+        assert_eq!(pipeline.description, "");
+    }
 }

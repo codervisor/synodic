@@ -257,4 +257,121 @@ gates:
         };
         assert!(config.gates.preflight.is_empty());
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 062: Additional gate system tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_files_match_pattern_multiple_extensions() {
+        let files = vec![
+            "src/main.rs".to_string(),
+            "src/app.ts".to_string(),
+            "src/style.css".to_string(),
+            "README.md".to_string(),
+        ];
+        assert!(files_match_pattern(&files, "*.ts"));
+        assert!(files_match_pattern(&files, "*.css"));
+        assert!(!files_match_pattern(&files, "*.py"));
+        assert!(!files_match_pattern(&files, "*.go"));
+    }
+
+    #[test]
+    fn test_files_match_pattern_full_path() {
+        let files = vec!["cli/synodic/src/main.rs".to_string()];
+        // Should match by filename
+        assert!(files_match_pattern(&files, "*.rs"));
+    }
+
+    #[test]
+    fn test_gate_group_result_all_passed() {
+        let result = GateGroupResult {
+            passed: true,
+            failures: vec![],
+            skipped: vec![],
+        };
+        assert!(result.passed);
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"passed\":true"));
+    }
+
+    #[test]
+    fn test_gate_group_result_with_skipped() {
+        let result = GateGroupResult {
+            passed: true,
+            failures: vec![],
+            skipped: vec!["ts-typecheck".to_string(), "python-lint".to_string()],
+        };
+        assert!(result.passed);
+        assert_eq!(result.skipped.len(), 2);
+    }
+
+    #[test]
+    fn test_gate_group_result_multiple_failures() {
+        let result = GateGroupResult {
+            passed: false,
+            failures: vec![
+                GateFailure {
+                    name: "rust-check".to_string(),
+                    output: "error[E0308]".to_string(),
+                },
+                GateFailure {
+                    name: "rust-lint".to_string(),
+                    output: "warning: unused variable".to_string(),
+                },
+            ],
+            skipped: vec![],
+        };
+        assert!(!result.passed);
+        assert_eq!(result.failures.len(), 2);
+    }
+
+    #[test]
+    fn test_load_gates_missing_dir() {
+        let result = load_gates(std::path::Path::new("/nonexistent/dir"));
+        // Should return empty config when gates.yml doesn't exist
+        let config = result.unwrap();
+        assert!(config.gates.preflight.is_empty());
+    }
+
+    #[test]
+    fn test_parse_gates_yaml_no_match_pattern() {
+        let yaml = r#"
+gates:
+  preflight:
+    - name: custom-rules
+      command: .harness/scripts/run-rules.sh
+"#;
+        let config: GatesConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.gates.preflight.len(), 1);
+        assert!(config.gates.preflight[0].match_pattern.is_none());
+    }
+
+    #[test]
+    fn test_parse_gates_yaml_per_spec_062() {
+        // Full gates.yml from spec 062
+        let yaml = r#"
+gates:
+  preflight:
+    - name: rust-check
+      match: "*.rs"
+      command: cd cli && cargo check
+    - name: rust-lint
+      match: "*.rs"
+      command: cd cli && cargo clippy -- -D warnings
+    - name: ts-typecheck
+      match: "*.ts,*.tsx"
+      command: npx tsc --noEmit
+    - name: custom-rules
+      match: "*"
+      command: .harness/scripts/run-rules.sh
+"#;
+        let config: GatesConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.gates.preflight.len(), 4);
+        // Verify all gates have correct structure
+        for gate in &config.gates.preflight {
+            assert!(!gate.name.is_empty());
+            assert!(!gate.command.is_empty());
+        }
+    }
 }

@@ -445,4 +445,127 @@ mod tests {
         let output = run(&input);
         assert_eq!(output.merge_order, vec!["a-first", "z-last"]);
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 064: Additional reunification tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_redundancy_conflict_detected() {
+        let input = ReunifyInput {
+            base_ref: "main".to_string(),
+            children: vec![
+                make_child("auth", vec!["src/shared.rs", "src/auth.rs"]),
+                make_child("api", vec!["src/shared.rs", "src/api.rs"]),
+            ],
+            dependency_order: Vec::new(),
+            node_slug: "root".to_string(),
+        };
+        let output = run(&input);
+        let redundancy = output.conflicts.iter().find(|c| c.category == "redundancy");
+        assert!(redundancy.is_some(), "should detect redundant file modification");
+        assert!(redundancy.unwrap().description.contains("shared.rs"));
+    }
+
+    #[test]
+    fn test_clean_merge_status() {
+        let input = ReunifyInput {
+            base_ref: "main".to_string(),
+            children: vec![
+                make_child("auth", vec!["src/auth.rs"]),
+                make_child("data", vec!["src/data.rs"]),
+                make_child("api", vec!["src/api.rs"]),
+            ],
+            dependency_order: Vec::new(),
+            node_slug: "root".to_string(),
+        };
+        let output = run(&input);
+        assert_eq!(output.status, "MERGED");
+        assert!(!output.needs_ai);
+    }
+
+    #[test]
+    fn test_interface_gap_needs_ai() {
+        let input = ReunifyInput {
+            base_ref: "main".to_string(),
+            children: vec![
+                ReunifyChild {
+                    slug: "consumer".to_string(),
+                    branch: String::new(),
+                    scope: String::new(),
+                    boundaries: String::new(),
+                    inputs: "missing-dependency".to_string(),
+                    outputs: "result".to_string(),
+                    files: vec!["src/consumer.rs".to_string()],
+                },
+            ],
+            dependency_order: Vec::new(),
+            node_slug: "root".to_string(),
+        };
+        let output = run(&input);
+        assert!(output.needs_ai, "gap conflicts need AI resolution");
+    }
+
+    #[test]
+    fn test_empty_children_clean_merge() {
+        let input = ReunifyInput {
+            base_ref: "main".to_string(),
+            children: vec![],
+            dependency_order: Vec::new(),
+            node_slug: "root".to_string(),
+        };
+        let output = run(&input);
+        assert_eq!(output.status, "MERGED");
+        assert!(output.conflicts.is_empty());
+    }
+
+    #[test]
+    fn test_merge_order_without_waves_alphabetical() {
+        let input = ReunifyInput {
+            base_ref: "main".to_string(),
+            children: vec![
+                make_child("zebra", vec!["z.rs"]),
+                make_child("alpha", vec!["a.rs"]),
+                make_child("middle", vec!["m.rs"]),
+            ],
+            dependency_order: vec![], // empty → alphabetical
+            node_slug: "root".to_string(),
+        };
+        let output = run(&input);
+        assert_eq!(output.merge_order, vec!["alpha", "middle", "zebra"]);
+    }
+
+    #[test]
+    fn test_multiple_conflict_types_aggregated() {
+        let input = ReunifyInput {
+            base_ref: "main".to_string(),
+            children: vec![
+                ReunifyChild {
+                    slug: "auth".to_string(),
+                    branch: String::new(),
+                    scope: String::new(),
+                    boundaries: String::new(),
+                    inputs: "database-models".to_string(), // gap: not produced
+                    outputs: "tokens".to_string(),
+                    files: vec!["src/shared.rs".to_string(), "src/auth.rs".to_string()],
+                },
+                ReunifyChild {
+                    slug: "api".to_string(),
+                    branch: String::new(),
+                    scope: String::new(),
+                    boundaries: String::new(),
+                    inputs: String::new(),
+                    outputs: "endpoints".to_string(),
+                    files: vec!["src/shared.rs".to_string(), "src/api.rs".to_string()],
+                },
+            ],
+            dependency_order: Vec::new(),
+            node_slug: "root".to_string(),
+        };
+        let output = run(&input);
+        // Should have both boundary and gap conflicts
+        let categories: Vec<&str> = output.conflicts.iter().map(|c| c.category.as_str()).collect();
+        assert!(categories.contains(&"boundary"), "should detect boundary violation");
+        assert!(categories.contains(&"gap"), "should detect interface gap");
+    }
 }

@@ -268,4 +268,84 @@ mod tests {
         assert!(output.waves.is_empty());
         assert_eq!(output.total_leaves, 0);
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 064: Additional scheduling tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_critical_path_length_equals_waves() {
+        let manifest = make_manifest(vec![
+            make_leaf("auth", "none", "tokens sessions"),
+            make_leaf("api", "tokens", "endpoints"),
+            make_leaf("monitoring", "endpoints", "dashboards"),
+        ]);
+        let output = run(&manifest);
+        assert_eq!(output.critical_path_length, output.waves.len());
+    }
+
+    #[test]
+    fn test_max_parallelism_diamond() {
+        // a → (b, c) → d
+        let manifest = make_manifest(vec![
+            make_leaf("a", "none", "tokens"),
+            make_leaf("b", "tokens", "endpoints"),
+            make_leaf("c", "tokens", "cached-data"),
+            make_leaf("d", "endpoints cached-data", "routes"),
+        ]);
+        let output = run(&manifest);
+        assert_eq!(output.max_parallelism, 2, "b and c are parallel");
+        assert_eq!(output.total_leaves, 4);
+    }
+
+    #[test]
+    fn test_single_node_schedule() {
+        let manifest = make_manifest(vec![make_leaf("only", "none", "result")]);
+        let output = run(&manifest);
+        assert_eq!(output.waves.len(), 1);
+        assert_eq!(output.waves[0], vec!["only"]);
+        assert_eq!(output.total_leaves, 1);
+        assert_eq!(output.max_parallelism, 1);
+    }
+
+    #[test]
+    fn test_non_leaf_nodes_excluded() {
+        let mut manifest = make_manifest(vec![
+            make_leaf("leaf1", "none", "data"),
+            make_leaf("leaf2", "none", "more-data"),
+        ]);
+        // Add a non-leaf node (has children)
+        manifest.tree.insert(
+            "parent".to_string(),
+            TreeNode {
+                slug: "parent".to_string(),
+                depth: 0,
+                status: "decomposed".to_string(),
+                scope: String::new(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+                children: vec!["leaf1".to_string(), "leaf2".to_string()],
+                files: Vec::new(),
+                branch: String::new(),
+            },
+        );
+        let output = run(&manifest);
+        // Only leaf nodes should be scheduled
+        assert_eq!(output.total_leaves, 2);
+    }
+
+    #[test]
+    fn test_wide_parallel_tree() {
+        let manifest = make_manifest(vec![
+            make_leaf("a", "none", "out-a"),
+            make_leaf("b", "none", "out-b"),
+            make_leaf("c", "none", "out-c"),
+            make_leaf("d", "none", "out-d"),
+            make_leaf("e", "none", "out-e"),
+        ]);
+        let output = run(&manifest);
+        assert_eq!(output.waves.len(), 1, "all independent → 1 wave");
+        assert_eq!(output.max_parallelism, 5);
+    }
 }

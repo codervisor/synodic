@@ -139,4 +139,107 @@ mod tests {
         assert!(result.cross_pollination["a"].contains(&"unique-b.rs".to_string()));
         assert!(result.cross_pollination["b"].contains(&"unique-a.rs".to_string()));
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 064: Additional checkpoint tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_checkpoint_three_branches_nway() {
+        let manifest = SwarmManifest {
+            id: "test".to_string(),
+            branches: vec![
+                SwarmBranch {
+                    id: "a".to_string(),
+                    strategy: "s1".to_string(),
+                    files: vec!["shared.rs".to_string(), "a.rs".to_string()],
+                    status: "active".to_string(),
+                },
+                SwarmBranch {
+                    id: "b".to_string(),
+                    strategy: "s2".to_string(),
+                    files: vec!["shared.rs".to_string(), "b.rs".to_string()],
+                    status: "active".to_string(),
+                },
+                SwarmBranch {
+                    id: "c".to_string(),
+                    strategy: "s3".to_string(),
+                    files: vec!["c.rs".to_string()],
+                    status: "active".to_string(),
+                },
+            ],
+        };
+        let result = run(&manifest);
+        // Should have 3 pairwise similarities: a:b, a:c, b:c
+        assert_eq!(result.similarities.len(), 3);
+        assert!(result.similarities.contains_key("a:b"));
+        assert!(result.similarities.contains_key("a:c"));
+        assert!(result.similarities.contains_key("b:c"));
+        // a:b share "shared.rs" (intersection=1, union=3 → 0.333)
+        assert!((result.similarities["a:b"] - 1.0 / 3.0).abs() < 1e-6);
+        // a:c share nothing
+        assert!((result.similarities["a:c"]).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_checkpoint_no_cross_pollination_for_identical() {
+        let manifest = SwarmManifest {
+            id: "test".to_string(),
+            branches: vec![
+                SwarmBranch {
+                    id: "a".to_string(),
+                    strategy: "s1".to_string(),
+                    files: vec!["main.rs".to_string()],
+                    status: "active".to_string(),
+                },
+                SwarmBranch {
+                    id: "b".to_string(),
+                    strategy: "s2".to_string(),
+                    files: vec!["main.rs".to_string()],
+                    status: "active".to_string(),
+                },
+            ],
+        };
+        let result = run(&manifest);
+        // Identical branches → similarity 1.0 → no cross-pollination (sim == 1.0 excluded)
+        assert!(result.cross_pollination.is_empty());
+    }
+
+    #[test]
+    fn test_checkpoint_empty_branches() {
+        let manifest = SwarmManifest {
+            id: "test".to_string(),
+            branches: vec![
+                SwarmBranch {
+                    id: "a".to_string(),
+                    strategy: "s1".to_string(),
+                    files: vec![],
+                    status: "active".to_string(),
+                },
+                SwarmBranch {
+                    id: "b".to_string(),
+                    strategy: "s2".to_string(),
+                    files: vec![],
+                    status: "active".to_string(),
+                },
+            ],
+        };
+        let result = run(&manifest);
+        assert!((result.similarities["a:b"]).abs() < 1e-6, "empty file sets → 0.0");
+    }
+
+    #[test]
+    fn test_checkpoint_single_branch() {
+        let manifest = SwarmManifest {
+            id: "test".to_string(),
+            branches: vec![SwarmBranch {
+                id: "only".to_string(),
+                strategy: "s1".to_string(),
+                files: vec!["main.rs".to_string()],
+                status: "active".to_string(),
+            }],
+        };
+        let result = run(&manifest);
+        assert!(result.similarities.is_empty(), "single branch → no pairs");
+    }
 }

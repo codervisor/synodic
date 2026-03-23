@@ -301,4 +301,93 @@ mod tests {
         assert_eq!(output.minimal_covering_set.len(), 1);
         assert!(output.minimal_covering_set.contains(&"big".to_string()));
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 064: Additional prune tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_empty_tree_no_pruning() {
+        let tree = make_tree(vec![]);
+        let output = run(&tree);
+        assert!(output.prunable.is_empty());
+        assert!(output.kept.is_empty());
+    }
+
+    #[test]
+    fn test_all_empty_nodes_prunable() {
+        let tree = make_tree(vec![
+            make_node("a", vec![]),
+            make_node("b", vec![]),
+        ]);
+        let output = run(&tree);
+        // Both have no files → both prunable
+        assert_eq!(output.prunable.len(), 2);
+    }
+
+    #[test]
+    fn test_mixed_redundancy_unique() {
+        let tree = make_tree(vec![
+            make_node("unique-a", vec!["src/a.rs"]),
+            make_node("unique-b", vec!["src/b.rs"]),
+            make_node("duplicate-of-a", vec!["src/a.rs"]),
+            make_node("subset-of-b", vec![]), // empty is subset of everything
+        ]);
+        let output = run(&tree);
+        // subset-of-b (empty) and duplicate-of-a should be prunable
+        assert!(output.prunable.contains(&"subset-of-b".to_string()));
+        // duplicate-of-a has identical file set as unique-a
+        assert_eq!(output.identical_pairs.len(), 1);
+    }
+
+    #[test]
+    fn test_file_coverage_map() {
+        let tree = make_tree(vec![
+            make_node("auth", vec!["src/auth.rs", "src/shared.rs"]),
+            make_node("api", vec!["src/api.rs", "src/shared.rs"]),
+        ]);
+        let output = run(&tree);
+        let shared_owners = &output.file_coverage["src/shared.rs"];
+        assert_eq!(shared_owners.len(), 2);
+    }
+
+    #[test]
+    fn test_non_solved_nodes_excluded() {
+        let mut tree = HashMap::new();
+        tree.insert(
+            "pending".to_string(),
+            TreeNode {
+                slug: "pending".to_string(),
+                depth: 1,
+                status: "pending".to_string(), // not solved
+                scope: String::new(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+                children: Vec::new(),
+                files: vec!["src/a.rs".to_string()],
+                branch: String::new(),
+            },
+        );
+        tree.insert(
+            "solved".to_string(),
+            TreeNode {
+                slug: "solved".to_string(),
+                depth: 1,
+                status: "solved".to_string(),
+                scope: String::new(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+                children: Vec::new(),
+                files: vec!["src/b.rs".to_string()],
+                branch: String::new(),
+            },
+        );
+        let output = run(&tree);
+        // Only the solved node should be considered
+        assert!(output.kept.contains(&"solved".to_string()));
+        assert!(!output.kept.contains(&"pending".to_string()));
+        assert!(!output.prunable.contains(&"pending".to_string()));
+    }
 }
