@@ -8,7 +8,7 @@ AI coding factory — structured BUILD → INSPECT pipelines for spec-driven dev
 
 ```bash
 cd cli && cargo build          # debug build (both crates)
-cd cli && cargo test           # run all tests (35 tests covering parser, scoring, alias resolution)
+cd cli && cargo test           # run all tests (98 tests: 63 pipeline/harness + 35 parser/scoring)
 cd cli && cargo build --release # release build
 cd cli/synodic-eval && cargo test  # eval tests only (standalone)
 pnpm install                   # install node deps (spec validation tooling)
@@ -50,10 +50,28 @@ cli/
 │       ├── cmd/harness.rs         # Harness dispatch → harness modules
 │       ├── governance.rs          # Eval result → .harness/eval.governance.jsonl
 │       ├── util.rs                # find_repo_root() (SYNODIC_ROOT, .harness/, .git)
-│       └── harness/               # Governance loop
-│           ├── run.rs             # L1 static rules + L2 AI judge + rework loop
-│           ├── log.rs             # Governance log display
-│           └── rules.rs           # Crystallized rules list
+│       ├── harness/               # Governance loop
+│       │   ├── run.rs             # L1 static rules + L2 AI judge + rework loop
+│       │   ├── log.rs             # Governance log display
+│       │   └── rules.rs           # Crystallized rules list
+│       ├── pipeline/              # Pipeline engine (spec 061-062)
+│       │   ├── mod.rs             # Pipeline types and public API
+│       │   ├── schema.rs          # YAML schema: Step, Fan, Branch, Run, Agent
+│       │   ├── executor.rs        # Sequential executor with middleware
+│       │   ├── gates.rs           # Preflight gate runner (file-match + structured output)
+│       │   ├── vars.rs            # Variable interpolation: ${scope.field}
+│       │   ├── validate.rs        # Static pipeline validation before execution
+│       │   └── checkpoint.rs      # Swarm checkpoint persistence
+│       ├── fractal/               # Fractal algorithmic spine (spec 064)
+│       │   ├── mod.rs             # Fractal subcommands
+│       │   ├── decompose.rs       # TF-IDF orthogonality scoring
+│       │   ├── schedule.rs        # DAG topological sort
+│       │   ├── reunify.rs         # Bottom-up merge
+│       │   └── prune.rs           # Greedy set cover pruning
+│       └── swarm/                 # Swarm algorithmic spine (spec 064)
+│           ├── mod.rs             # Swarm subcommands
+│           ├── checkpoint.rs      # Branch checkpoint read/write
+│           └── prune.rs           # Jaccard similarity pruning
 ```
 
 ### Key types (synodic-eval: score/mod.rs)
@@ -95,18 +113,36 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 
 ## Skills
 
-| Skill | Description | Usage | Pipeline |
-|-------|-------------|-------|----------|
-| `factory` | Coding factory — transforms a spec into a reviewed PR via BUILD → INSPECT pipeline | `/factory run <spec-path>` | `synodic harness run --pipeline factory --spec <path>` |
-| `fractal` | Fractal decomposition — recursively splits complex tasks into sub-specs, solves leaves independently, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` | `synodic harness run --pipeline fractal --spec <path>` |
-| `swarm` | Speculative swarm — forks N agents to explore divergent strategies, cross-pollinates, prunes convergent branches, fuses best fragments | `/swarm run <spec-path>` | `synodic harness run --pipeline swarm --spec <path>` |
-| `adversarial` | Generative-adversarial — locks generator + critic in escalating quality loop for deep hardening | `/adversarial run <spec-path>` | `synodic harness run --pipeline adversarial --spec <path>` |
+Each skill is a thin SKILL.md shim backed by a pipeline YAML in `.harness/pipelines/`. Invoke via Claude Code; the skill calls `synodic harness run` under the hood.
+
+| Skill | Description | Invoke | Pipeline definition |
+|-------|-------------|--------|---------------------|
+| `factory` | Coding factory — BUILD → INSPECT with adversarial review and rework loop | `/factory run <spec-path>` | `.harness/pipelines/factory.yml` |
+| `fractal` | Fractal decomposition — recursively splits complex tasks, solves leaves, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` | `.harness/pipelines/fractal.yml` |
+| `swarm` | Speculative swarm — forks N agents on divergent strategies, prunes convergent branches, fuses best fragments | `/swarm run <spec-path>` | `.harness/pipelines/swarm.yml` |
+| `adversarial` | Generative-adversarial — generator + critic in escalating quality loop for deep hardening | `/adversarial run <spec-path>` | `.harness/pipelines/adversarial.yml` |
+
+**Pipeline step types:** `agent` (LLM via `claude -p`), `run` (shell with `match`/`poll`/`check`), `branch` (verdict routing), `fan` (parallel/sequential/loop collection processing).
+
+**Gate groups:** `preflight` (local-only fast checks in `.harness/gates.yml`). CI is a `run` step with `poll`, not a gate.
 
 ### Pipeline validation
 
 ```bash
 synodic harness validate factory     # validate a pipeline YAML before execution
 synodic harness validate fractal
+```
+
+### Algorithmic CLI commands
+
+```bash
+synodic fractal complexity <spec>    # score decomposition complexity
+synodic fractal decompose <spec>     # TF-IDF orthogonality decomposition
+synodic fractal schedule <dir>       # DAG topological sort
+synodic fractal reunify <dir>        # bottom-up merge
+synodic fractal prune <dir>          # greedy set cover pruning
+synodic swarm checkpoint <branch>    # persist swarm branch state
+synodic swarm prune <dir>            # Jaccard similarity pruning
 ```
 
 ### Skill installation

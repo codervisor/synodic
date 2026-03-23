@@ -36,57 +36,45 @@ The factory reads your spec, implements code in an isolated worktree, runs an ad
 
 ## Skills
 
+Each skill is backed by a declarative pipeline YAML in `.harness/pipelines/`. Skills are invoked via Claude Code; orchestration is handled by the pipeline engine, not inline prose.
+
 | Skill | What it does | Invoke with |
 |-------|-------------|-------------|
 | **Factory** | Implements a spec as a reviewed PR via BUILD → INSPECT pipeline | `/factory run <spec-path>` |
 | **Fractal** | Decomposes complex tasks into sub-specs, solves leaves in parallel, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` |
+| **Swarm** | Forks N agents on divergent strategies, prunes convergent branches, fuses best fragments | `/swarm run <spec-path>` |
+| **Adversarial** | Locks generator + critic in escalating quality loop for deep hardening | `/adversarial run <spec-path>` |
 
 ### Factory — BUILD → INSPECT Pipeline
 
-The factory skill runs a two-station assembly line with adversarial review:
+The factory pipeline (`factory.yml`) runs adversarial review with a bounded rework loop:
 
 ```
-/factory run <spec-path>
-
-Orchestrator
-  │
-  ├─→ BUILD subagent (worktree-isolated)
-  │     • Reads spec, implements code
-  │     • Runs tests, commits to branch
-  │     • Static gate: linters, formatters (no AI cost)
-  │
-  ├─→ INSPECT subagent (fresh context, adversarial)
-  │     • Reviews diff against spec requirements
-  │     • Returns APPROVE or REWORK with specific items
-  │
-  └─→ Rework loop (max 3 cycles)
-        • REWORK → re-invoke BUILD with feedback
-        • APPROVE → create PR via gh
-        • Exhausted → escalate to human
+agent: build    →  run: preflight gate  →  agent: inspect
+                                                │
+                                           branch: verdict
+                                           ├─ approve → run: create-pr
+                                           ├─ rework  → loop back to build
+                                           └─ exhaust → governance log (human review)
 ```
 
 Key properties:
 - **Isolation** — BUILD runs in a git worktree, can't pollute the main branch
 - **Adversarial** — INSPECT has fresh context, no builder bias
-- **Bounded** — max 3 rework cycles, then escalate
+- **Bounded** — max 3 rework cycles, then governance escalation
 - **Governed** — every cycle logged to `.harness/factory.governance.jsonl`
 
 ### Fractal — Recursive Decomposition
 
-The fractal skill handles tasks too complex for a single agent pass:
+The fractal pipeline (`fractal.yml`) handles tasks too complex for a single agent pass. Deterministic algorithms handle structure; AI handles semantics:
 
 ```
-/fractal decompose <task-or-spec-path>
-
-1. Score complexity (deterministic — auto-LEAF if simple)
-2. Decompose into orthogonal sub-tasks (AI, level by level)
-3. Validate decomposition (TF-IDF orthogonality, cycle detection, coverage)
-4. Solve leaves in parallel waves (DAG-scheduled)
-5. Reunify bottom-up (git merge-tree, AI only for semantic conflicts)
-6. Prune redundant artifacts (greedy set cover)
+agent: decompose  →  run: schedule (DAG sort)  →  fan: solve leaves (parallel)
+                                                         │
+                                                    agent: reunify  →  run: prune
 ```
 
-Design principle: **algorithms for structure, AI for semantics.** The algorithmic spine (topological sort, TF-IDF, set cover) handles structural decisions deterministically. AI is reserved for semantic work — understanding requirements, writing code, resolving conflicts.
+The algorithmic spine (`synodic fractal complexity|schedule|reunify|prune`) is deterministic — TF-IDF orthogonality, topological sort, greedy set cover. AI is invoked only for semantic work.
 
 Set `solve_mode: factory` to run each leaf through the full Factory pipeline.
 
@@ -106,11 +94,13 @@ Feedback is categorized (completeness, correctness, security, conformance, quali
 synodic/
 ├── skills/
 │   ├── factory/             # BUILD → INSPECT pipeline skill
-│   │   ├── SKILL.md         # Skill definition and orchestration protocol
-│   │   └── evals/           # Skill-specific evaluations
-│   └── fractal/             # Recursive decomposition skill
-│       ├── SKILL.md         # Skill definition and orchestration protocol
-│       └── evals/           # Skill-specific evaluations
+│   ├── fractal/             # Recursive decomposition skill
+│   ├── swarm/               # Speculative swarm skill
+│   └── adversarial/         # Generative-adversarial skill
+├── .harness/
+│   ├── pipelines/           # Pipeline YAML definitions (factory, fractal, swarm, adversarial)
+│   ├── gates.yml            # Preflight gate definitions
+│   └── *.governance.jsonl   # Governance logs (append-only)
 ├── cli/                     # Rust workspace (eval framework + governance CLI)
 │   ├── synodic-eval/        # Standalone eval framework (SWE-bench, FeatureBench, DevBench)
 │   └── synodic/             # Governance CLI (harness + eval integration)
