@@ -95,12 +95,19 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 
 ## Skills
 
-| Skill | Description | Usage |
-|-------|-------------|-------|
-| `factory` | Coding factory — transforms a spec into a reviewed PR via BUILD → INSPECT pipeline | `/factory run <spec-path>` |
-| `fractal` | Fractal decomposition — recursively splits complex tasks into sub-specs, solves leaves independently, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` |
-| `swarm` | Speculative swarm — forks N agents to explore divergent strategies, cross-pollinates, prunes convergent branches, fuses best fragments | `/swarm run <spec-path>` |
-| `adversarial` | Generative-adversarial — locks generator + critic in escalating quality loop for deep hardening | `/adversarial run <spec-path>` |
+| Skill | Description | Usage | Pipeline |
+|-------|-------------|-------|----------|
+| `factory` | Coding factory — transforms a spec into a reviewed PR via BUILD → INSPECT pipeline | `/factory run <spec-path>` | `synodic harness run --pipeline factory --spec <path>` |
+| `fractal` | Fractal decomposition — recursively splits complex tasks into sub-specs, solves leaves independently, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` | `synodic harness run --pipeline fractal --spec <path>` |
+| `swarm` | Speculative swarm — forks N agents to explore divergent strategies, cross-pollinates, prunes convergent branches, fuses best fragments | `/swarm run <spec-path>` | `synodic harness run --pipeline swarm --spec <path>` |
+| `adversarial` | Generative-adversarial — locks generator + critic in escalating quality loop for deep hardening | `/adversarial run <spec-path>` | `synodic harness run --pipeline adversarial --spec <path>` |
+
+### Pipeline validation
+
+```bash
+synodic harness validate factory     # validate a pipeline YAML before execution
+synodic harness validate fractal
+```
 
 ### Skill installation
 

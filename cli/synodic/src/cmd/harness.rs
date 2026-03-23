@@ -1,6 +1,7 @@
 use clap::{Args, Subcommand};
 
 use crate::harness;
+use crate::pipeline;
 use crate::util;
 
 #[derive(Args)]
@@ -45,9 +46,23 @@ enum HarnessSubcommand {
         #[arg(long)]
         json: bool,
 
+        /// Pipeline name (factory, fractal, swarm, adversarial)
+        #[arg(long)]
+        pipeline: Option<String>,
+
+        /// Spec path for pipeline execution
+        #[arg(long)]
+        spec: Option<String>,
+
         /// Agent command (everything after --)
-        #[arg(last = true, required = true)]
+        #[arg(last = true)]
         agent_cmd: Vec<String>,
+    },
+
+    /// Validate a pipeline YAML before execution
+    Validate {
+        /// Pipeline name or path to YAML file
+        pipeline: String,
     },
 
     /// Run Layer 2 evaluation (evaluate_harness.py)
@@ -84,8 +99,57 @@ impl HarnessCmd {
                 dry_run,
                 quiet,
                 json,
+                pipeline: pipeline_name,
+                spec,
                 agent_cmd,
             } => {
+                // Pipeline mode: synodic harness run --pipeline <name>
+                if let Some(name) = pipeline_name {
+                    let repo_root = util::find_repo_root()?;
+                    let harness_dir = resolve_harness_dir(&repo_root)?;
+                    let pipeline_path = resolve_pipeline_path(&name, &harness_dir)?;
+                    let config = pipeline::executor::ExecConfig {
+                        pipeline_path,
+                        spec_path: spec,
+                        repo_root: repo_root.clone(),
+                        harness_dir,
+                        dry_run,
+                        json_output: json,
+                    };
+                    let result = pipeline::executor::execute(&config)?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                    } else {
+                        eprintln!("Pipeline '{}': {}", result.pipeline, result.status);
+                        for step in &result.steps {
+                            let status_str = match &step.status {
+                                pipeline::executor::StepStatus::Passed => "PASS",
+                                pipeline::executor::StepStatus::Failed => "FAIL",
+                                pipeline::executor::StepStatus::Skipped => "SKIP",
+                            };
+                            eprintln!("  {} {} ({}ms)", status_str, step.name, step.duration_ms);
+                        }
+                    }
+                    // Write governance log.
+                    let gov_path = repo_root.join(".harness").join(format!("{}.governance.jsonl", name));
+                    let entry = serde_json::json!({
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                        "pipeline": result.pipeline,
+                        "status": result.status,
+                        "duration_ms": result.duration_ms,
+                        "steps": result.steps.len(),
+                    });
+                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&gov_path) {
+                        use std::io::Write;
+                        let _ = writeln!(f, "{}", serde_json::to_string(&entry)?);
+                    }
+                    return Ok(());
+                }
+
+                // Legacy mode: synodic harness run -- <agent_cmd>
+                if agent_cmd.is_empty() {
+                    anyhow::bail!("either --pipeline <name> or agent command (after --) is required");
+                }
                 harness::run::execute(harness::run::RunConfig {
                     max_rework,
                     workdir,
@@ -97,6 +161,32 @@ impl HarnessCmd {
                     json_output: json,
                     agent_cmd,
                 })
+            }
+            HarnessSubcommand::Validate { pipeline: name } => {
+                let repo_root = util::find_repo_root()?;
+                let harness_dir = resolve_harness_dir(&repo_root)?;
+                let pipeline_path = resolve_pipeline_path(&name, &harness_dir)?;
+                let p = pipeline::Pipeline::from_file(&pipeline_path)?;
+                let errors = p.validate();
+                if errors.is_empty() {
+                    println!("Pipeline '{}' is valid ({} steps)", p.name, p.steps.len());
+                    for step in &p.steps {
+                        let kind = match &step.kind {
+                            pipeline::StepKind::Agent(_) => "agent",
+                            pipeline::StepKind::Run(_) => "run",
+                            pipeline::StepKind::Branch(_) => "branch",
+                            pipeline::StepKind::Fan(_) => "fan",
+                        };
+                        println!("  {} ({})", step.name, kind);
+                    }
+                    Ok(())
+                } else {
+                    eprintln!("Pipeline '{}' has {} error(s):", p.name, errors.len());
+                    for err in &errors {
+                        eprintln!("  - {}", err);
+                    }
+                    std::process::exit(1);
+                }
             }
             HarnessSubcommand::Eval { args } => {
                 // Delegate to evaluate_harness.py
@@ -128,6 +218,29 @@ impl HarnessCmd {
             }
         }
     }
+}
+
+/// Resolve a pipeline name or path to a YAML file path.
+fn resolve_pipeline_path(
+    name: &str,
+    harness_dir: &std::path::Path,
+) -> anyhow::Result<std::path::PathBuf> {
+    // If it's already a file path, use directly.
+    let as_path = std::path::PathBuf::from(name);
+    if as_path.exists() {
+        return Ok(as_path);
+    }
+    // Look in .harness/pipelines/<name>.yml
+    let pipeline_path = harness_dir.join("pipelines").join(format!("{}.yml", name));
+    if pipeline_path.exists() {
+        return Ok(pipeline_path);
+    }
+    anyhow::bail!(
+        "pipeline '{}' not found (tried: {}, {})",
+        name,
+        as_path.display(),
+        pipeline_path.display()
+    )
 }
 
 fn resolve_harness_dir(repo_root: &std::path::Path) -> anyhow::Result<std::path::PathBuf> {
