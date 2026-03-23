@@ -505,3 +505,64 @@ Child specs 059 (Context Mesh) and 060 (Stigmergic Coordination) explore optiona
 8. **Scope: this is 4-6 specs compressed into one.** The spec defines: (a) a pipeline YAML schema with 7 step types, (b) a middleware system, (c) a provider abstraction, (d) a gate system, (e) four complete pipeline definitions, (f) seven CLI commands. Each of these is a non-trivial implementation. Compressing them into one spec means none gets adequate design scrutiny. The plan section has 17 unchecked items — a signal that decomposition is needed.
 
 9. **"Industry consensus" citation is vague.** The overview states "Industry consensus confirms: the agent isn't the hard part — the harness is" without citation. This frames the entire spec's direction. If the claim is based on specific research (OpenAI, Elastic, Dagger, OpenDev — mentioned in 057's notes), those should be cited. If it's the author's interpretation, it should be stated as such. Unattributed authority claims in a design spec create false certainty.
+
+### Proposed Solutions (2026-03-23)
+
+**Issue 1 — Reduce step types from 7 to 4:**
+
+Collapse to: `agent`, `run`, `branch`, `fan`.
+- `run` = shell + gate + watch. Flags: `match` (file filter), `poll: {interval, timeout}`, `check: [static, ci]`
+- `branch` = route. Verdict-based branching with `exhaust` handler
+- `fan` = loop + parallel. `mode: parallel|sequential|loop`, `until` for termination
+
+This halves the type surface while preserving all current pipeline semantics.
+
+**Issue 2 — Define middleware interaction semantics:**
+
+Resolution order (outside-in): `log(retry(timeout(step)))`
+- `timeout` resets per retry attempt
+- `on_fail` fires only after all retries exhaust
+- `log` records each attempt with `attempt: N` field
+- Add a "Middleware Resolution Order" section to the pipeline schema docs
+
+**Issue 3 — Constrain variable interpolation:**
+
+No filters, no pipes, no expressions. Only `${scope.field}`.
+- Scopes: `config.*`, `spec.*`, `manifest.*`, `steps.{name}.*`, `loop.*`
+- Unset variables → runtime error (fail-fast)
+- Complex transformations (e.g., `index_into`) → computed `context` maps in the runtime
+
+**Issue 4 — Remove provider abstraction:**
+
+Hardcode `claude -p` integration. No abstraction until a second provider materializes. Delete provider config from `.harness/config.yml`.
+
+**Issue 5 — Bound the YAML DSL complexity:**
+
+- No user-defined functions, macros, arithmetic, or string manipulation
+- Document the complete feature set as a formal grammar
+- Add `synodic harness validate` for pre-execution schema checking
+- Evaluate whether fractal/swarm pipelines are better as Rust code with YAML config
+
+**Issue 6 — Remove session continuity from v1:**
+
+Replace `session: build.session_id` with explicit context passing — pipe build diff + errors + manifest into ci-fix prompt. Mark session continuity as a future capability gated on provider support.
+
+**Issue 7 — Differentiate gates from CI:**
+
+Gates = fail-fast pre-flight (speed optimization, not correctness guarantee).
+- Local gates: `cargo check`, `clippy` only (fast, catches obvious errors)
+- CI: full test suite, cross-platform, coverage, integration
+- Remove `ci` gate group from local execution; rename to `preflight`
+
+**Issue 8 — Decompose into child specs:**
+
+Split spec 58 into 5 focused child specs:
+1. Pipeline engine core (YAML schema + parser + 4-type executor)
+2. Gate system (`gates.yml` schema + file matching + execution)
+3. Pipeline definitions (4 YAML pipelines + prompt templates + output schemas)
+4. Algorithmic commands (`synodic fractal/swarm` CLI commands)
+5. Migration path (SKILL.md → pipeline YAML + shim layer)
+
+**Issue 9 — Ground the "industry consensus" claim:**
+
+Rewrite to cite specific evidence: our own factory/fractal/swarm builds revealed prompt-based orchestration failures (inconsistent step ordering, missed gates, silent failures). Optionally cite: OpenAI Swarm patterns, Dagger pipeline engine, Elastic agent coordination research.
