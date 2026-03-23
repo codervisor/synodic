@@ -159,4 +159,102 @@ mod tests {
         let result = ctx.interpolate("Iteration ${loop.iteration}: ${loop.item}");
         assert_eq!(result.unwrap(), "Iteration 2: node-auth");
     }
+
+    // -----------------------------------------------------------------------
+    // Spec 061: Additional variable interpolation tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_multiple_unset_variables_all_reported() {
+        let ctx = VarContext::new();
+        let result = ctx.interpolate("${a.b} and ${c.d} and ${e.f}");
+        match result.unwrap_err() {
+            VarError::UnsetVariables(vars) => {
+                assert_eq!(vars.len(), 3, "all 3 unset variables should be reported");
+            }
+        }
+    }
+
+    #[test]
+    fn test_same_variable_twice_in_string() {
+        let mut ctx = VarContext::new();
+        ctx.set("config.name", "factory");
+        let result = ctx
+            .interpolate("${config.name} is called ${config.name}")
+            .unwrap();
+        assert_eq!(result, "factory is called factory");
+    }
+
+    #[test]
+    fn test_literal_dollar_brace_not_a_variable() {
+        let ctx = VarContext::new();
+        // Text without proper variable syntax should pass through
+        let result = ctx.interpolate("price is $100 and {name}");
+        assert_eq!(result.unwrap(), "price is $100 and {name}");
+    }
+
+    #[test]
+    fn test_steps_scope_deep_nesting() {
+        let mut ctx = VarContext::new();
+        ctx.set("steps.build.output", "success");
+        ctx.set("steps.inspect.verdict", "approved");
+        ctx.set("steps.gates.failures", "none");
+
+        let result = ctx
+            .interpolate(
+                "Build: ${steps.build.output}, Inspect: ${steps.inspect.verdict}, Gates: ${steps.gates.failures}",
+            )
+            .unwrap();
+        assert_eq!(
+            result,
+            "Build: success, Inspect: approved, Gates: none"
+        );
+    }
+
+    #[test]
+    fn test_manifest_scope() {
+        let mut ctx = VarContext::new();
+        ctx.set("manifest.summary", "3 files changed");
+        ctx.set("manifest.id", "run-001");
+
+        let result = ctx
+            .interpolate("Manifest ${manifest.id}: ${manifest.summary}")
+            .unwrap();
+        assert_eq!(result, "Manifest run-001: 3 files changed");
+    }
+
+    #[test]
+    fn test_mixed_set_and_unset_variables() {
+        let mut ctx = VarContext::new();
+        ctx.set("config.name", "factory");
+        // spec.path is not set
+        let result = ctx.interpolate("${config.name} at ${spec.path}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_var_error_display() {
+        let err = VarError::UnsetVariables(vec!["config.x".to_string(), "spec.y".to_string()]);
+        let msg = format!("{}", err);
+        assert!(msg.contains("config.x"));
+        assert!(msg.contains("spec.y"));
+    }
+
+    #[test]
+    fn test_empty_string_interpolation() {
+        let ctx = VarContext::new();
+        let result = ctx.interpolate("").unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_underscored_variable_names() {
+        let mut ctx = VarContext::new();
+        ctx.set("config.max_rework", "3");
+        ctx.set("config.output_format", "json");
+        let result = ctx
+            .interpolate("${config.max_rework} ${config.output_format}")
+            .unwrap();
+        assert_eq!(result, "3 json");
+    }
 }

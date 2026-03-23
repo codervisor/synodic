@@ -185,4 +185,87 @@ mod tests {
         let b: HashSet<String> = HashSet::new();
         assert_eq!(jaccard_similarity(&a, &b), 0.0);
     }
+
+    #[test]
+    fn test_jaccard_identical() {
+        let a: HashSet<String> = ["auth", "system"].iter().map(|s| s.to_string()).collect();
+        let b = a.clone();
+        assert!((jaccard_similarity(&a, &b) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_extract_terms_stop_words_filtered() {
+        let terms = extract_terms("the system should have this feature");
+        assert!(!terms.contains("the"));
+        assert!(!terms.contains("should"));
+        assert!(!terms.contains("have"));
+        assert!(terms.contains("system"));
+        assert!(terms.contains("feature"));
+    }
+
+    #[test]
+    fn test_extract_terms_short_words_filtered() {
+        let terms = extract_terms("go do it on my way");
+        // All words are < 3 chars or stop words
+        assert!(terms.is_empty() || terms.iter().all(|t| t.len() >= 3));
+    }
+
+    #[test]
+    fn test_extract_term_list_preserves_duplicates() {
+        let terms = extract_term_list("auth auth auth system system");
+        let auth_count = terms.iter().filter(|t| *t == "auth").count();
+        assert_eq!(auth_count, 3, "term list should preserve duplicate counts");
+    }
+
+    #[test]
+    fn test_extract_terms_hyphenated() {
+        let terms = extract_terms("error-handling and cross-cutting concerns");
+        assert!(terms.contains("error-handling"));
+        assert!(terms.contains("cross-cutting"));
+        assert!(terms.contains("concerns"));
+    }
+
+    #[test]
+    fn test_child_serialization_roundtrip() {
+        let child = Child {
+            slug: "auth".to_string(),
+            scope: "authentication system".to_string(),
+            boundaries: "no external calls".to_string(),
+            inputs: "user credentials".to_string(),
+            outputs: "auth tokens".to_string(),
+        };
+        let json = serde_json::to_string(&child).unwrap();
+        let back: Child = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.slug, "auth");
+        assert_eq!(back.scope, "authentication system");
+    }
+
+    #[test]
+    fn test_manifest_serialization_roundtrip() {
+        let mut tree = HashMap::new();
+        tree.insert(
+            "root".to_string(),
+            TreeNode {
+                slug: "root".to_string(),
+                depth: 0,
+                status: "decomposed".to_string(),
+                scope: "full system".to_string(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+                children: vec!["child-a".to_string()],
+                files: Vec::new(),
+                branch: String::new(),
+            },
+        );
+        let manifest = Manifest {
+            id: "test-manifest".to_string(),
+            status: "solving".to_string(),
+            tree,
+        };
+        let json = serde_json::to_string(&manifest).unwrap();
+        let back: Manifest = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, "test-manifest");
+        assert_eq!(back.tree.len(), 1);
+    }
 }
