@@ -4,6 +4,7 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
+use crate::meta;
 use crate::score;
 
 /// Options for a single eval run.
@@ -35,6 +36,8 @@ pub struct EvalResult {
     pub skill: String,
     pub split: String,
     pub resolved: bool,
+    /// Meta-testing analysis (environment + strategy pre-check, quality post-check).
+    pub meta: Option<meta::MetaReport>,
 }
 
 /// Resolve a benchmark alias (e.g. "fb:mlflow-tracing") to a Target.
@@ -195,6 +198,7 @@ pub fn execute(opts: RunOptions) -> Result<EvalResult> {
             skill: opts.skill,
             split: opts.split,
             resolved: false,
+            meta: None,
         });
     }
 
@@ -308,6 +312,29 @@ pub fn execute(opts: RunOptions) -> Result<EvalResult> {
     let duration_s = run_start.elapsed().as_secs();
     let resolved = verdict.as_ref().map_or(false, |v| v.resolved);
 
+    // --- Meta-testing: post-run quality analysis ---
+    let meta_report = {
+        let env_report = meta::environment::validate(&target.benchmark, &testbed_path);
+        let strategy_report = meta::strategy::analyze(&target.benchmark, &testbed_path);
+        let quality_report = verdict.as_ref().map(|v| meta::quality::analyze(v));
+        let report = meta::MetaReport::compute(
+            Some(env_report),
+            Some(strategy_report),
+            quality_report,
+        );
+
+        if report.overall_confidence < 1.0 {
+            println!();
+            println!("━━━ Meta-Testing Analysis ━━━");
+            println!("  Confidence: {:.0}%", report.overall_confidence * 100.0);
+            for finding in &report.actionable_findings {
+                println!("  - {}", finding);
+            }
+        }
+
+        Some(report)
+    };
+
     println!();
     if resolved {
         println!("━━━ Done (resolved) ━━━");
@@ -322,6 +349,7 @@ pub fn execute(opts: RunOptions) -> Result<EvalResult> {
         skill: opts.skill,
         split: opts.split,
         resolved,
+        meta: meta_report,
     })
 }
 
