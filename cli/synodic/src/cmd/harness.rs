@@ -85,6 +85,41 @@ enum HarnessSubcommand {
 
     /// List crystallized rules
     Rules,
+
+    /// AI meta-testing: analyze project, propose testing strategy, implement and validate tests
+    Meta {
+        /// Working directory (defaults to repo root)
+        #[arg(long)]
+        workdir: Option<String>,
+
+        /// Git diff to test (reads from stdin if omitted, or auto-detects from git)
+        #[arg(long)]
+        diff: Option<String>,
+
+        /// Spec or feature description file path
+        #[arg(long)]
+        spec: Option<String>,
+
+        /// AI agent command for consultation
+        #[arg(long, default_value = "claude")]
+        agent: String,
+
+        /// Max rework cycles for test validation
+        #[arg(long, default_value = "2")]
+        max_rework: u32,
+
+        /// Minimal output
+        #[arg(long, short)]
+        quiet: bool,
+
+        /// Machine-readable JSON output
+        #[arg(long)]
+        json: bool,
+
+        /// Show plan without executing tests
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 impl HarnessCmd {
@@ -215,6 +250,94 @@ impl HarnessCmd {
                 let repo_root = util::find_repo_root()?;
                 let harness_dir = resolve_harness_dir(&repo_root)?;
                 harness::rules::list(&harness_dir)
+            }
+            HarnessSubcommand::Meta {
+                workdir,
+                diff,
+                spec,
+                agent,
+                max_rework,
+                quiet,
+                json,
+                dry_run,
+            } => {
+                let repo_root = util::find_repo_root()?;
+                let harness_dir = resolve_harness_dir(&repo_root)?;
+                let work = workdir
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| repo_root.clone());
+
+                // Read spec from file if path provided
+                let spec_content = spec.and_then(|path| {
+                    std::fs::read_to_string(&path)
+                        .ok()
+                        .or_else(|| {
+                            eprintln!("Warning: could not read spec file: {path}");
+                            None
+                        })
+                });
+
+                let config = crate::meta::MetaConfig {
+                    workdir: work,
+                    diff,
+                    spec: spec_content,
+                    agent_cmd: agent,
+                    max_rework,
+                    quiet,
+                    json_output: json,
+                    dry_run,
+                };
+
+                let run_id = format!(
+                    "meta-{}",
+                    chrono::Utc::now().timestamp()
+                );
+                let run_dir = harness_dir.join(".runs").join(&run_id);
+                std::fs::create_dir_all(&run_dir)?;
+
+                let result = crate::meta::run(&config, &run_dir)?;
+
+                // Write governance log
+                let gov_log = harness_dir.join("meta.governance.jsonl");
+                let entry = serde_json::json!({
+                    "work_id": run_id,
+                    "source": "meta-testing",
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                    "status": result.status,
+                    "strategy": result.plan.strategy,
+                    "frameworks": result.plan.frameworks,
+                    "tests_proposed": result.plan.tests.len(),
+                    "tests_passed": result.execution.as_ref().map(|e| e.passed),
+                    "tests_failed": result.execution.as_ref().map(|e| e.failed),
+                    "confidence": result.validation.as_ref().map(|v| v.confidence),
+                    "run_dir": run_dir.display().to_string(),
+                });
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&gov_log)
+                {
+                    use std::io::Write;
+                    let _ = writeln!(f, "{}", serde_json::to_string(&entry)?);
+                }
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                } else if !quiet {
+                    eprintln!();
+                    eprintln!("meta: ━━━ Result: {} ━━━", result.status);
+                    eprintln!("meta: Run dir: {}", run_dir.display());
+                    eprintln!("meta: Governance log: {}", gov_log.display());
+                }
+
+                match result.status.as_str() {
+                    "passed" => Ok(()),
+                    "unreliable" => {
+                        eprintln!("meta: Tests completed but results are unreliable. Review findings.");
+                        std::process::exit(2)
+                    }
+                    _ => std::process::exit(1),
+                }
             }
         }
     }
