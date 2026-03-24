@@ -3,7 +3,7 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::events::{Event, EventFilter, EventType, Severity, Stats};
+use crate::events::{Event, EventFilter, Stats};
 use crate::storage::EventStore;
 
 /// SQLite-backed event store. Default backend for local development.
