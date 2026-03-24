@@ -8,3 +8,4 @@ pub mod search;
 pub mod serve;
 pub mod stats;
 pub mod submit;
+pub mod watch;

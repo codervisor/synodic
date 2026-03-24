@@ -4,8 +4,10 @@
   "private": true,
   "packageManager": "pnpm@10.6.2",
   "scripts": {
-    "build": "cd cli && cargo build --release",
-    "dev": "cd cli && cargo build"
+    "build": "cd rust && cargo build --release",
+    "build:ui": "cd packages/ui && pnpm install && npx vite build",
+    "dev": "cd rust && cargo build",
+    "dev:ui": "cd packages/ui && npx vite"
   },
   "devDependencies": {
     "ajv": "^8.18.0"
