@@ -1,9 +1,6 @@
 mod cmd;
-mod fractal;
 mod harness;
 mod meta;
-mod pipeline;
-mod swarm;
 mod util;
 
 use clap::Parser;
@@ -14,17 +11,11 @@ use clap::Parser;
 enum Cli {
     /// Governance wrapper for agent commands
     Harness(cmd::harness::HarnessCmd),
-    /// Fractal algorithmic spine — deterministic operations for decomposition
-    Fractal(cmd::fractal::FractalCmd),
-    /// Swarm algorithmic spine — deterministic operations for speculative swarm
-    Swarm(cmd::swarm::SwarmCmd),
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli {
         Cli::Harness(cmd) => cmd.run(),
-        Cli::Fractal(cmd) => cmd.run(),
-        Cli::Swarm(cmd) => cmd.run(),
     }
 }
