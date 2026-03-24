@@ -1,4 +1,5 @@
 pub mod claude;
+pub mod copilot;
 
 use crate::events::Event;
 use anyhow::Result;

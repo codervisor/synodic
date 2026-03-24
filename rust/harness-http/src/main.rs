@@ -1,5 +1,6 @@
 mod routes;
 mod state;
+mod ws;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
