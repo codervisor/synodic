@@ -1,0 +1,18 @@
+[package]
+name = "harness-http"
+version = "0.1.0"
+edition = "2021"
+description = "Synodic harness-http — Axum REST API and dashboard server"
+
+[[bin]]
+name = "synodic-http"
+path = "src/main.rs"
+
+[dependencies]
+harness-core = { path = "../harness-core" }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"

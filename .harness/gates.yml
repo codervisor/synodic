@@ -2,13 +2,13 @@ gates:
   preflight:
     - name: rust-check
       match: "*.rs"
-      command: cd cli && cargo check 2>&1
+      command: cd rust && cargo check 2>&1
     - name: rust-lint
       match: "*.rs"
-      command: cd cli && cargo clippy -- -D warnings 2>&1
+      command: cd rust && cargo clippy -- -D warnings 2>&1
     - name: rust-test
       match: "*.rs"
-      command: cd cli && cargo test 2>&1
+      command: cd rust && cargo test 2>&1
     - name: custom-rules
       match: "*"
       command: .harness/scripts/static_gate.sh 2>&1

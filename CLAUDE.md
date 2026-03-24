@@ -2,93 +2,88 @@
 
 ## Project: Synodic
 
-AI coding factory — structured BUILD → INSPECT pipelines for spec-driven development.
+Open-source AI agent event governance platform — monitor, audit, and enforce governance rules on AI coding agent sessions.
+
+**Core identity:** The tool that watches the AI agents.
 
 ## Build & Test
 
 ```bash
-cd cli && cargo build          # debug build (both crates)
-cd cli && cargo test           # run all tests (98 tests: 63 pipeline/harness + 35 parser/scoring)
-cd cli && cargo build --release # release build
-cd cli/synodic-eval && cargo test  # eval tests only (standalone)
+cd rust && cargo build          # debug build (all crates)
+cd rust && cargo test           # run all tests
+cd rust && cargo build --release # release build
 pnpm install                   # install node deps (spec validation tooling)
 ```
 
 ## Architecture
 
-Cargo workspace (`cli/`) with two crates and Node.js tooling for spec validation.
-
-**synodic-eval** is a standalone eval framework — no governance concepts. **synodic** is the governance CLI that depends on synodic-eval as a library.
+Cargo workspace (`rust/`) with three crates following the LeanSpec pattern (core/cli/http).
 
 ```
-cli/
-├── Cargo.toml                     # [workspace] members = ["synodic", "synodic-eval"]
-├── synodic-eval/                  # Standalone eval framework (zero synodic governance deps)
-│   └── src/
-│       ├── lib.rs                 # Public API: run, score, batch, list, report, setup
-│       ├── main.rs                # Binary: `synodic-eval run|score|list|batch|report`
-│       ├── run.rs                 # Orchestration: setup → agent → score → EvalResult
-│       ├── batch.rs               # Batch evaluation across task×skill matrix
-│       ├── list.rs                # List tasks from evals.json
-│       ├── report.rs              # Report generation (table/json/csv)
-│       ├── util.rs                # find_project_root() (EVAL_ROOT, evals/, .git)
-│       ├── score/                 # Scoring pipeline
-│       │   ├── mod.rs             # Types: TestStatus, TestResult, ScoreResult, EvalVerdict
-│       │   ├── parser.rs          # Django/pytest output parsing — heavily tested
-│       │   ├── runner.rs          # Test subprocess execution via Command
-│       │   ├── verdict.rs         # F2P/P2P verdict computation
-│       │   └── report.rs          # JSON score report generation
-│       └── setup/                 # Testbed setup
-│           ├── swebench.rs        # SWE-bench: HF download → clone → patch → deps → prompt
-│           ├── featurebench.rs    # FeatureBench: same + gold patch stripping + sanity check
-│           ├── devbench.rs        # DevBench: repo fetch → PRD extraction → scaffold
-│           └── synodic.rs         # Synodic dogfood: clone → verify build → prompt
-├── synodic/                       # Governance CLI (depends on synodic-eval)
-│   └── src/
-│       ├── main.rs                # CLI entry: Harness | Eval subcommands
-│       ├── cmd/eval.rs            # Eval dispatch → synodic_eval + governance log
-│       ├── cmd/harness.rs         # Harness dispatch → harness modules
-│       ├── governance.rs          # Eval result → .harness/eval.governance.jsonl
-│       ├── util.rs                # find_repo_root() (SYNODIC_ROOT, .harness/, .git)
-│       ├── harness/               # Governance loop
-│       │   ├── run.rs             # L1 static rules + L2 AI judge + rework loop
-│       │   ├── log.rs             # Governance log display
-│       │   └── rules.rs           # Crystallized rules list
-│       ├── pipeline/              # Pipeline engine (spec 061-062)
-│       │   ├── mod.rs             # Pipeline types and public API
-│       │   ├── schema.rs          # YAML schema: Step, Fan, Branch, Run, Agent
-│       │   ├── executor.rs        # Sequential executor with middleware
-│       │   ├── gates.rs           # Preflight gate runner (file-match + structured output)
-│       │   ├── vars.rs            # Variable interpolation: ${scope.field}
-│       │   ├── validate.rs        # Static pipeline validation before execution
-│       │   └── checkpoint.rs      # Swarm checkpoint persistence
-│       ├── fractal/               # Fractal algorithmic spine (spec 064)
-│       │   ├── mod.rs             # Fractal subcommands
-│       │   ├── decompose.rs       # TF-IDF orthogonality scoring
-│       │   ├── schedule.rs        # DAG topological sort
-│       │   ├── reunify.rs         # Bottom-up merge
-│       │   └── prune.rs           # Greedy set cover pruning
-│       └── swarm/                 # Swarm algorithmic spine (spec 064)
-│           ├── mod.rs             # Swarm subcommands
-│           ├── checkpoint.rs      # Branch checkpoint read/write
-│           └── prune.rs           # Jaccard similarity pruning
+synodic/
+├── rust/
+│   ├── Cargo.toml                     # [workspace] members = ["harness-core", "harness-cli", "harness-http"]
+│   ├── harness-core/                  # Event types, detection rules, storage, log parsers
+│   │   └── src/
+│   │       ├── lib.rs                 # Public API: events, storage, rules, parsers
+│   │       ├── events.rs              # EventType, Severity, Event
+│   │       ├── storage/
+│   │       │   ├── mod.rs             # EventStore trait, EventFilter, Stats
+│   │       │   └── sqlite.rs          # SQLite backend (default)
+│   │       ├── rules/
+│   │       │   └── mod.rs             # Rule, RuleEngine, crystallization
+│   │       └── parsers/
+│   │           └── mod.rs             # Claude Code, Copilot log parsers
+│   ├── harness-cli/                   # CLI: submit, collect, query, resolve, watch, serve
+│   │   └── src/
+│   │       ├── main.rs                # CLI entry: top-level subcommands
+│   │       ├── cmd/harness.rs         # Governance run, eval, log, rules, meta
+│   │       ├── harness/               # Governance loop
+│   │       │   ├── run.rs             # L1 static rules + L2 AI judge + rework loop
+│   │       │   ├── log.rs             # Governance log display
+│   │       │   └── rules.rs           # Crystallized rules list
+│   │       ├── meta/                  # AI meta-testing framework
+│   │       │   ├── mod.rs             # Orchestration + phase logic + rework loop
+│   │       │   ├── consult.rs         # AI project analysis + diagnosis
+│   │       │   ├── execute.rs         # Test execution pipeline
+│   │       │   └── validate.rs        # Result reliability assessment
+│   │       └── util.rs                # find_repo_root(), exec_script()
+│   └── harness-http/                  # Axum REST API + dashboard static files
+│       └── src/
+│           └── main.rs                # HTTP server (PR 6)
+├── packages/
+│   ├── cli/                           # npm wrapper for Rust binary
+│   └── ui/                            # Vite React dashboard
+├── skills/
+│   └── harness-governance/            # Agent self-reporting skill
+├── docs-site/                         # Docusaurus documentation
+├── docker/                            # Multi-stage Dockerfile
+├── deploy/                            # Fly.io, Railway, Render configs
+├── specs/                             # LeanSpec specs (harness-scoped)
+├── .harness/                          # Governance config
+│   ├── gates.yml                      # Preflight gates
+│   ├── harness.governance.jsonl       # Governance log
+│   ├── rules/                         # Crystallized rules
+│   └── scripts/                       # Utility scripts
+└── HARNESS.md                         # Governance protocol
 ```
 
-### Key types (synodic-eval: score/mod.rs)
+### Extracted repositories
 
-- `TestStatus` enum: Passed, Failed, Error, Skipped — no stringly-typed status
-- `TestResult`: name + status + optional reason
-- `ScoreResult`: passed/failed/errors/skipped — total is structural (passed > total impossible)
-- `EvalVerdict`: instance_id + F2P verdict + P2P verdict + resolved bool
-- `EvalResult`: target + verdict + duration + resolved (returned by `run::execute()`)
+- **[codervisor/eval](https://github.com/codervisor/eval)** — Standalone eval framework (SWE-bench, FeatureBench, DevBench)
+- **[codervisor/orchestra](https://github.com/codervisor/orchestra)** — Coordination patterns (pipeline engine, fractal, swarm, skills)
 
-### Separation boundary
+### Event types
 
-Eval produces structured output (EvalResult / exit code). Synodic's governance.rs reads it and writes `.harness/eval.governance.jsonl`. Eval never writes governance logs or references `.harness/`.
+- `tool_call_error` — tool execution failures
+- `hallucination` — references to nonexistent files/APIs
+- `compliance_violation` — secrets, dangerous commands, prod access
+- `misalignment` — agent actions diverge from user intent
 
-### Python remnant
+### Two-layer governance (from HARNESS.md)
 
-HuggingFace dataset downloads stay as inline Python (~40 lines per setup module) called via `Command`. No viable Rust equivalent for `datasets` library.
+- **L1**: Static/deterministic rules (zero AI cost, fast)
+- **L2**: AI judge (independent LLM, fresh context, semantic analysis)
 
 ## Claude Code Cloud Environment
 
@@ -111,38 +106,18 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 - **LeanSpec format**: All specs use YAML frontmatter (status, created, tags, priority)
 - **Governance**: All agent operations follow [HARNESS.md](./HARNESS.md)
 
-## Skills
-
-Each skill is a thin SKILL.md shim backed by a pipeline YAML in `.harness/pipelines/`. Invoke via Claude Code; the skill calls `synodic harness run` under the hood.
-
-| Skill | Description | Invoke | Pipeline definition |
-|-------|-------------|--------|---------------------|
-| `factory` | Coding factory — BUILD → INSPECT with adversarial review and rework loop | `/factory run <spec-path>` | `.harness/pipelines/factory.yml` |
-| `fractal` | Fractal decomposition — recursively splits complex tasks, solves leaves, reunifies bottom-up | `/fractal decompose <task-or-spec-path>` | `.harness/pipelines/fractal.yml` |
-| `swarm` | Speculative swarm — forks N agents on divergent strategies, prunes convergent branches, fuses best fragments | `/swarm run <spec-path>` | `.harness/pipelines/swarm.yml` |
-| `adversarial` | Generative-adversarial — generator + critic in escalating quality loop for deep hardening | `/adversarial run <spec-path>` | `.harness/pipelines/adversarial.yml` |
-
-**Pipeline step types:** `agent` (LLM via `claude -p`), `run` (shell with `match`/`poll`/`check`), `branch` (verdict routing), `fan` (parallel/sequential/loop collection processing).
-
-**Gate groups:** `preflight` (local-only fast checks in `.harness/gates.yml`). CI is a `run` step with `poll`, not a gate.
-
-### Pipeline validation
+## CLI commands
 
 ```bash
-synodic harness validate factory     # validate a pipeline YAML before execution
-synodic harness validate fractal
-```
+# Governance run (L1 + L2)
+synodic harness run -- <agent_cmd>
 
-### Algorithmic CLI commands
+# Log and rules
+synodic harness log [--json] [--tail N]
+synodic harness rules
 
-```bash
-synodic fractal complexity <spec>    # score decomposition complexity
-synodic fractal decompose <spec>     # TF-IDF orthogonality decomposition
-synodic fractal schedule <dir>       # DAG topological sort
-synodic fractal reunify <dir>        # bottom-up merge
-synodic fractal prune <dir>          # greedy set cover pruning
-synodic swarm checkpoint <branch>    # persist swarm branch state
-synodic swarm prune <dir>            # Jaccard similarity pruning
+# Meta-testing
+synodic harness meta [--spec <path>] [--dry-run]
 ```
 
 ### Skill installation
