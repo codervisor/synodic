@@ -33,6 +33,9 @@ enum Cli {
     /// Manage detection rules
     Rules(cmd::rules::RulesCmd),
 
+    /// Live event monitoring (TUI)
+    Watch(cmd::watch::WatchCmd),
+
     /// Start API server and dashboard
     Serve(cmd::serve::ServeCmd),
 
@@ -51,6 +54,7 @@ fn main() -> anyhow::Result<()> {
         Cli::Stats(cmd) => cmd.run(),
         Cli::Resolve(cmd) => cmd.run(),
         Cli::Rules(cmd) => cmd.run(),
+        Cli::Watch(cmd) => cmd.run(),
         Cli::Serve(cmd) => cmd.run(),
         Cli::Harness(cmd) => cmd.run(),
     }

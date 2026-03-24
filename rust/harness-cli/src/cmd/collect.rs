@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{Duration, Utc};
 use clap::Args;
 
 use harness_core::parsers::claude::{self, ClaudeLogParser};
@@ -14,7 +15,7 @@ pub struct CollectCmd {
     #[arg(long, default_value = "auto")]
     source: String,
 
-    /// Only collect events from the last N hours/minutes (e.g., "1h", "30m")
+    /// Only collect events newer than this duration (e.g., "1h", "30m", "7d")
     #[arg(long)]
     since: Option<String>,
 
@@ -23,10 +24,33 @@ pub struct CollectCmd {
     dry_run: bool,
 }
 
+/// Parse a duration string like "1h", "30m", "7d" into a chrono::Duration.
+fn parse_duration(s: &str) -> Result<Duration> {
+    let s = s.trim();
+    if s.is_empty() {
+        anyhow::bail!("empty duration string");
+    }
+    let (num_str, unit) = s.split_at(s.len() - 1);
+    let num: i64 = num_str.parse().map_err(|_| anyhow::anyhow!("invalid duration: {s}"))?;
+    match unit {
+        "s" => Ok(Duration::seconds(num)),
+        "m" => Ok(Duration::minutes(num)),
+        "h" => Ok(Duration::hours(num)),
+        "d" => Ok(Duration::days(num)),
+        _ => anyhow::bail!("unknown duration unit '{unit}' in '{s}'. Use s/m/h/d."),
+    }
+}
+
 impl CollectCmd {
     pub fn run(self) -> Result<()> {
         let root = util::find_repo_root()?;
         let db_path = root.join(".harness").join("synodic.db");
+
+        let cutoff = self
+            .since
+            .as_deref()
+            .map(|s| parse_duration(s).map(|d| Utc::now() - d))
+            .transpose()?;
 
         let store = if self.dry_run {
             None
@@ -50,7 +74,26 @@ impl CollectCmd {
             } else {
                 let parser = ClaudeLogParser::new();
                 for log_path in &logs {
+                    // Skip log files older than cutoff based on file modification time
+                    if let Some(cutoff_ts) = cutoff {
+                        if let Ok(meta) = std::fs::metadata(log_path) {
+                            if let Ok(modified) = meta.modified() {
+                                let mod_time: chrono::DateTime<Utc> = modified.into();
+                                if mod_time < cutoff_ts {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
                     let events = parser.parse(log_path)?;
+                    // Filter events by timestamp
+                    let events: Vec<_> = if let Some(cutoff_ts) = cutoff {
+                        events.into_iter().filter(|e| e.created_at >= cutoff_ts).collect()
+                    } else {
+                        events
+                    };
+
                     if events.is_empty() {
                         continue;
                     }
@@ -80,5 +123,37 @@ impl CollectCmd {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_duration_seconds() {
+        assert_eq!(parse_duration("30s").unwrap(), Duration::seconds(30));
+    }
+
+    #[test]
+    fn test_parse_duration_minutes() {
+        assert_eq!(parse_duration("5m").unwrap(), Duration::minutes(5));
+    }
+
+    #[test]
+    fn test_parse_duration_hours() {
+        assert_eq!(parse_duration("2h").unwrap(), Duration::hours(2));
+    }
+
+    #[test]
+    fn test_parse_duration_days() {
+        assert_eq!(parse_duration("7d").unwrap(), Duration::days(7));
+    }
+
+    #[test]
+    fn test_parse_duration_invalid() {
+        assert!(parse_duration("abc").is_err());
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration("5x").is_err());
     }
 }
