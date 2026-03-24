@@ -1,0 +1,22 @@
+{
+  "name": "@synodic/cli",
+  "version": "0.1.0",
+  "description": "Synodic — AI agent event governance CLI",
+  "license": "MIT",
+  "bin": {
+    "synodic": "bin/synodic"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.mjs"
+  },
+  "files": [
+    "bin/",
+    "scripts/"
+  ],
+  "optionalDependencies": {
+    "@synodic/cli-darwin-arm64": "0.1.0",
+    "@synodic/cli-darwin-x64": "0.1.0",
+    "@synodic/cli-linux-x64": "0.1.0",
+    "@synodic/cli-linux-arm64": "0.1.0"
+  }
+}

@@ -1,0 +1,38 @@
+#!/usr/bin/env node
+import { execFileSync } from 'child_process';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const args = process.argv.slice(2);
+
+// Try platform-specific binary from optional deps
+const PLATFORM_MAP = {
+  'darwin-arm64': '@synodic/cli-darwin-arm64',
+  'darwin-x64': '@synodic/cli-darwin-x64',
+  'linux-x64': '@synodic/cli-linux-x64',
+  'linux-arm64': '@synodic/cli-linux-arm64',
+};
+
+const key = `${process.platform}-${process.arch}`;
+const pkg = PLATFORM_MAP[key];
+
+if (pkg) {
+  try {
+    const pkgPath = import.meta.resolve(pkg);
+    const binPath = join(dirname(fileURLToPath(pkgPath)), 'synodic');
+    if (existsSync(binPath)) {
+      execFileSync(binPath, args, { stdio: 'inherit' });
+      process.exit(0);
+    }
+  } catch {}
+}
+
+// Fallback: try synodic in PATH
+try {
+  execFileSync('synodic', args, { stdio: 'inherit' });
+} catch {
+  console.error('synodic: binary not found. Install a platform package or build from source.');
+  process.exit(1);
+}
