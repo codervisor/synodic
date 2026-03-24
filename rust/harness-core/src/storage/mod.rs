@@ -1,1 +1,14 @@
-// Storage abstraction — populated in PR 4
+pub mod sqlite;
+
+use crate::events::{Event, EventFilter, Stats};
+use anyhow::Result;
+
+/// Abstraction over event persistence backends.
+pub trait EventStore {
+    fn insert(&self, event: &Event) -> Result<()>;
+    fn get(&self, id: &str) -> Result<Option<Event>>;
+    fn list(&self, filter: &EventFilter) -> Result<Vec<Event>>;
+    fn resolve(&self, id: &str, notes: &str) -> Result<()>;
+    fn stats(&self, filter: &EventFilter) -> Result<Stats>;
+    fn search(&self, query: &str, limit: usize) -> Result<Vec<Event>>;
+}
