@@ -33,6 +33,9 @@ enum Cli {
     /// Manage detection rules
     Rules(cmd::rules::RulesCmd),
 
+    /// Start API server and dashboard
+    Serve(cmd::serve::ServeCmd),
+
     /// Legacy governance harness (L1/L2 evaluation loop)
     Harness(cmd::harness_legacy::HarnessCmd),
 }
@@ -48,6 +51,7 @@ fn main() -> anyhow::Result<()> {
         Cli::Stats(cmd) => cmd.run(),
         Cli::Resolve(cmd) => cmd.run(),
         Cli::Rules(cmd) => cmd.run(),
+        Cli::Serve(cmd) => cmd.run(),
         Cli::Harness(cmd) => cmd.run(),
     }
 }
