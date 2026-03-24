@@ -10,6 +10,7 @@ use harness_core::rules;
 use harness_core::storage::EventStore;
 
 use crate::state::AppState;
+use crate::ws;
 
 pub fn api_router() -> Router<AppState> {
     Router::new()
@@ -19,6 +20,7 @@ pub fn api_router() -> Router<AppState> {
         .route("/rules", get(list_rules))
         .route("/stats", get(get_stats))
         .route("/health", get(health))
+        .route("/ws", get(ws::ws_handler))
 }
 
 // ── Health ──────────────────────────────────────────────
@@ -108,6 +110,9 @@ async fn submit_event(
     store.insert(&event).map_err(|e| {
         (StatusCode::INTERNAL_SERVER_ERROR, format!("insert error: {e}"))
     })?;
+
+    // Broadcast to WebSocket subscribers
+    ws::broadcast_event(&state.event_tx, &event);
 
     Ok((StatusCode::CREATED, Json(event)))
 }

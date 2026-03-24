@@ -1,19 +1,41 @@
-# Synodic Documentation
+# Website
 
-Documentation site for Synodic — the AI agent event governance platform.
+This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
 
-## Setup
+## Installation
 
 ```bash
-cd docs-site
-npx create-docusaurus@latest . classic --typescript
+yarn
 ```
 
-## Structure (planned)
+## Local Development
 
-- **Getting Started** — install, init, first event
-- **CLI Reference** — all commands with examples
-- **API Reference** — REST endpoints, request/response schemas
-- **Agent Integration** — harness-governance skill, self-reporting
-- **Detection Rules** — built-in rules, custom patterns, crystallization
-- **Deployment** — Docker, Fly.io, Railway, Render
+```bash
+yarn start
+```
+
+This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
+
+## Build
+
+```bash
+yarn build
+```
+
+This command generates static content into the `build` directory and can be served using any static contents hosting service.
+
+## Deployment
+
+Using SSH:
+
+```bash
+USE_SSH=true yarn deploy
+```
+
+Not using SSH:
+
+```bash
+GIT_USER=<Your GitHub username> yarn deploy
+```
+
+If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.

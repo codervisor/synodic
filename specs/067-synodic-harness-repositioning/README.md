@@ -218,16 +218,17 @@ synodic watch [--filter "<expr>"]         # TUI: live event stream
 - [x] Add `packages/` (cli npm wrapper, ui)
 - [x] Create `skills/harness-governance/SKILL.md`
 - [x] Update CLAUDE.md, HARNESS.md, README.md for new scope
-- [ ] Archive superseded specs, migrate applicable ones
+- [x] Archive superseded specs, migrate applicable ones
 
 ### Phase 4: Build harness-core
 - [x] Event types and schemas
 - [x] Storage abstraction trait (SQLite)
 - [x] Detection rules engine
 - [x] Log parsers (Claude Code)
-- [ ] Log parsers (Copilot, Cursor)
-- [ ] PostgreSQL storage backend
-- [ ] L1 static rule evaluation (refactored from harness/run.rs)
+- [x] Log parsers (Copilot)
+- [ ] Log parsers (Cursor)
+- [x] PostgreSQL storage backend
+- [x] L1 static rule evaluation (refactored from harness/run.rs)
 
 ### Phase 5: Build harness-cli
 - [x] submit, collect, query, resolve commands
@@ -239,14 +240,14 @@ synodic watch [--filter "<expr>"]         # TUI: live event stream
 ### Phase 6: Build harness-http + dashboard
 - [x] Axum REST API (events CRUD, rules, stats)
 - [x] Static file serving for dashboard
-- [ ] WebSocket for live event streaming
+- [x] WebSocket for live event streaming
 - [x] Vite React dashboard (event feed, resolution queue, analytics)
 
 ### Phase 7: Distribution
 - [x] npm wrapper with platform-specific binaries
 - [x] Docker image (multi-stage build)
 - [x] Deploy configs (Fly.io, Railway, Render)
-- [ ] Docusaurus documentation site (scaffolded)
+- [x] Docusaurus documentation site
 - [x] harness-governance skill
 
 ## Non-goals
@@ -265,4 +266,4 @@ synodic watch [--filter "<expr>"]         # TUI: live event stream
 - [x] `synodic serve` starts API + dashboard on localhost
 - [x] harness-governance skill installable and functional
 - [x] SQLite works out of the box
-- [ ] PostgreSQL works with DATABASE_URL (deferred — requires sqlx feature gate)
+- [x] PostgreSQL works with DATABASE_URL (feature-gated via `--features postgres`)

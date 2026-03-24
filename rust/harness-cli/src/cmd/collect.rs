@@ -3,6 +3,7 @@ use chrono::{Duration, Utc};
 use clap::Args;
 
 use harness_core::parsers::claude::{self, ClaudeLogParser};
+use harness_core::parsers::copilot::{self, CopilotLogParser};
 use harness_core::parsers::LogParser;
 use harness_core::storage::sqlite::SqliteStore;
 use harness_core::storage::EventStore;
@@ -11,7 +12,7 @@ use crate::util;
 
 #[derive(Args)]
 pub struct CollectCmd {
-    /// Log source: claude, auto (default: auto)
+    /// Log source: claude, copilot, auto (default: auto)
     #[arg(long, default_value = "auto")]
     source: String,
 
@@ -88,6 +89,57 @@ impl CollectCmd {
 
                     let events = parser.parse(log_path)?;
                     // Filter events by timestamp
+                    let events: Vec<_> = if let Some(cutoff_ts) = cutoff {
+                        events.into_iter().filter(|e| e.created_at >= cutoff_ts).collect()
+                    } else {
+                        events
+                    };
+
+                    if events.is_empty() {
+                        continue;
+                    }
+                    eprintln!(
+                        "{}: {} event(s)",
+                        log_path.file_name().unwrap_or_default().to_string_lossy(),
+                        events.len()
+                    );
+                    for event in &events {
+                        eprintln!(
+                            "  [{:?}] {} ({})",
+                            event.severity, event.title, event.event_type
+                        );
+                        if let Some(ref store) = store {
+                            store.insert(event)?;
+                        }
+                    }
+                    total += events.len();
+                }
+            }
+        }
+
+        // Copilot logs
+        if self.source == "auto" || self.source == "copilot" {
+            let logs = copilot::find_copilot_logs(&root)?;
+            if logs.is_empty() {
+                if self.source == "copilot" {
+                    eprintln!("No Copilot event logs found");
+                }
+            } else {
+                let parser = CopilotLogParser::new();
+                for log_path in &logs {
+                    // Skip log files older than cutoff
+                    if let Some(cutoff_ts) = cutoff {
+                        if let Ok(meta) = std::fs::metadata(log_path) {
+                            if let Ok(modified) = meta.modified() {
+                                let mod_time: chrono::DateTime<Utc> = modified.into();
+                                if mod_time < cutoff_ts {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    let events = parser.parse(log_path)?;
                     let events: Vec<_> = if let Some(cutoff_ts) = cutoff {
                         events.into_iter().filter(|e| e.created_at >= cutoff_ts).collect()
                     } else {

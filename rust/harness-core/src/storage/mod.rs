@@ -1,5 +1,8 @@
 pub mod sqlite;
 
+#[cfg(feature = "postgres")]
+pub mod postgres;
+
 use crate::events::{Event, EventFilter, Stats};
 use anyhow::Result;
 
