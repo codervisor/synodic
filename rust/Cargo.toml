@@ -1,0 +1,3 @@
+[workspace]
+members = ["harness-core", "harness-cli", "harness-http"]
+resolver = "2"
