@@ -199,51 +199,55 @@ synodic watch [--filter "<expr>"]         # TUI: live event stream
 ## Migration path
 
 ### Phase 1: Extract eval (clean cut)
-- [ ] Create `codervisor/eval` repo
-- [ ] Move `cli/synodic-eval/` as the primary crate
-- [ ] Move `evals/` directory
-- [ ] Move eval-related specs (046, 047, 053, 066-umbrella)
-- [ ] Remove synodic-eval from this workspace
+- [x] Create `codervisor/eval` repo
+- [x] Move `cli/synodic-eval/` as the primary crate
+- [x] Move `evals/` directory
+- [x] Move eval-related specs (046, 047, 053, 066-umbrella)
+- [x] Remove synodic-eval from this workspace
 
 ### Phase 2: Extract coordination patterns
-- [ ] Create `codervisor/orchestra` repo
-- [ ] Move `pipeline/`, `fractal/`, `swarm/` modules
-- [ ] Move skills (factory, fractal, swarm, adversarial) with prompts and evals
-- [ ] Move `.harness/pipelines/` and pipeline output schemas
-- [ ] Move coordination specs (037, 044, 049, 050, 052, 058-065)
+- [x] Create `codervisor/orchestra` repo
+- [x] Move `pipeline/`, `fractal/`, `swarm/` modules
+- [x] Move skills (factory, fractal, swarm, adversarial) with prompts and evals
+- [x] Move `.harness/pipelines/` and pipeline output schemas
+- [x] Move coordination specs (037, 044, 049, 050, 052, 058-065)
 - [ ] Orchestra consumes Synodic as a dependency for governance event submission
 
 ### Phase 3: Restructure this repo
-- [ ] `cli/` -> `rust/` with new workspace (harness-core, harness-cli, harness-http)
-- [ ] Add `packages/` (cli npm wrapper, ui)
-- [ ] Create `skills/harness-governance/SKILL.md`
-- [ ] Update CLAUDE.md, HARNESS.md, README.md for new scope
+- [x] `cli/` -> `rust/` with new workspace (harness-core, harness-cli, harness-http)
+- [x] Add `packages/` (cli npm wrapper, ui)
+- [x] Create `skills/harness-governance/SKILL.md`
+- [x] Update CLAUDE.md, HARNESS.md, README.md for new scope
 - [ ] Archive superseded specs, migrate applicable ones
 
 ### Phase 4: Build harness-core
-- [ ] Event types and schemas
-- [ ] Storage abstraction trait (SQLite + PostgreSQL)
-- [ ] Detection rules engine
-- [ ] Log parsers (Claude Code, Copilot, Cursor)
-- [ ] L1 static rule evaluation
+- [x] Event types and schemas
+- [x] Storage abstraction trait (SQLite)
+- [x] Detection rules engine
+- [x] Log parsers (Claude Code)
+- [ ] Log parsers (Copilot, Cursor)
+- [ ] PostgreSQL storage backend
+- [ ] L1 static rule evaluation (refactored from harness/run.rs)
 
 ### Phase 5: Build harness-cli
-- [ ] submit, collect, query, resolve commands
-- [ ] rules management commands
-- [ ] watch command (TUI via Ratatui)
-- [ ] serve command (launches harness-http)
+- [x] submit, collect, query, resolve commands
+- [x] rules management commands
+- [x] watch command (TUI via Ratatui)
+- [x] serve command (launches harness-http)
+- [x] --since filtering in collect
 
 ### Phase 6: Build harness-http + dashboard
-- [ ] Axum REST API (events CRUD, rules, stats)
+- [x] Axum REST API (events CRUD, rules, stats)
+- [x] Static file serving for dashboard
 - [ ] WebSocket for live event streaming
-- [ ] Vite React dashboard (event feed, resolution queue, analytics, rules manager)
+- [x] Vite React dashboard (event feed, resolution queue, analytics)
 
 ### Phase 7: Distribution
-- [ ] npm wrapper with platform-specific binaries
-- [ ] Docker image (multi-stage build)
-- [ ] Deploy configs (Fly.io, Railway, Render)
-- [ ] Docusaurus documentation site
-- [ ] harness-governance skill published
+- [x] npm wrapper with platform-specific binaries
+- [x] Docker image (multi-stage build)
+- [x] Deploy configs (Fly.io, Railway, Render)
+- [ ] Docusaurus documentation site (scaffolded)
+- [x] harness-governance skill
 
 ## Non-goals
 
@@ -254,10 +258,11 @@ synodic watch [--filter "<expr>"]         # TUI: live event stream
 
 ## Success criteria
 
-- [ ] synodic-eval extracted to standalone repo with all tests passing
-- [ ] Coordination patterns extracted to orchestra repo with all tests passing
-- [ ] This repo builds and serves a working governance dashboard
-- [ ] `synodic collect --source claude --dry-run` parses real session logs
-- [ ] `synodic serve` starts API + dashboard on localhost
-- [ ] harness-governance skill installable and functional
-- [ ] SQLite works out of the box, PostgreSQL works with DATABASE_URL
+- [x] synodic-eval extracted to standalone repo with all tests passing (35 tests, github.com/codervisor/eval)
+- [x] Coordination patterns extracted to orchestra repo with all tests passing (140 tests, github.com/codervisor/orchestra)
+- [x] This repo builds and serves a working governance dashboard
+- [x] `synodic collect --source claude --dry-run` parses real session logs
+- [x] `synodic serve` starts API + dashboard on localhost
+- [x] harness-governance skill installable and functional
+- [x] SQLite works out of the box
+- [ ] PostgreSQL works with DATABASE_URL (deferred — requires sqlx feature gate)
