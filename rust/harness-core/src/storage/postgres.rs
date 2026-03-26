@@ -54,9 +54,7 @@ impl PostgresStore {
 impl EventStore for PostgresStore {
     fn insert(&self, event: &Event) -> Result<()> {
         // Need a mutable reference for postgres execute
-        let client = unsafe {
-            &mut *(self as *const Self as *mut Self)
-        };
+        let client = unsafe { &mut *(self as *const Self as *mut Self) };
         client.client.execute(
             "INSERT INTO events (id, event_type, title, severity, source, metadata, resolved, resolution_notes, created_at, resolved_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
@@ -77,13 +75,10 @@ impl EventStore for PostgresStore {
     }
 
     fn get(&self, id: &str) -> Result<Option<Event>> {
-        let client = unsafe {
-            &mut *(self as *const Self as *mut Self)
-        };
-        let rows = client.client.query(
-            "SELECT * FROM events WHERE id = $1",
-            &[&id],
-        )?;
+        let client = unsafe { &mut *(self as *const Self as *mut Self) };
+        let rows = client
+            .client
+            .query("SELECT * FROM events WHERE id = $1", &[&id])?;
         match rows.first() {
             Some(row) => Ok(Some(row_to_event(row)?)),
             None => Ok(None),
@@ -127,11 +122,11 @@ impl EventStore for PostgresStore {
             sql.push_str(&format!(" LIMIT {limit}"));
         }
 
-        let client = unsafe {
-            &mut *(self as *const Self as *mut Self)
-        };
-        let param_refs: Vec<&(dyn postgres::types::ToSql + Sync)> =
-            params.iter().map(|s| s as &(dyn postgres::types::ToSql + Sync)).collect();
+        let client = unsafe { &mut *(self as *const Self as *mut Self) };
+        let param_refs: Vec<&(dyn postgres::types::ToSql + Sync)> = params
+            .iter()
+            .map(|s| s as &(dyn postgres::types::ToSql + Sync))
+            .collect();
         let rows = client.client.query(&sql as &str, &param_refs)?;
 
         let mut events = Vec::new();
@@ -142,9 +137,7 @@ impl EventStore for PostgresStore {
     }
 
     fn resolve(&self, id: &str, notes: &str) -> Result<()> {
-        let client = unsafe {
-            &mut *(self as *const Self as *mut Self)
-        };
+        let client = unsafe { &mut *(self as *const Self as *mut Self) };
         let updated = client.client.execute(
             "UPDATE events SET resolved = TRUE, resolution_notes = $1, resolved_at = $2 WHERE id = $3",
             &[&notes, &chrono::Utc::now(), &id],
@@ -163,8 +156,12 @@ impl EventStore for PostgresStore {
         let mut by_type: HashMap<String, usize> = HashMap::new();
         let mut by_severity: HashMap<String, usize> = HashMap::new();
         for e in &events {
-            *by_type.entry(e.event_type.as_str().to_string()).or_default() += 1;
-            *by_severity.entry(e.severity.as_str().to_string()).or_default() += 1;
+            *by_type
+                .entry(e.event_type.as_str().to_string())
+                .or_default() += 1;
+            *by_severity
+                .entry(e.severity.as_str().to_string())
+                .or_default() += 1;
         }
 
         Ok(Stats {
@@ -176,9 +173,7 @@ impl EventStore for PostgresStore {
     }
 
     fn search(&self, query: &str, limit: usize) -> Result<Vec<Event>> {
-        let client = unsafe {
-            &mut *(self as *const Self as *mut Self)
-        };
+        let client = unsafe { &mut *(self as *const Self as *mut Self) };
         let rows = client.client.query(
             "SELECT * FROM events
              WHERE to_tsvector('english', title) @@ plainto_tsquery('english', $1)

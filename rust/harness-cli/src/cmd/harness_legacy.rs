@@ -141,10 +141,7 @@ impl HarnessCmd {
                 let harness_dir = resolve_harness_dir(&repo_root)?;
                 let script = harness_dir.join("scripts/evaluate_harness.py");
                 if !script.exists() {
-                    anyhow::bail!(
-                        "evaluate_harness.py not found at {}",
-                        script.display()
-                    );
+                    anyhow::bail!("evaluate_harness.py not found at {}", script.display());
                 }
                 let mut cmd_args = vec![
                     script.display().to_string(),
@@ -180,12 +177,10 @@ impl HarnessCmd {
                     .unwrap_or_else(|| repo_root.clone());
 
                 let spec_content = spec.and_then(|path| {
-                    std::fs::read_to_string(&path)
-                        .ok()
-                        .or_else(|| {
-                            eprintln!("Warning: could not read spec file: {path}");
-                            None
-                        })
+                    std::fs::read_to_string(&path).ok().or_else(|| {
+                        eprintln!("Warning: could not read spec file: {path}");
+                        None
+                    })
                 });
 
                 let config = crate::meta::MetaConfig {
@@ -199,10 +194,7 @@ impl HarnessCmd {
                     dry_run,
                 };
 
-                let run_id = format!(
-                    "meta-{}",
-                    chrono::Utc::now().timestamp()
-                );
+                let run_id = format!("meta-{}", chrono::Utc::now().timestamp());
                 let run_dir = harness_dir.join(".runs").join(&run_id);
                 std::fs::create_dir_all(&run_dir)?;
 
@@ -243,7 +235,9 @@ impl HarnessCmd {
                 match result.status.as_str() {
                     "passed" => Ok(()),
                     "unreliable" => {
-                        eprintln!("meta: Tests completed but results are unreliable. Review findings.");
+                        eprintln!(
+                            "meta: Tests completed but results are unreliable. Review findings."
+                        );
                         std::process::exit(2)
                     }
                     _ => std::process::exit(1),

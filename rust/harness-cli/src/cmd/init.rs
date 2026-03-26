@@ -36,10 +36,7 @@ impl InitCmd {
         // Create default gates.yml if not present
         let gates_path = harness_dir.join("gates.yml");
         if !gates_path.exists() {
-            std::fs::write(
-                &gates_path,
-                "gates:\n  preflight: []\n",
-            )?;
+            std::fs::write(&gates_path, "gates:\n  preflight: []\n")?;
             eprintln!("Created: {}", gates_path.display());
         }
 

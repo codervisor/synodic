@@ -35,29 +35,73 @@ pub fn execute(config: RunConfig) -> Result<()> {
     fs::create_dir_all(&run_dir)?;
 
     // Snapshot base ref
-    let base_ref = config.base_ref.clone().unwrap_or_else(|| {
-        git_rev_parse(&workdir, "HEAD").unwrap_or_default()
-    });
+    let base_ref = config
+        .base_ref
+        .clone()
+        .unwrap_or_else(|| git_rev_parse(&workdir, "HEAD").unwrap_or_default());
 
     log_info(&config, &format!("Starting governed run: {run_id}"));
-    log_info(&config, &format!("Agent command: {}", config.agent_cmd.join(" ")));
-    log_info(&config, &format!("Working directory: {}", workdir.display()));
-    log_info(&config, &format!("Base ref: {}", if base_ref.is_empty() { "(no git)" } else { &base_ref }));
+    log_info(
+        &config,
+        &format!("Agent command: {}", config.agent_cmd.join(" ")),
+    );
+    log_info(
+        &config,
+        &format!("Working directory: {}", workdir.display()),
+    );
+    log_info(
+        &config,
+        &format!(
+            "Base ref: {}",
+            if base_ref.is_empty() {
+                "(no git)"
+            } else {
+                &base_ref
+            }
+        ),
+    );
     log_info(&config, &format!("Max rework: {}", config.max_rework));
     log_info(
         &config,
-        &format!("Layer 2 (AI judge): {}", if config.no_l2 { "disabled" } else { "enabled" }),
+        &format!(
+            "Layer 2 (AI judge): {}",
+            if config.no_l2 { "disabled" } else { "enabled" }
+        ),
     );
     log_info(&config, "");
 
     if config.dry_run {
         log_info(&config, "DRY RUN — would execute:");
-        log_info(&config, &format!("  1. Run agent: {}", config.agent_cmd.join(" ")));
-        log_info(&config, &format!("  2. Observe: git diff {base_ref}...HEAD"));
-        log_info(&config, &format!("  3. Layer 1: static rules from {}/rules/ + language checkers", harness_dir.display()));
-        log_info(&config, &format!("  4. Layer 2: AI judge via {}", config.judge));
-        log_info(&config, &format!("  5. Rework loop (up to {} times)", config.max_rework));
-        log_info(&config, &format!("  6. Log to {}/harness.governance.jsonl", harness_dir.display()));
+        log_info(
+            &config,
+            &format!("  1. Run agent: {}", config.agent_cmd.join(" ")),
+        );
+        log_info(
+            &config,
+            &format!("  2. Observe: git diff {base_ref}...HEAD"),
+        );
+        log_info(
+            &config,
+            &format!(
+                "  3. Layer 1: static rules from {}/rules/ + language checkers",
+                harness_dir.display()
+            ),
+        );
+        log_info(
+            &config,
+            &format!("  4. Layer 2: AI judge via {}", config.judge),
+        );
+        log_info(
+            &config,
+            &format!("  5. Rework loop (up to {} times)", config.max_rework),
+        );
+        log_info(
+            &config,
+            &format!(
+                "  6. Log to {}/harness.governance.jsonl",
+                harness_dir.display()
+            ),
+        );
         return Ok(());
     }
 
@@ -70,9 +114,18 @@ pub fn execute(config: RunConfig) -> Result<()> {
     let mut all_static_failures: Vec<String> = Vec::new();
     let start_time = Utc::now();
 
-    while attempt < config.max_rework + 1 && status == "running" {
+    // Pre-compile regexes used inside the governance loop
+    let verdict_re = Regex::new(r"VERDICT:\s*(\w+)").unwrap();
+    let summary_re = Regex::new(r"SUMMARY:\s*(.*)").unwrap();
+    let items_re = Regex::new(r"(?s)ITEMS:\s*\n(.*?)(?:SUMMARY:|===)").unwrap();
+    let item_re = Regex::new(r"\[(\w+)\]\s*(.*)").unwrap();
+
+    while attempt <= config.max_rework && status == "running" {
         attempt += 1;
-        log_info(&config, &format!("━━━ Attempt {}/{} ━━━", attempt, config.max_rework + 1));
+        log_info(
+            &config,
+            &format!("━━━ Attempt {}/{} ━━━", attempt, config.max_rework + 1),
+        );
 
         // --- Run the agent ---
         log_info(&config, "Running agent...");
@@ -80,7 +133,13 @@ pub fn execute(config: RunConfig) -> Result<()> {
 
         let agent_exit = if feedback_file.exists() && attempt > 1 {
             let feedback = fs::read_to_string(&feedback_file)?;
-            log_info(&config, &format!("Providing rework feedback ({} lines)", feedback.lines().count()));
+            log_info(
+                &config,
+                &format!(
+                    "Providing rework feedback ({} lines)",
+                    feedback.lines().count()
+                ),
+            );
 
             let rework_input = format!(
                 "## Harness Governance Feedback (Rework Required)\n\n\
@@ -89,21 +148,32 @@ pub fn execute(config: RunConfig) -> Result<()> {
                  {feedback}\n\n\
                  Re-read the original task and fix the issues above.\n"
             );
-            run_agent_with_stdin(&config.agent_cmd, &workdir, &rework_input, &agent_log, &repo_root)?
+            run_agent_with_stdin(
+                &config.agent_cmd,
+                &workdir,
+                &rework_input,
+                &agent_log,
+                &repo_root,
+            )?
         } else {
             run_agent(&config.agent_cmd, &workdir, &agent_log, &repo_root)?
         };
 
         last_agent_exit = agent_exit;
-        log_info(&config, &format!("Agent finished (exit code: {agent_exit})"));
+        log_info(
+            &config,
+            &format!("Agent finished (exit code: {agent_exit})"),
+        );
 
         // --- Observe: what changed? ---
         let diff_file = run_dir.join(format!("diff-attempt-{attempt}.patch"));
-        let (has_changes, diff_stat) =
-            observe_changes(&workdir, &base_ref, &diff_file)?;
+        let (has_changes, diff_stat) = observe_changes(&workdir, &base_ref, &diff_file)?;
 
         if !has_changes {
-            log_info(&config, "No changes detected. Agent may have failed silently.");
+            log_info(
+                &config,
+                "No changes detected. Agent may have failed silently.",
+            );
             if agent_exit != 0 {
                 status = "error".to_string();
             } else {
@@ -188,7 +258,8 @@ pub fn execute(config: RunConfig) -> Result<()> {
                         Ok(output) => {
                             l1_passed = false;
                             let rule_output = String::from_utf8_lossy(&output.stderr);
-                            let truncated: String = rule_output.lines().take(10).collect::<Vec<_>>().join("\n");
+                            let truncated: String =
+                                rule_output.lines().take(10).collect::<Vec<_>>().join("\n");
                             log_info(&config, &format!("  Rule [{name}]: FAIL"));
                             l1_failures.push(json!({
                                 "checker": format!("rule:{name}"),
@@ -227,8 +298,11 @@ pub fn execute(config: RunConfig) -> Result<()> {
             log_info(&config, "");
             log_info(&config, "Layer 1 REJECTED. Generating rework feedback...");
 
-            if attempt >= config.max_rework + 1 {
-                log_info(&config, "Rework limit reached at Layer 1. Escalating to human.");
+            if attempt > config.max_rework {
+                log_info(
+                    &config,
+                    "Rework limit reached at Layer 1. Escalating to human.",
+                );
                 status = "escalated".to_string();
                 break;
             }
@@ -236,11 +310,18 @@ pub fn execute(config: RunConfig) -> Result<()> {
             // Format L1 failures as structured feedback
             let mut feedback_lines = vec!["## Layer 1 (Static Rules) Failures\n".to_string()];
             for f in &l1_failures {
-                let checker = f.get("checker").and_then(|v| v.as_str()).unwrap_or("unknown");
-                let output = f.get("output").and_then(|v| v.as_str()).unwrap_or("no details");
+                let checker = f
+                    .get("checker")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let output = f
+                    .get("output")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("no details");
                 feedback_lines.push(format!("- **{checker}**: {output}"));
             }
-            feedback_lines.push("\nFix these issues before your changes can be accepted.".to_string());
+            feedback_lines
+                .push("\nFix these issues before your changes can be accepted.".to_string());
             fs::write(&feedback_file, feedback_lines.join("\n"))?;
 
             continue;
@@ -263,7 +344,11 @@ pub fn execute(config: RunConfig) -> Result<()> {
 
         let judge_output_file = run_dir.join(format!("judge-attempt-{attempt}.log"));
         let diff_content = fs::read_to_string(&diff_file).unwrap_or_default();
-        let capped_diff: String = diff_content.lines().take(2000).collect::<Vec<_>>().join("\n");
+        let capped_diff: String = diff_content
+            .lines()
+            .take(2000)
+            .collect::<Vec<_>>()
+            .join("\n");
 
         let judge_prompt = format!(
             "You are an independent code reviewer for the Harness governance system.\n\
@@ -288,16 +373,15 @@ pub fn execute(config: RunConfig) -> Result<()> {
         let judge_exit = run_judge(&config.judge, &judge_prompt, &judge_output_file)?;
 
         if judge_exit != 0 {
-            log_info(&config, &format!("  AI judge failed to run (exit {judge_exit}). Accepting by default."));
+            log_info(
+                &config,
+                &format!("  AI judge failed to run (exit {judge_exit}). Accepting by default."),
+            );
             status = "passed".to_string();
             break;
         }
 
         let judge_text = fs::read_to_string(&judge_output_file).unwrap_or_default();
-
-        // Parse verdict
-        let verdict_re = Regex::new(r"VERDICT:\s*(\w+)").unwrap();
-        let summary_re = Regex::new(r"SUMMARY:\s*(.*)").unwrap();
 
         let verdict = verdict_re
             .captures(&judge_text)
@@ -319,8 +403,6 @@ pub fn execute(config: RunConfig) -> Result<()> {
             log_info(&config, &format!("  AI judge: REWORK — {summary}"));
 
             // Extract rework items
-            let items_re = Regex::new(r"(?s)ITEMS:\s*\n(.*?)(?:SUMMARY:|===)").unwrap();
-            let item_re = Regex::new(r"\[(\w+)\]\s*(.*)").unwrap();
 
             let rework_items: Vec<Value> = items_re
                 .captures(&judge_text)
@@ -351,12 +433,19 @@ pub fn execute(config: RunConfig) -> Result<()> {
             // Save feedback for next rework cycle
             let mut feedback_lines = vec!["## Layer 2 (AI Judge) Review Findings\n".to_string()];
             for item in &rework_items {
-                let cat = item.get("category").and_then(|v| v.as_str()).unwrap_or("[quality]");
-                let desc = item.get("description").and_then(|v| v.as_str()).unwrap_or("");
+                let cat = item
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("[quality]");
+                let desc = item
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 feedback_lines.push(format!("- **{cat}** {desc}"));
             }
             feedback_lines.push(format!("\nSummary: {summary}"));
-            feedback_lines.push("\nFix these issues. Your changes will be re-evaluated.".to_string());
+            feedback_lines
+                .push("\nFix these issues. Your changes will be re-evaluated.".to_string());
             fs::write(&feedback_file, feedback_lines.join("\n"))?;
 
             // Save L2 report
@@ -369,14 +458,26 @@ pub fn execute(config: RunConfig) -> Result<()> {
                 }))?,
             )?;
 
-            if attempt >= config.max_rework + 1 {
+            if attempt > config.max_rework {
                 log_info(&config, "");
-                log_info(&config, &format!("Rework limit reached ({}). Escalating to human.", config.max_rework));
+                log_info(
+                    &config,
+                    &format!(
+                        "Rework limit reached ({}). Escalating to human.",
+                        config.max_rework
+                    ),
+                );
                 status = "escalated".to_string();
             }
         } else {
-            log_info(&config, "  AI judge: could not parse verdict. Accepting by default.");
-            log_info(&config, &format!("  (Raw output saved to {})", judge_output_file.display()));
+            log_info(
+                &config,
+                "  AI judge: could not parse verdict. Accepting by default.",
+            );
+            log_info(
+                &config,
+                &format!("  (Raw output saved to {})", judge_output_file.display()),
+            );
             status = "passed".to_string();
             break;
         }
@@ -389,7 +490,10 @@ pub fn execute(config: RunConfig) -> Result<()> {
     // Agent exit code is authoritative: if the agent reports failure (e.g.
     // eval resolved=false), governance approval alone doesn't override that.
     if status == "passed" && last_agent_exit != 0 {
-        log_info(&config, &format!("Agent exited with code {last_agent_exit} — overriding governance pass"));
+        log_info(
+            &config,
+            &format!("Agent exited with code {last_agent_exit} — overriding governance pass"),
+        );
         status = "error".to_string();
     }
 
@@ -507,7 +611,9 @@ fn git_rev_parse(workdir: &Path, refspec: &str) -> Option<String> {
         .ok()
         .and_then(|o| {
             if o.status.success() {
-                String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
             } else {
                 None
             }
@@ -528,7 +634,13 @@ fn run_agent(cmd: &[String], workdir: &Path, log_path: &Path, repo_root: &Path) 
     Ok(status.code().unwrap_or(1))
 }
 
-fn run_agent_with_stdin(cmd: &[String], workdir: &Path, input: &str, log_path: &Path, repo_root: &Path) -> Result<i32> {
+fn run_agent_with_stdin(
+    cmd: &[String],
+    workdir: &Path,
+    input: &str,
+    log_path: &Path,
+    repo_root: &Path,
+) -> Result<i32> {
     let log_file = fs::File::create(log_path)?;
     let mut child = Command::new(&cmd[0])
         .args(&cmd[1..])
@@ -595,9 +707,7 @@ fn observe_changes(workdir: &Path, base_ref: &str, diff_file: &Path) -> Result<(
     }
 
     // Check for unstaged/staged changes
-    let unstaged = Command::new("git")
-        .args(["-C", &wd, "diff"])
-        .output()?;
+    let unstaged = Command::new("git").args(["-C", &wd, "diff"]).output()?;
     let staged = Command::new("git")
         .args(["-C", &wd, "diff", "--cached"])
         .output()?;

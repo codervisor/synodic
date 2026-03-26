@@ -124,7 +124,10 @@ impl CopilotLogParser {
 
                     events.push(Event::new(
                         EventType::ToolCallError,
-                        format!("Copilot agent action failed: {action}: {}", truncate(detail, 120)),
+                        format!(
+                            "Copilot agent action failed: {action}: {}",
+                            truncate(detail, 120)
+                        ),
                         Severity::Medium,
                         "copilot".to_string(),
                         serde_json::json!({
@@ -247,7 +250,9 @@ pub fn find_copilot_logs(project_dir: &Path) -> Result<Vec<std::path::PathBuf>> 
             if let Ok(entries) = std::fs::read_dir(&vscode_ext) {
                 for entry in entries.flatten() {
                     let name = entry.file_name().to_string_lossy().to_string();
-                    if name.starts_with("github.copilot-chat-") || name.starts_with("github.copilot-") {
+                    if name.starts_with("github.copilot-chat-")
+                        || name.starts_with("github.copilot-")
+                    {
                         let ext_dir = entry.path();
                         // Look for conversation logs
                         let conv_dir = ext_dir.join("conversations");
@@ -282,9 +287,7 @@ fn collect_jsonl_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<
 }
 
 fn dirs_path() -> Option<std::path::PathBuf> {
-    std::env::var("HOME")
-        .ok()
-        .map(std::path::PathBuf::from)
+    std::env::var("HOME").ok().map(std::path::PathBuf::from)
 }
 
 #[cfg(test)]
@@ -308,7 +311,9 @@ mod tests {
             r#"{"event": "tool_error", "tool": "terminal", "message": "Command failed with exit code 1"}"#,
         ]);
         let events = parser.parse(log.path()).unwrap();
-        assert!(events.iter().any(|e| e.event_type == EventType::ToolCallError));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ToolCallError));
         assert!(events.iter().any(|e| e.source == "copilot"));
     }
 
@@ -319,7 +324,9 @@ mod tests {
             r#"{"event": "completion", "outcome": "error", "message": "Rate limit exceeded"}"#,
         ]);
         let events = parser.parse(log.path()).unwrap();
-        assert!(events.iter().any(|e| e.event_type == EventType::ToolCallError));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ToolCallError));
     }
 
     #[test]
@@ -329,7 +336,9 @@ mod tests {
             r#"{"event": "completion_rejected", "reason": "content_filter: potentially unsafe"}"#,
         ]);
         let events = parser.parse(log.path()).unwrap();
-        assert!(events.iter().any(|e| e.event_type == EventType::ComplianceViolation));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ComplianceViolation));
     }
 
     #[test]
@@ -339,7 +348,9 @@ mod tests {
             r#"{"event": "agent_action", "action": "file_edit", "status": "error", "error": "Permission denied"}"#,
         ]);
         let events = parser.parse(log.path()).unwrap();
-        assert!(events.iter().any(|e| e.event_type == EventType::ToolCallError));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ToolCallError));
     }
 
     #[test]
@@ -356,11 +367,12 @@ mod tests {
     #[test]
     fn test_parse_secret_in_output() {
         let parser = CopilotLogParser::new();
-        let log = write_temp_log(&[
-            r#"{"event": "completion", "output": "const API_KEY=sk-secret123"}"#,
-        ]);
+        let log =
+            write_temp_log(&[r#"{"event": "completion", "output": "const API_KEY=sk-secret123"}"#]);
         let events = parser.parse(log.path()).unwrap();
-        assert!(events.iter().any(|e| e.event_type == EventType::ComplianceViolation));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ComplianceViolation));
     }
 
     #[test]

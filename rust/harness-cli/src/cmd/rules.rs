@@ -36,8 +36,8 @@ impl RulesCmd {
                     println!("{}", serde_json::to_string_pretty(&rules)?);
                 } else {
                     println!(
-                        "{:<25} {:<22} {:<10} {:<8} {}",
-                        "NAME", "EVENT_TYPE", "SEVERITY", "ENABLED", "DESCRIPTION"
+                        "{:<25} {:<22} {:<10} {:<8} DESCRIPTION",
+                        "NAME", "EVENT_TYPE", "SEVERITY", "ENABLED"
                     );
                     println!("{}", "-".repeat(90));
                     for r in &rules {

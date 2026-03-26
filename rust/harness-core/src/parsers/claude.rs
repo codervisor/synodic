@@ -78,7 +78,10 @@ impl ClaudeLogParser {
                         None
                     }
                 }),
-            "tool_result" => obj.get("content").and_then(|v| v.as_str()).map(String::from),
+            "tool_result" => obj
+                .get("content")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             _ => None,
         };
 
@@ -179,7 +182,9 @@ mod tests {
         ]);
         let events = parser.parse(log.path()).unwrap();
         // Should get at least a tool_call_error event
-        assert!(events.iter().any(|e| e.event_type == EventType::ToolCallError));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ToolCallError));
     }
 
     #[test]
@@ -201,7 +206,9 @@ mod tests {
             r#"{"type": "tool_result", "content": "config: API_KEY=sk-abc123secret"}"#,
         ]);
         let events = parser.parse(log.path()).unwrap();
-        assert!(events.iter().any(|e| e.event_type == EventType::ComplianceViolation));
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ComplianceViolation));
     }
 
     #[test]
@@ -223,9 +230,8 @@ mod tests {
     #[test]
     fn test_parse_line_no_error() {
         let parser = ClaudeLogParser::new();
-        let events = parser.parse_line(
-            r#"{"type": "tool_result", "is_error": false, "content": "success"}"#,
-        );
+        let events = parser
+            .parse_line(r#"{"type": "tool_result", "is_error": false, "content": "success"}"#);
         assert!(events.is_empty());
     }
 }
