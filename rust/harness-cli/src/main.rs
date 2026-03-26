@@ -7,7 +7,11 @@ use clap::Parser;
 
 /// Synodic — AI agent event governance platform
 #[derive(Parser)]
-#[command(name = "synodic", version, about = "The tool that watches the AI agents.")]
+#[command(
+    name = "synodic",
+    version,
+    about = "The tool that watches the AI agents."
+)]
 enum Cli {
     /// Initialize .harness/ directory and SQLite database
     Init(cmd::init::InitCmd),

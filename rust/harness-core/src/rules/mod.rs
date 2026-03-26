@@ -101,11 +101,7 @@ impl RuleEngine {
         self.rules
             .iter()
             .filter(|r| {
-                self.tracker
-                    .counts
-                    .get(&r.name)
-                    .copied()
-                    .unwrap_or(0)
+                self.tracker.counts.get(&r.name).copied().unwrap_or(0)
                     >= self.tracker.promotion_threshold
             })
             .collect()
@@ -234,6 +230,8 @@ mod tests {
     fn test_file_not_found_detection() {
         let mut engine = RuleEngine::new(default_rules());
         let matches = engine.evaluate("Error: No such file or directory: /tmp/missing.txt");
-        assert!(matches.iter().any(|m| m.rule_name == "nonexistent-file-ref"));
+        assert!(matches
+            .iter()
+            .any(|m| m.rule_name == "nonexistent-file-ref"));
     }
 }

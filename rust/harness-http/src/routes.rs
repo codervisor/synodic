@@ -64,10 +64,16 @@ async fn list_events(
     };
 
     let store = state.store.lock().map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("lock error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("lock error: {e}"),
+        )
     })?;
     let events = store.list(&filter).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("query error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("query error: {e}"),
+        )
     })?;
     Ok(Json(events))
 }
@@ -105,10 +111,16 @@ async fn submit_event(
     );
 
     let store = state.store.lock().map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("lock error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("lock error: {e}"),
+        )
     })?;
     store.insert(&event).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("insert error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("insert error: {e}"),
+        )
     })?;
 
     // Broadcast to WebSocket subscribers
@@ -122,12 +134,18 @@ async fn get_event(
     Path(id): Path<String>,
 ) -> Result<Json<Event>, (StatusCode, String)> {
     let store = state.store.lock().map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("lock error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("lock error: {e}"),
+        )
     })?;
     match store.get(&id) {
         Ok(Some(event)) => Ok(Json(event)),
         Ok(None) => Err((StatusCode::NOT_FOUND, format!("event not found: {id}"))),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, format!("query error: {e}"))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("query error: {e}"),
+        )),
     }
 }
 
@@ -142,7 +160,10 @@ async fn resolve_event(
     Json(body): Json<ResolveBody>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let store = state.store.lock().map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("lock error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("lock error: {e}"),
+        )
     })?;
     store
         .resolve(&id, body.notes.as_deref().unwrap_or(""))
@@ -163,10 +184,16 @@ async fn get_stats(
     State(state): State<AppState>,
 ) -> Result<Json<harness_core::events::Stats>, (StatusCode, String)> {
     let store = state.store.lock().map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("lock error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("lock error: {e}"),
+        )
     })?;
     let stats = store.stats(&EventFilter::default()).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("stats error: {e}"))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("stats error: {e}"),
+        )
     })?;
     Ok(Json(stats))
 }

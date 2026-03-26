@@ -58,8 +58,8 @@ impl ListCmd {
             eprintln!("No events found.");
         } else {
             println!(
-                "{:<28} {:<22} {:<10} {:<10} {}",
-                "ID", "TYPE", "SEVERITY", "STATUS", "TITLE"
+                "{:<28} {:<22} {:<10} {:<10} TITLE",
+                "ID", "TYPE", "SEVERITY", "STATUS"
             );
             println!("{}", "-".repeat(90));
             for e in &events {

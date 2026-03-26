@@ -268,22 +268,43 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
     log_info(config, "");
 
     // Phase 1: AI consults on the project and produces a test plan
-    log_info(config, "Phase 1: Analyzing project and proposing test strategy...");
+    log_info(
+        config,
+        "Phase 1: Analyzing project and proposing test strategy...",
+    );
     let mut plan = consult::analyze(config, run_dir)?;
 
     log_info(config, &format!("  Strategy: {}", plan.strategy));
-    log_info(config, &format!("  Frameworks: {}", plan.frameworks.join(", ")));
+    log_info(
+        config,
+        &format!("  Frameworks: {}", plan.frameworks.join(", ")),
+    );
     log_info(config, &format!("  Tiers: {}", plan.tiers.len()));
     for (i, tier) in plan.tiers.iter().enumerate() {
         let test_count: usize = tier.tests.len();
-        log_info(config, &format!(
-            "    {}. {} — {} test(s) [{}]",
-            i + 1, tier.name, test_count, tier.purpose
-        ));
+        log_info(
+            config,
+            &format!(
+                "    {}. {} — {} test(s) [{}]",
+                i + 1,
+                tier.name,
+                test_count,
+                tier.purpose
+            ),
+        );
     }
     if !plan.infrastructure.is_empty() {
-        log_info(config, &format!("  Infrastructure: {}",
-            plan.infrastructure.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join(", ")));
+        log_info(
+            config,
+            &format!(
+                "  Infrastructure: {}",
+                plan.infrastructure
+                    .iter()
+                    .map(|i| i.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
     }
     if !plan.risks.is_empty() {
         log_info(config, "  Risks:");
@@ -296,8 +317,16 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
     if config.dry_run {
         log_info(config, "DRY RUN — would execute:");
         for tier in &plan.tiers {
-            log_info(config, &format!("  Tier '{}': {} setup cmd(s), {} test(s), {} run cmd(s)",
-                tier.name, tier.setup_commands.len(), tier.tests.len(), tier.run_commands.len()));
+            log_info(
+                config,
+                &format!(
+                    "  Tier '{}': {} setup cmd(s), {} test(s), {} run cmd(s)",
+                    tier.name,
+                    tier.setup_commands.len(),
+                    tier.tests.len(),
+                    tier.run_commands.len()
+                ),
+            );
         }
         return Ok(MetaResult {
             plan,
@@ -315,10 +344,13 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
 
     let execution = loop {
         iteration += 1;
-        log_info(config, &format!(
-            "Phase 2: Implementing and executing tests (attempt {}/{})",
-            iteration, max_iterations
-        ));
+        log_info(
+            config,
+            &format!(
+                "Phase 2: Implementing and executing tests (attempt {}/{})",
+                iteration, max_iterations
+            ),
+        );
 
         let exec = execute::run_plan(config, &plan, run_dir, iteration)?;
 
@@ -331,10 +363,13 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
             } else {
                 "FAIL"
             };
-            log_info(config, &format!(
-                "  Tier '{}': {} ({} passed, {} failed)",
-                tier_exec.tier_name, status, tier_exec.passed, tier_exec.failed
-            ));
+            log_info(
+                config,
+                &format!(
+                    "  Tier '{}': {} ({} passed, {} failed)",
+                    tier_exec.tier_name, status, tier_exec.passed, tier_exec.failed
+                ),
+            );
         }
         log_info(config, "");
 
@@ -343,10 +378,13 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
 
         if !needs_rework || iteration >= max_iterations {
             if needs_rework && iteration >= max_iterations {
-                log_info(config, &format!(
-                    "  Rework limit reached ({} attempts). Proceeding with partial results.",
-                    max_iterations
-                ));
+                log_info(
+                    config,
+                    &format!(
+                        "  Rework limit reached ({} attempts). Proceeding with partial results.",
+                        max_iterations
+                    ),
+                );
             }
             break exec;
         }
@@ -355,15 +393,27 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
         log_info(config, "  Tests failed to run properly. Diagnosing...");
         let diagnosis = consult::diagnose(config, &plan, &exec, run_dir, iteration)?;
 
-        log_info(config, &format!("  Root cause: {} ({:?})", diagnosis.root_cause, diagnosis.failure_kind));
+        log_info(
+            config,
+            &format!(
+                "  Root cause: {} ({:?})",
+                diagnosis.root_cause, diagnosis.failure_kind
+            ),
+        );
         log_info(config, &format!("  Salvageable: {}", diagnosis.salvageable));
         for fix in &diagnosis.fixes {
-            log_info(config, &format!("  Fix: {} [{}]", fix.description, fix.target));
+            log_info(
+                config,
+                &format!("  Fix: {} [{}]", fix.description, fix.target),
+            );
         }
         log_info(config, "");
 
         if !diagnosis.salvageable {
-            log_info(config, "  AI determined the approach needs fundamental rethinking.");
+            log_info(
+                config,
+                "  AI determined the approach needs fundamental rethinking.",
+            );
             log_info(config, "  Re-consulting with failure context...");
             log_info(config, "");
 
@@ -381,12 +431,18 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
     log_info(config, "Phase 3: Validating test result reliability...");
     let validation = validate::assess(config, &execution, run_dir)?;
 
-    log_info(config, &format!("  Confidence: {:.0}%", validation.confidence * 100.0));
+    log_info(
+        config,
+        &format!("  Confidence: {:.0}%", validation.confidence * 100.0),
+    );
     log_info(config, &format!("  Summary: {}", validation.summary));
     for assessment in &validation.assessments {
         if !assessment.reliable {
             let concern = assessment.concern.as_deref().unwrap_or("unknown");
-            log_info(config, &format!("    [{concern}] {}", assessment.test_description));
+            log_info(
+                config,
+                &format!("    [{concern}] {}", assessment.test_description),
+            );
         }
     }
     if !validation.next_actions.is_empty() {
@@ -406,10 +462,13 @@ pub fn run(config: &MetaConfig, run_dir: &Path) -> anyhow::Result<MetaResult> {
     };
 
     if !diagnosis_history.is_empty() {
-        log_info(config, &format!(
-            "  ({} rework iteration(s) were needed to stabilize test infrastructure)",
-            diagnosis_history.len()
-        ));
+        log_info(
+            config,
+            &format!(
+                "  ({} rework iteration(s) were needed to stabilize test infrastructure)",
+                diagnosis_history.len()
+            ),
+        );
     }
 
     Ok(MetaResult {
@@ -468,7 +527,10 @@ fn apply_fixes(mut plan: TestPlan, fixes: &[PlanFix]) -> TestPlan {
                     }
                 }
             }
-            FixAction::ReplaceTest { file_path, new_code } => {
+            FixAction::ReplaceTest {
+                file_path,
+                new_code,
+            } => {
                 for tier in &mut plan.tiers {
                     for test in &mut tier.tests {
                         if test.file_path == *file_path {
@@ -593,7 +655,9 @@ mod tests {
             },
         }];
         plan = apply_fixes(plan, &fixes);
-        assert!(plan.tiers[0].setup_commands.contains(&"pip install numpy".to_string()));
+        assert!(plan.tiers[0]
+            .setup_commands
+            .contains(&"pip install numpy".to_string()));
     }
 
     #[test]
@@ -608,7 +672,9 @@ mod tests {
             },
         }];
         plan = apply_fixes(plan, &fixes);
-        assert!(plan.tiers[0].tests[0].code.contains("from mylib import parse"));
+        assert!(plan.tiers[0].tests[0]
+            .code
+            .contains("from mylib import parse"));
     }
 
     #[test]
@@ -675,7 +741,7 @@ mod tests {
                 exit_code: 1,
                 passed: 1,
                 failed: 2,
-                }],
+            }],
             infra_output: String::new(),
             infra_ok: true,
             total_passed: 1,

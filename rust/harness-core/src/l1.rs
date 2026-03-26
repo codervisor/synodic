@@ -132,8 +132,14 @@ mod tests {
         let mut eval = L1Evaluator::new("test");
         let result = eval.evaluate("config API_KEY=sk-abc123secret");
         assert!(!result.passed);
-        assert!(result.matches.iter().any(|f| f.rule_name == "secret-in-output"));
-        assert!(result.events.iter().any(|e| e.event_type == EventType::ComplianceViolation));
+        assert!(result
+            .matches
+            .iter()
+            .any(|f| f.rule_name == "secret-in-output"));
+        assert!(result
+            .events
+            .iter()
+            .any(|e| e.event_type == EventType::ComplianceViolation));
     }
 
     #[test]
@@ -150,7 +156,10 @@ mod tests {
 ";
         let result = eval.evaluate_diff(diff);
         assert!(!result.passed);
-        assert!(result.matches.iter().any(|f| f.rule_name == "secret-in-output"));
+        assert!(result
+            .matches
+            .iter()
+            .any(|f| f.rule_name == "secret-in-output"));
     }
 
     #[test]
@@ -170,11 +179,7 @@ mod tests {
     #[test]
     fn test_evaluate_all_multiple_chunks() {
         let mut eval = L1Evaluator::new("test");
-        let result = eval.evaluate_all(&[
-            "normal content",
-            "config API_KEY=sk-abc123",
-            "rm -rf /",
-        ]);
+        let result = eval.evaluate_all(&["normal content", "config API_KEY=sk-abc123", "rm -rf /"]);
         assert!(!result.passed);
         assert!(result.matches.len() >= 2);
     }

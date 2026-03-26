@@ -49,10 +49,7 @@ pub fn display(harness_dir: &Path, json_mode: bool, tail_n: usize) -> Result<()>
                     .get("work_id")
                     .and_then(|v| v.as_str())
                     .unwrap_or("?");
-                let status = record
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let status = record.get("status").and_then(|v| v.as_str()).unwrap_or("?");
                 let attempt = record
                     .get("metrics")
                     .and_then(|m| m.get("attempt_count"))
