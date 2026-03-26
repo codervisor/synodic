@@ -10,10 +10,7 @@ use harness_core::storage::EventStore;
 use crate::state::AppState;
 
 /// WebSocket upgrade handler — streams governance events in real time.
-pub async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
@@ -36,7 +33,9 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     };
     if let Some(snapshot) = snapshot_msg {
         let _ = socket
-            .send(Message::Text(serde_json::to_string(&snapshot).unwrap_or_default().into()))
+            .send(Message::Text(
+                serde_json::to_string(&snapshot).unwrap_or_default().into(),
+            ))
             .await;
     }
 

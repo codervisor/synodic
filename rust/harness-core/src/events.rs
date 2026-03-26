@@ -207,7 +207,12 @@ mod tests {
 
     #[test]
     fn test_severity_roundtrip() {
-        for s in [Severity::Low, Severity::Medium, Severity::High, Severity::Critical] {
+        for s in [
+            Severity::Low,
+            Severity::Medium,
+            Severity::High,
+            Severity::Critical,
+        ] {
             let str = s.as_str();
             let parsed: Severity = str.parse().unwrap();
             assert_eq!(s, parsed);

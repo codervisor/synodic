@@ -46,20 +46,31 @@ fn build_validation_prompt(execution: &TestExecution) -> String {
     p.push_str("## Testing Strategy\n\n");
     p.push_str(&format!("Strategy: {}\n", execution.plan.strategy));
     p.push_str(&format!("Rationale: {}\n", execution.plan.rationale));
-    p.push_str(&format!("Frameworks: {}\n", execution.plan.frameworks.join(", ")));
-    p.push_str(&format!("Rework iterations needed: {}\n\n", execution.rework_iterations));
+    p.push_str(&format!(
+        "Frameworks: {}\n",
+        execution.plan.frameworks.join(", ")
+    ));
+    p.push_str(&format!(
+        "Rework iterations needed: {}\n\n",
+        execution.rework_iterations
+    ));
 
     if !execution.plan.risks.is_empty() {
         p.push_str("Known risks:\n");
         for risk in &execution.plan.risks {
             p.push_str(&format!("  - {risk}\n"));
         }
-        p.push_str("\n");
+        p.push('\n');
     }
 
     // Per-tier details
     for (i, tier) in execution.plan.tiers.iter().enumerate() {
-        p.push_str(&format!("## Tier {}: {} [{}]\n\n", i + 1, tier.name, tier.purpose));
+        p.push_str(&format!(
+            "## Tier {}: {} [{}]\n\n",
+            i + 1,
+            tier.name,
+            tier.purpose
+        ));
 
         for test in &tier.tests {
             p.push_str(&format!(
@@ -82,7 +93,12 @@ fn build_validation_prompt(execution: &TestExecution) -> String {
                 status, tier_exec.exit_code, tier_exec.passed, tier_exec.failed
             ));
             if !tier_exec.test_output.is_empty() {
-                let capped: String = tier_exec.test_output.lines().take(200).collect::<Vec<_>>().join("\n");
+                let capped: String = tier_exec
+                    .test_output
+                    .lines()
+                    .take(200)
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 p.push_str(&format!("```\n{capped}\n```\n\n"));
             }
         }
@@ -111,12 +127,7 @@ fn build_validation_prompt(execution: &TestExecution) -> String {
     p
 }
 
-fn invoke_agent(
-    agent_cmd: &str,
-    prompt: &str,
-    run_dir: &Path,
-    phase: &str,
-) -> Result<String> {
+fn invoke_agent(agent_cmd: &str, prompt: &str, run_dir: &Path, phase: &str) -> Result<String> {
     let output_path = run_dir.join(format!("{phase}-response.txt"));
 
     let child = Command::new(agent_cmd)
@@ -223,7 +234,10 @@ mod tests {
         let json = r#"{"confidence": 0.3, "summary": "Unreliable", "assessments": [{"test_description": "Test import", "reliable": false, "concern": "false_negative", "reasoning": "ModuleNotFoundError"}], "next_actions": ["Install deps"]}"#;
         let report = parse_validation_report(json).unwrap();
         assert!(!report.assessments[0].reliable);
-        assert_eq!(report.assessments[0].concern.as_deref(), Some("false_negative"));
+        assert_eq!(
+            report.assessments[0].concern.as_deref(),
+            Some("false_negative")
+        );
     }
 
     #[test]

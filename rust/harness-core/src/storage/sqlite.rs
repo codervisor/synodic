@@ -29,8 +29,9 @@ impl SqliteStore {
     }
 
     fn migrate(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS events (
+        self.conn
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS events (
                 id TEXT PRIMARY KEY,
                 event_type TEXT NOT NULL,
                 title TEXT NOT NULL,
@@ -68,8 +69,8 @@ impl SqliteStore {
                 INSERT INTO events_fts(id, title, source, resolution_notes)
                 VALUES (new.id, new.title, new.source, new.resolution_notes);
             END;",
-        )
-        .context("running migrations")?;
+            )
+            .context("running migrations")?;
         Ok(())
     }
 
@@ -82,23 +83,24 @@ impl SqliteStore {
 
         Ok(Event {
             id: row.get("id")?,
-            event_type: event_type_str
-                .parse()
-                .map_err(|e: String| rusqlite::Error::FromSqlConversionFailure(
+            event_type: event_type_str.parse().map_err(|e: String| {
+                rusqlite::Error::FromSqlConversionFailure(
                     0,
                     rusqlite::types::Type::Text,
                     Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-                ))?,
+                )
+            })?,
             title: row.get("title")?,
-            severity: severity_str
-                .parse()
-                .map_err(|e: String| rusqlite::Error::FromSqlConversionFailure(
+            severity: severity_str.parse().map_err(|e: String| {
+                rusqlite::Error::FromSqlConversionFailure(
                     0,
                     rusqlite::types::Type::Text,
                     Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-                ))?,
+                )
+            })?,
             source: row.get("source")?,
-            metadata: serde_json::from_str(&metadata_str).unwrap_or(serde_json::Value::Object(Default::default())),
+            metadata: serde_json::from_str(&metadata_str)
+                .unwrap_or(serde_json::Value::Object(Default::default())),
             resolved: row.get::<_, i32>("resolved")? != 0,
             resolution_notes: row.get("resolution_notes")?,
             created_at: chrono::DateTime::parse_from_rfc3339(&created_str)
@@ -174,7 +176,8 @@ impl EventStore for SqliteStore {
             sql.push_str(&format!(" LIMIT {}", limit));
         }
 
-        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|b| b.as_ref()).collect();
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params_ref.as_slice(), Self::row_to_event)?;
 
@@ -204,8 +207,12 @@ impl EventStore for SqliteStore {
         let mut by_type: HashMap<String, usize> = HashMap::new();
         let mut by_severity: HashMap<String, usize> = HashMap::new();
         for e in &events {
-            *by_type.entry(e.event_type.as_str().to_string()).or_default() += 1;
-            *by_severity.entry(e.severity.as_str().to_string()).or_default() += 1;
+            *by_type
+                .entry(e.event_type.as_str().to_string())
+                .or_default() += 1;
+            *by_severity
+                .entry(e.severity.as_str().to_string())
+                .or_default() += 1;
         }
 
         Ok(Stats {
@@ -274,8 +281,12 @@ mod tests {
     #[test]
     fn test_list_all() {
         let store = test_store();
-        store.insert(&sample_event("a", EventType::Hallucination, Severity::Low)).unwrap();
-        store.insert(&sample_event("b", EventType::ToolCallError, Severity::High)).unwrap();
+        store
+            .insert(&sample_event("a", EventType::Hallucination, Severity::Low))
+            .unwrap();
+        store
+            .insert(&sample_event("b", EventType::ToolCallError, Severity::High))
+            .unwrap();
 
         let all = store.list(&EventFilter::default()).unwrap();
         assert_eq!(all.len(), 2);
@@ -284,13 +295,19 @@ mod tests {
     #[test]
     fn test_list_filter_type() {
         let store = test_store();
-        store.insert(&sample_event("a", EventType::Hallucination, Severity::Low)).unwrap();
-        store.insert(&sample_event("b", EventType::ToolCallError, Severity::High)).unwrap();
+        store
+            .insert(&sample_event("a", EventType::Hallucination, Severity::Low))
+            .unwrap();
+        store
+            .insert(&sample_event("b", EventType::ToolCallError, Severity::High))
+            .unwrap();
 
-        let filtered = store.list(&EventFilter {
-            event_type: Some(EventType::Hallucination),
-            ..Default::default()
-        }).unwrap();
+        let filtered = store
+            .list(&EventFilter {
+                event_type: Some(EventType::Hallucination),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].title, "a");
     }
@@ -305,10 +322,12 @@ mod tests {
         store.insert(&e2).unwrap();
         store.resolve(&id, "fixed").unwrap();
 
-        let unresolved = store.list(&EventFilter {
-            unresolved_only: true,
-            ..Default::default()
-        }).unwrap();
+        let unresolved = store
+            .list(&EventFilter {
+                unresolved_only: true,
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(unresolved.len(), 1);
         assert_eq!(unresolved[0].title, "b");
     }
@@ -324,7 +343,10 @@ mod tests {
 
         let fetched = store.get(&id).unwrap().unwrap();
         assert!(fetched.resolved);
-        assert_eq!(fetched.resolution_notes.as_deref(), Some("addressed in PR #42"));
+        assert_eq!(
+            fetched.resolution_notes.as_deref(),
+            Some("addressed in PR #42")
+        );
         assert!(fetched.resolved_at.is_some());
     }
 
@@ -337,9 +359,19 @@ mod tests {
     #[test]
     fn test_stats() {
         let store = test_store();
-        store.insert(&sample_event("a", EventType::Hallucination, Severity::Low)).unwrap();
-        store.insert(&sample_event("b", EventType::ToolCallError, Severity::High)).unwrap();
-        store.insert(&sample_event("c", EventType::Hallucination, Severity::Medium)).unwrap();
+        store
+            .insert(&sample_event("a", EventType::Hallucination, Severity::Low))
+            .unwrap();
+        store
+            .insert(&sample_event("b", EventType::ToolCallError, Severity::High))
+            .unwrap();
+        store
+            .insert(&sample_event(
+                "c",
+                EventType::Hallucination,
+                Severity::Medium,
+            ))
+            .unwrap();
 
         let id = {
             let all = store.list(&EventFilter::default()).unwrap();
@@ -357,8 +389,20 @@ mod tests {
     #[test]
     fn test_search() {
         let store = test_store();
-        store.insert(&sample_event("missing file reference", EventType::Hallucination, Severity::Low)).unwrap();
-        store.insert(&sample_event("command failed", EventType::ToolCallError, Severity::High)).unwrap();
+        store
+            .insert(&sample_event(
+                "missing file reference",
+                EventType::Hallucination,
+                Severity::Low,
+            ))
+            .unwrap();
+        store
+            .insert(&sample_event(
+                "command failed",
+                EventType::ToolCallError,
+                Severity::High,
+            ))
+            .unwrap();
 
         let results = store.search("missing", 10).unwrap();
         assert_eq!(results.len(), 1);
@@ -369,9 +413,20 @@ mod tests {
     fn test_list_with_limit() {
         let store = test_store();
         for i in 0..10 {
-            store.insert(&sample_event(&format!("event {i}"), EventType::ToolCallError, Severity::Low)).unwrap();
+            store
+                .insert(&sample_event(
+                    &format!("event {i}"),
+                    EventType::ToolCallError,
+                    Severity::Low,
+                ))
+                .unwrap();
         }
-        let limited = store.list(&EventFilter { limit: Some(3), ..Default::default() }).unwrap();
+        let limited = store
+            .list(&EventFilter {
+                limit: Some(3),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(limited.len(), 3);
     }
 }

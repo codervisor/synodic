@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::Args;
 use crossterm::event::{self, Event as TermEvent, KeyCode, KeyEventKind};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use crossterm::ExecutableCommand;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
@@ -79,7 +81,10 @@ fn run_loop(
 
             // Header
             let header = Paragraph::new(Line::from(vec![
-                Span::styled(" SYNODIC ", Style::default().fg(Color::Black).bg(Color::Cyan).bold()),
+                Span::styled(
+                    " SYNODIC ",
+                    Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
+                ),
                 Span::raw("  AI Agent Governance  "),
                 Span::styled("LIVE", Style::default().fg(Color::Green).bold()),
             ]))
@@ -93,15 +98,31 @@ fn run_loop(
                 Span::raw("  Unresolved: "),
                 Span::styled(
                     stats.unresolved.to_string(),
-                    Style::default().fg(if stats.unresolved > 0 { Color::Red } else { Color::Green }).bold(),
+                    Style::default()
+                        .fg(if stats.unresolved > 0 {
+                            Color::Red
+                        } else {
+                            Color::Green
+                        })
+                        .bold(),
                 ),
                 Span::raw("  Resolution: "),
                 Span::styled(
-                    format!("{}%", if stats.total > 0 { (stats.total - stats.unresolved) * 100 / stats.total } else { 0 }),
+                    format!(
+                        "{}%",
+                        if stats.total > 0 {
+                            (stats.total - stats.unresolved) * 100 / stats.total
+                        } else {
+                            0
+                        }
+                    ),
                     Style::default().bold(),
                 ),
                 if let Some(ref t) = type_filter {
-                    Span::styled(format!("  Filter: {}", t), Style::default().fg(Color::Yellow))
+                    Span::styled(
+                        format!("  Filter: {}", t),
+                        Style::default().fg(Color::Yellow),
+                    )
                 } else {
                     Span::raw("")
                 },
@@ -141,7 +162,8 @@ fn run_loop(
                         Cell::from(title),
                         Cell::from(e.source.as_str()),
                         Cell::from(status).style(Style::default().fg(status_color)),
-                        Cell::from(e.created_at.format("%H:%M:%S").to_string()).style(Style::default().fg(Color::DarkGray)),
+                        Cell::from(e.created_at.format("%H:%M:%S").to_string())
+                            .style(Style::default().fg(Color::DarkGray)),
                     ])
                 })
                 .collect();
@@ -162,9 +184,10 @@ fn run_loop(
             frame.render_widget(table, chunks[2]);
 
             // Footer
-            let footer = Paragraph::new(
-                Span::styled(" q: quit  r: refresh ", Style::default().fg(Color::DarkGray)),
-            );
+            let footer = Paragraph::new(Span::styled(
+                " q: quit  r: refresh ",
+                Style::default().fg(Color::DarkGray),
+            ));
             frame.render_widget(footer, chunks[3]);
         })?;
 

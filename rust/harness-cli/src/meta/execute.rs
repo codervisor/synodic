@@ -37,7 +37,8 @@ pub fn run_plan(
     }
 
     // Phase 2: Provision infrastructure
-    let (infra_ok, infra_output) = provision_infrastructure(workdir, &plan.infrastructure, &iter_dir)?;
+    let (infra_ok, infra_output) =
+        provision_infrastructure(workdir, &plan.infrastructure, &iter_dir)?;
 
     if !infra_ok {
         // Infrastructure failed — return early so the rework loop can diagnose
@@ -87,7 +88,12 @@ pub fn run_plan(
     }
 
     // Phase 4: Teardown (always, even on failure)
-    run_teardown(workdir, &plan.teardown_commands, &plan.infrastructure, &iter_dir);
+    run_teardown(
+        workdir,
+        &plan.teardown_commands,
+        &plan.infrastructure,
+        &iter_dir,
+    );
 
     Ok(TestExecution {
         plan: plan.clone(),
@@ -104,8 +110,7 @@ pub fn run_plan(
 fn write_test_file(workdir: &Path, test: &super::TestProposal) -> Result<()> {
     let target = workdir.join(&test.file_path);
     if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("create dir for {}", test.file_path))?;
+        fs::create_dir_all(parent).with_context(|| format!("create dir for {}", test.file_path))?;
     }
     fs::write(&target, &test.code)
         .with_context(|| format!("write test file {}", test.file_path))?;
@@ -129,7 +134,10 @@ fn provision_infrastructure(
         if req.setup_command.is_empty() {
             continue;
         }
-        output.push_str(&format!("[infra:{}] setup: {}\n", req.name, req.setup_command));
+        output.push_str(&format!(
+            "[infra:{}] setup: {}\n",
+            req.name, req.setup_command
+        ));
         let result = run_shell_command(workdir, &req.setup_command)?;
         output.push_str(&result.output);
 
@@ -145,13 +153,19 @@ fn provision_infrastructure(
         if req.health_check.is_empty() {
             continue;
         }
-        output.push_str(&format!("[infra:{}] health check: {}\n", req.name, req.health_check));
+        output.push_str(&format!(
+            "[infra:{}] health check: {}\n",
+            req.name, req.health_check
+        ));
 
         let mut healthy = false;
         for attempt in 1..=5 {
             let result = run_shell_command(workdir, &req.health_check)?;
             if result.success {
-                output.push_str(&format!("[infra:{}] healthy (attempt {})\n", req.name, attempt));
+                output.push_str(&format!(
+                    "[infra:{}] healthy (attempt {})\n",
+                    req.name, attempt
+                ));
                 healthy = true;
                 break;
             }
@@ -162,7 +176,10 @@ fn provision_infrastructure(
         }
 
         if !healthy {
-            output.push_str(&format!("[infra:{}] health check FAILED after 5 attempts\n", req.name));
+            output.push_str(&format!(
+                "[infra:{}] health check FAILED after 5 attempts\n",
+                req.name
+            ));
             let _ = fs::write(iter_dir.join("infra-output.txt"), &output);
             return Ok((false, output));
         }
@@ -173,11 +190,7 @@ fn provision_infrastructure(
 }
 
 /// Execute a single test tier.
-fn execute_tier(
-    workdir: &Path,
-    tier: &super::TestTier,
-    iter_dir: &Path,
-) -> Result<TierExecution> {
+fn execute_tier(workdir: &Path, tier: &super::TestTier, iter_dir: &Path) -> Result<TierExecution> {
     // Run tier setup
     let mut setup_output = String::new();
     for cmd in &tier.setup_commands {
@@ -245,7 +258,10 @@ fn run_teardown(
 
     for req in infra {
         if !req.teardown_command.is_empty() {
-            output.push_str(&format!("[infra:{}] teardown: {}\n", req.name, req.teardown_command));
+            output.push_str(&format!(
+                "[infra:{}] teardown: {}\n",
+                req.name, req.teardown_command
+            ));
             if let Ok(result) = run_shell_command(workdir, &req.teardown_command) {
                 output.push_str(&result.output);
             }
@@ -309,7 +325,9 @@ fn extract_number_before(line: &str, keyword: &str) -> Option<usize> {
         .chars()
         .rev()
         .collect();
-    if num_str.is_empty() { return None; }
+    if num_str.is_empty() {
+        return None;
+    }
     num_str.parse().ok()
 }
 
@@ -327,7 +345,8 @@ mod tests {
 
     #[test]
     fn test_parse_mixed_output() {
-        let output = "========================= 3 passed, 2 failed in 0.15s ==========================";
+        let output =
+            "========================= 3 passed, 2 failed in 0.15s ==========================";
         let (passed, failed) = parse_test_results(output);
         assert_eq!(passed, 3);
         assert_eq!(failed, 2);
@@ -351,7 +370,10 @@ mod tests {
     #[test]
     fn test_extract_number_before() {
         assert_eq!(extract_number_before("5 passed", " passed"), Some(5));
-        assert_eq!(extract_number_before("31 passed; 0 failed", " passed"), Some(31));
+        assert_eq!(
+            extract_number_before("31 passed; 0 failed", " passed"),
+            Some(31)
+        );
         assert_eq!(extract_number_before("no match", " passed"), None);
     }
 

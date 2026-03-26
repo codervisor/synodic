@@ -32,7 +32,9 @@ fn parse_duration(s: &str) -> Result<Duration> {
         anyhow::bail!("empty duration string");
     }
     let (num_str, unit) = s.split_at(s.len() - 1);
-    let num: i64 = num_str.parse().map_err(|_| anyhow::anyhow!("invalid duration: {s}"))?;
+    let num: i64 = num_str
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid duration: {s}"))?;
     match unit {
         "s" => Ok(Duration::seconds(num)),
         "m" => Ok(Duration::minutes(num)),
@@ -90,7 +92,10 @@ impl CollectCmd {
                     let events = parser.parse(log_path)?;
                     // Filter events by timestamp
                     let events: Vec<_> = if let Some(cutoff_ts) = cutoff {
-                        events.into_iter().filter(|e| e.created_at >= cutoff_ts).collect()
+                        events
+                            .into_iter()
+                            .filter(|e| e.created_at >= cutoff_ts)
+                            .collect()
                     } else {
                         events
                     };
@@ -141,7 +146,10 @@ impl CollectCmd {
 
                     let events = parser.parse(log_path)?;
                     let events: Vec<_> = if let Some(cutoff_ts) = cutoff {
-                        events.into_iter().filter(|e| e.created_at >= cutoff_ts).collect()
+                        events
+                            .into_iter()
+                            .filter(|e| e.created_at >= cutoff_ts)
+                            .collect()
                     } else {
                         events
                     };

@@ -83,9 +83,10 @@ fn gather_project_context(config: &MetaConfig) -> Result<ProjectContext> {
         file_listing: list_project_files(workdir),
         existing_tests: find_existing_tests(workdir),
         config_files: read_config_files(workdir),
-        changes: config.diff.clone().unwrap_or_else(|| {
-            get_git_diff(workdir).unwrap_or_default()
-        }),
+        changes: config
+            .diff
+            .clone()
+            .unwrap_or_else(|| get_git_diff(workdir).unwrap_or_default()),
         spec: config.spec.clone().unwrap_or_default(),
     })
 }
@@ -145,7 +146,7 @@ fn build_consult_prompt(_config: &MetaConfig, ctx: &ProjectContext) -> String {
          - Every test must be complete and runnable\n\
          - Match existing project conventions\n\
          - Infrastructure requirements must be explicit\n\
-         - Risks should be honest — what might not work\n"
+         - Risks should be honest — what might not work\n",
     );
 
     p
@@ -169,15 +170,31 @@ fn build_reconsult_prompt(
 
     p.push_str("## Previous Approach (DO NOT REPEAT)\n\n");
     p.push_str(&format!("Strategy: {}\n", failed_exec.plan.strategy));
-    p.push_str(&format!("Frameworks: {}\n", failed_exec.plan.frameworks.join(", ")));
+    p.push_str(&format!(
+        "Frameworks: {}\n",
+        failed_exec.plan.frameworks.join(", ")
+    ));
     if !failed_exec.infra_output.is_empty() {
-        let capped: String = failed_exec.infra_output.lines().take(50).collect::<Vec<_>>().join("\n");
+        let capped: String = failed_exec
+            .infra_output
+            .lines()
+            .take(50)
+            .collect::<Vec<_>>()
+            .join("\n");
         p.push_str(&format!("\nInfra output:\n```\n{capped}\n```\n\n"));
     }
     for tier in &failed_exec.tiers {
         if !tier.test_output.is_empty() {
-            let capped: String = tier.test_output.lines().take(50).collect::<Vec<_>>().join("\n");
-            p.push_str(&format!("Tier '{}' output:\n```\n{capped}\n```\n\n", tier.tier_name));
+            let capped: String = tier
+                .test_output
+                .lines()
+                .take(50)
+                .collect::<Vec<_>>()
+                .join("\n");
+            p.push_str(&format!(
+                "Tier '{}' output:\n```\n{capped}\n```\n\n",
+                tier.tier_name
+            ));
         }
     }
 
@@ -199,7 +216,7 @@ fn build_diagnose_prompt(plan: &TestPlan, execution: &TestExecution) -> String {
 
     p.push_str(
         "You are a test infrastructure debugger. Tests failed to run properly.\n\
-         Analyze the error output and determine the root cause.\n\n"
+         Analyze the error output and determine the root cause.\n\n",
     );
 
     p.push_str("## Plan That Was Executed\n\n");
@@ -208,7 +225,12 @@ fn build_diagnose_prompt(plan: &TestPlan, execution: &TestExecution) -> String {
 
     if !execution.infra_ok {
         p.push_str("## Infrastructure Setup FAILED\n\n```\n");
-        let capped: String = execution.infra_output.lines().take(100).collect::<Vec<_>>().join("\n");
+        let capped: String = execution
+            .infra_output
+            .lines()
+            .take(100)
+            .collect::<Vec<_>>()
+            .join("\n");
         p.push_str(&capped);
         p.push_str("\n```\n\n");
     }
@@ -218,13 +240,23 @@ fn build_diagnose_prompt(plan: &TestPlan, execution: &TestExecution) -> String {
             p.push_str(&format!("## Tier '{}' — ", tier.tier_name));
             if !tier.setup_ok {
                 p.push_str("SETUP FAILED\n\n");
-                let capped: String = tier.setup_output.lines().take(80).collect::<Vec<_>>().join("\n");
+                let capped: String = tier
+                    .setup_output
+                    .lines()
+                    .take(80)
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 p.push_str(&format!("Setup output:\n```\n{capped}\n```\n\n"));
             } else {
                 p.push_str("TESTS DID NOT RUN\n\n");
             }
             if !tier.test_output.is_empty() {
-                let capped: String = tier.test_output.lines().take(100).collect::<Vec<_>>().join("\n");
+                let capped: String = tier
+                    .test_output
+                    .lines()
+                    .take(100)
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 p.push_str(&format!("Test output:\n```\n{capped}\n```\n\n"));
             }
         }
@@ -274,7 +306,12 @@ fn append_project_context(p: &mut String, ctx: &ProjectContext) {
 
     if !ctx.changes.is_empty() {
         p.push_str("## Changes to Test\n\n```diff\n");
-        let capped: String = ctx.changes.lines().take(3000).collect::<Vec<_>>().join("\n");
+        let capped: String = ctx
+            .changes
+            .lines()
+            .take(3000)
+            .collect::<Vec<_>>()
+            .join("\n");
         p.push_str(&capped);
         p.push_str("\n```\n\n");
     }
@@ -288,12 +325,7 @@ fn append_project_context(p: &mut String, ctx: &ProjectContext) {
 
 // ── AI invocation ───────────────────────────────────────────────────
 
-fn invoke_agent(
-    agent_cmd: &str,
-    prompt: &str,
-    run_dir: &Path,
-    phase: &str,
-) -> Result<String> {
+fn invoke_agent(agent_cmd: &str, prompt: &str, run_dir: &Path, phase: &str) -> Result<String> {
     let output_path = run_dir.join(format!("{phase}-response.txt"));
 
     let child = Command::new(agent_cmd)
@@ -327,8 +359,7 @@ fn parse_test_plan(response: &str) -> Result<TestPlan> {
     if let Ok(plan) = serde_json::from_str::<TestPlan>(response.trim()) {
         return Ok(plan);
     }
-    let json_str = extract_json_block(response)
-        .context("Could not find JSON in AI response")?;
+    let json_str = extract_json_block(response).context("Could not find JSON in AI response")?;
     serde_json::from_str::<TestPlan>(&json_str)
         .context("AI response JSON didn't match TestPlan schema")
 }
@@ -337,8 +368,8 @@ fn parse_diagnosis(response: &str) -> Result<Diagnosis> {
     if let Ok(d) = serde_json::from_str::<Diagnosis>(response.trim()) {
         return Ok(d);
     }
-    let json_str = extract_json_block(response)
-        .context("Could not find JSON in AI diagnosis response")?;
+    let json_str =
+        extract_json_block(response).context("Could not find JSON in AI diagnosis response")?;
     serde_json::from_str::<Diagnosis>(&json_str)
         .context("AI diagnosis JSON didn't match Diagnosis schema")
 }
@@ -408,7 +439,16 @@ fn list_project_files(workdir: &Path) -> String {
         }
         _ => {
             let output = Command::new("find")
-                .args([".", "-maxdepth", "2", "-type", "f", "-not", "-path", "./.git/*"])
+                .args([
+                    ".",
+                    "-maxdepth",
+                    "2",
+                    "-type",
+                    "f",
+                    "-not",
+                    "-path",
+                    "./.git/*",
+                ])
                 .current_dir(workdir)
                 .output();
             match output {
@@ -427,10 +467,30 @@ fn find_existing_tests(workdir: &Path) -> String {
 
     let output = Command::new("find")
         .args([
-            ".", "-maxdepth", "4", "-type", "f",
-            "(", "-name", "test_*", "-o", "-name", "*_test.*", "-o",
-            "-name", "*.test.*", "-o", "-name", "*.spec.*", ")",
-            "-not", "-path", "./.git/*", "-not", "-path", "*/node_modules/*",
+            ".",
+            "-maxdepth",
+            "4",
+            "-type",
+            "f",
+            "(",
+            "-name",
+            "test_*",
+            "-o",
+            "-name",
+            "*_test.*",
+            "-o",
+            "-name",
+            "*.test.*",
+            "-o",
+            "-name",
+            "*.spec.*",
+            ")",
+            "-not",
+            "-path",
+            "./.git/*",
+            "-not",
+            "-path",
+            "*/node_modules/*",
         ])
         .current_dir(workdir)
         .output();
@@ -447,10 +507,14 @@ fn find_existing_tests(workdir: &Path) -> String {
     }
 
     let configs = [
-        ("pytest.ini", "pytest"), ("pyproject.toml", "Python"),
-        ("jest.config.js", "Jest"), ("jest.config.ts", "Jest (TS)"),
-        ("vitest.config.ts", "Vitest"), (".mocharc.yml", "Mocha"),
-        ("Cargo.toml", "Cargo"), ("go.mod", "Go"),
+        ("pytest.ini", "pytest"),
+        ("pyproject.toml", "Python"),
+        ("jest.config.js", "Jest"),
+        ("jest.config.ts", "Jest (TS)"),
+        ("vitest.config.ts", "Vitest"),
+        (".mocharc.yml", "Mocha"),
+        ("Cargo.toml", "Cargo"),
+        ("go.mod", "Go"),
     ];
 
     for (file, name) in &configs {
@@ -465,8 +529,14 @@ fn find_existing_tests(workdir: &Path) -> String {
 fn read_config_files(workdir: &Path) -> String {
     let mut info = String::new();
     let configs = [
-        "package.json", "Cargo.toml", "pyproject.toml", "setup.py",
-        "go.mod", "Gemfile", "pom.xml", "build.gradle",
+        "package.json",
+        "Cargo.toml",
+        "pyproject.toml",
+        "setup.py",
+        "go.mod",
+        "Gemfile",
+        "pom.xml",
+        "build.gradle",
     ];
 
     for name in &configs {
@@ -495,14 +565,26 @@ fn get_git_diff(workdir: &Path) -> Option<String> {
         }
     }
 
-    let staged = Command::new("git").args(["diff", "--cached"]).current_dir(workdir).output().ok()?;
-    let unstaged = Command::new("git").args(["diff"]).current_dir(workdir).output().ok()?;
+    let staged = Command::new("git")
+        .args(["diff", "--cached"])
+        .current_dir(workdir)
+        .output()
+        .ok()?;
+    let unstaged = Command::new("git")
+        .args(["diff"])
+        .current_dir(workdir)
+        .output()
+        .ok()?;
     let combined = format!(
         "{}{}",
         String::from_utf8_lossy(&staged.stdout),
         String::from_utf8_lossy(&unstaged.stdout)
     );
-    if combined.trim().is_empty() { None } else { Some(combined) }
+    if combined.trim().is_empty() {
+        None
+    } else {
+        Some(combined)
+    }
 }
 
 #[cfg(test)]
@@ -542,7 +624,10 @@ mod tests {
     fn test_parse_diagnosis() {
         let json = r#"{"root_cause": "numpy missing", "failure_kind": "MissingDependency", "salvageable": true, "fixes": [{"description": "install numpy", "target": "unit", "action": {"SetupCommand": {"command": "pip install numpy"}}}]}"#;
         let diag = parse_diagnosis(json).unwrap();
-        assert_eq!(diag.failure_kind, super::super::FailureKind::MissingDependency);
+        assert_eq!(
+            diag.failure_kind,
+            super::super::FailureKind::MissingDependency
+        );
         assert!(diag.salvageable);
     }
 

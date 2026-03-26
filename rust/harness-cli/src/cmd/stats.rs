@@ -24,11 +24,14 @@ impl StatsCmd {
         } else {
             println!("Total events:    {}", stats.total);
             println!("Unresolved:      {}", stats.unresolved);
-            println!("Resolution rate: {:.0}%", if stats.total > 0 {
-                ((stats.total - stats.unresolved) as f64 / stats.total as f64) * 100.0
-            } else {
-                0.0
-            });
+            println!(
+                "Resolution rate: {:.0}%",
+                if stats.total > 0 {
+                    ((stats.total - stats.unresolved) as f64 / stats.total as f64) * 100.0
+                } else {
+                    0.0
+                }
+            );
 
             if !stats.by_type.is_empty() {
                 println!("\nBy type:");

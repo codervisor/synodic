@@ -32,7 +32,14 @@ impl SearchCmd {
         } else {
             for e in &events {
                 let status = if e.resolved { "resolved" } else { "open" };
-                println!("[{}] {} ({}, {}) - {}", e.id, e.title, e.event_type, status, e.created_at.format("%Y-%m-%d %H:%M"));
+                println!(
+                    "[{}] {} ({}, {}) - {}",
+                    e.id,
+                    e.title,
+                    e.event_type,
+                    status,
+                    e.created_at.format("%Y-%m-%d %H:%M")
+                );
             }
             eprintln!("\n{} result(s)", events.len());
         }

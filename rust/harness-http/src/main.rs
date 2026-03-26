@@ -28,9 +28,8 @@ async fn main() -> anyhow::Result<()> {
     if let Some(dashboard_dir) = resolve_dashboard_dir() {
         let index = dashboard_dir.join("index.html");
         if index.exists() {
-            app = app.fallback_service(
-                ServeDir::new(&dashboard_dir).fallback(ServeFile::new(index)),
-            );
+            app =
+                app.fallback_service(ServeDir::new(&dashboard_dir).fallback(ServeFile::new(index)));
             eprintln!("Dashboard: serving from {}", dashboard_dir.display());
         }
     }
@@ -79,7 +78,12 @@ fn resolve_dashboard_dir() -> Option<PathBuf> {
     // Relative to binary location (dev/install)
     if let Ok(exe) = std::env::current_exe() {
         // dev: rust/target/debug/synodic-http → ../../packages/ui/dist
-        if let Some(root) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).and_then(|p| p.parent()) {
+        if let Some(root) = exe
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+        {
             let ui_dist = root.join("packages").join("ui").join("dist");
             if ui_dist.is_dir() {
                 return Some(ui_dist);
