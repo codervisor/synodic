@@ -1,17 +1,12 @@
+## Standard lint/test checks (cargo fmt, clippy, cargo test) are handled by:
+##   - Git hooks (.githooks/pre-commit, pre-push)
+##   - CI (.github/workflows/ci.yml)
+##
+## Harness gates are reserved for governance-specific checks that go
+## beyond what standard tooling provides.
+
 gates:
   preflight:
-    - name: rust-fmt
-      match: "*.rs"
-      command: cd rust && cargo fmt --all -- --check 2>&1
-    - name: rust-check
-      match: "*.rs"
-      command: cd rust && cargo check 2>&1
-    - name: rust-lint
-      match: "*.rs"
-      command: cd rust && cargo clippy -- -D warnings 2>&1
-    - name: rust-test
-      match: "*.rs"
-      command: cd rust && cargo test 2>&1
-    - name: custom-rules
+    - name: governance-rules
       match: "*"
       command: .harness/scripts/static_gate.sh 2>&1
