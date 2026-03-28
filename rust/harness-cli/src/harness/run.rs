@@ -80,10 +80,7 @@ pub fn execute(config: RunConfig) -> Result<()> {
             &config,
             &format!("  2. Observe: git diff {base_ref}...HEAD"),
         );
-        log_info(
-            &config,
-            &format!("  3. AI judge via {}", config.judge),
-        );
+        log_info(&config, &format!("  3. AI judge via {}", config.judge));
         log_info(
             &config,
             &format!("  4. Rework loop (up to {} times)", config.max_rework),
