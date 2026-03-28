@@ -24,7 +24,11 @@ fn init_project() -> tempfile::TempDir {
         .current_dir(dir.path())
         .output()
         .expect("synodic init");
-    assert!(out.status.success(), "synodic init failed: {}", lossy_both(&out));
+    assert!(
+        out.status.success(),
+        "synodic init failed: {}",
+        lossy_both(&out)
+    );
     assert!(dir.path().join(".harness/synodic.db").exists());
     dir
 }
@@ -54,10 +58,14 @@ fn test_full_lifecycle() {
     let out = synodic()
         .args([
             "submit",
-            "--type", "hallucination",
-            "--title", "Referenced nonexistent API /v2/users",
-            "--severity", "high",
-            "--source", "claude",
+            "--type",
+            "hallucination",
+            "--title",
+            "Referenced nonexistent API /v2/users",
+            "--severity",
+            "high",
+            "--source",
+            "claude",
         ])
         .current_dir(wd)
         .output()
@@ -69,10 +77,14 @@ fn test_full_lifecycle() {
     let out2 = synodic()
         .args([
             "submit",
-            "--type", "compliance_violation",
-            "--title", "Attempted to read .env file",
-            "--severity", "critical",
-            "--source", "copilot",
+            "--type",
+            "compliance_violation",
+            "--title",
+            "Attempted to read .env file",
+            "--severity",
+            "critical",
+            "--source",
+            "copilot",
         ])
         .current_dir(wd)
         .output()
@@ -87,8 +99,14 @@ fn test_full_lifecycle() {
         .expect("list");
     assert!(out.status.success());
     let list_text = lossy(&out.stdout);
-    assert!(list_text.contains("hallucination"), "list should show event type");
-    assert!(list_text.contains("compliance_violation"), "list should show both events");
+    assert!(
+        list_text.contains("hallucination"),
+        "list should show event type"
+    );
+    assert!(
+        list_text.contains("compliance_violation"),
+        "list should show both events"
+    );
 
     // List with --json
     let out = synodic()
@@ -108,7 +126,10 @@ fn test_full_lifecycle() {
         .expect("search");
     assert!(out.status.success());
     let search_text = lossy(&out.stdout);
-    assert!(search_text.contains("/v2/users"), "search should find matching event");
+    assert!(
+        search_text.contains("/v2/users"),
+        "search should find matching event"
+    );
 
     // Stats
     let out = synodic()
@@ -118,12 +139,23 @@ fn test_full_lifecycle() {
         .expect("stats");
     assert!(out.status.success());
     let stats_text = lossy_both(&out);
-    assert!(stats_text.contains("Total events:    2"), "stats should show 2 events");
-    assert!(stats_text.contains("Unresolved:      2"), "all events unresolved");
+    assert!(
+        stats_text.contains("Total events:    2"),
+        "stats should show 2 events"
+    );
+    assert!(
+        stats_text.contains("Unresolved:      2"),
+        "all events unresolved"
+    );
 
     // Resolve
     let out = synodic()
-        .args(["resolve", &event_id, "--notes", "Verified endpoint exists in v3"])
+        .args([
+            "resolve",
+            &event_id,
+            "--notes",
+            "Verified endpoint exists in v3",
+        ])
         .current_dir(wd)
         .output()
         .expect("resolve");
@@ -137,8 +169,14 @@ fn test_full_lifecycle() {
         .expect("stats after resolve");
     assert!(out.status.success());
     let stats_text = lossy_both(&out);
-    assert!(stats_text.contains("Unresolved:      1"), "one event should remain unresolved");
-    assert!(stats_text.contains("Resolution rate: 50%"), "resolution rate should be 50%");
+    assert!(
+        stats_text.contains("Unresolved:      1"),
+        "one event should remain unresolved"
+    );
+    assert!(
+        stats_text.contains("Resolution rate: 50%"),
+        "resolution rate should be 50%"
+    );
 }
 
 #[test]
@@ -151,9 +189,18 @@ fn test_rules_list() {
         .expect("rules list");
     assert!(out.status.success());
     let text = lossy(&out.stdout);
-    assert!(text.contains("secret-in-output"), "built-in rules should be listed");
-    assert!(text.contains("rm-rf-dangerous"), "built-in rules should be listed");
-    assert!(text.contains("force-push"), "built-in rules should be listed");
+    assert!(
+        text.contains("secret-in-output"),
+        "built-in rules should be listed"
+    );
+    assert!(
+        text.contains("rm-rf-dangerous"),
+        "built-in rules should be listed"
+    );
+    assert!(
+        text.contains("force-push"),
+        "built-in rules should be listed"
+    );
 }
 
 #[test]
@@ -166,18 +213,17 @@ fn test_rules_list_json() {
         .expect("rules list --json");
     assert!(out.status.success());
     let json: serde_json::Value = serde_json::from_slice(&out.stdout).expect("valid JSON");
-    assert!(json.as_array().unwrap().len() >= 5, "should have at least 5 built-in rules");
+    assert!(
+        json.as_array().unwrap().len() >= 5,
+        "should have at least 5 built-in rules"
+    );
 }
 
 #[test]
 fn test_submit_invalid_type() {
     let dir = init_project();
     let out = synodic()
-        .args([
-            "submit",
-            "--type", "bogus",
-            "--title", "test",
-        ])
+        .args(["submit", "--type", "bogus", "--title", "test"])
         .current_dir(dir.path())
         .output()
         .expect("submit with bad type");
@@ -194,7 +240,10 @@ fn test_empty_list() {
         .expect("list empty");
     assert!(out.status.success());
     let stderr = lossy_both(&out);
-    assert!(stderr.contains("No events found"), "should report no events");
+    assert!(
+        stderr.contains("No events found"),
+        "should report no events"
+    );
 }
 
 #[test]

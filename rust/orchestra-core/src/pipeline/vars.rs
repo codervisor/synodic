@@ -205,10 +205,7 @@ mod tests {
                 "Build: ${steps.build.output}, Inspect: ${steps.inspect.verdict}, Gates: ${steps.gates.failures}",
             )
             .unwrap();
-        assert_eq!(
-            result,
-            "Build: success, Inspect: approved, Gates: none"
-        );
+        assert_eq!(result, "Build: success, Inspect: approved, Gates: none");
     }
 
     #[test]

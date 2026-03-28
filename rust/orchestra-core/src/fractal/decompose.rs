@@ -23,10 +23,7 @@ use super::{
 ///
 /// Uses rust-tfidf for proper IDF weighting: terms that appear in every
 /// child scope get low weight, discriminative terms get high weight.
-fn tfidf_vector(
-    text: &str,
-    corpus: &[Vec<(String, usize)>],
-) -> HashMap<String, f64> {
+fn tfidf_vector(text: &str, corpus: &[Vec<(String, usize)>]) -> HashMap<String, f64> {
     let terms = extract_term_list(text);
     let mut tf: HashMap<String, usize> = HashMap::new();
     for t in &terms {
@@ -64,7 +61,9 @@ fn processed_doc(text: &str) -> Vec<(String, usize)> {
 
 /// Cosine similarity between two TF-IDF vectors.
 fn cosine_similarity(a: &HashMap<String, f64>, b: &HashMap<String, f64>) -> f64 {
-    let common: HashSet<&String> = a.keys().collect::<HashSet<_>>()
+    let common: HashSet<&String> = a
+        .keys()
+        .collect::<HashSet<_>>()
         .intersection(&b.keys().collect::<HashSet<_>>())
         .copied()
         .collect();
@@ -98,13 +97,12 @@ fn check_orthogonality(children: &[Child]) -> Vec<Flag> {
     }
 
     // Build corpus of processed documents for IDF computation
-    let corpus: Vec<Vec<(String, usize)>> = children
-        .iter()
-        .map(|c| processed_doc(&c.scope))
-        .collect();
+    let corpus: Vec<Vec<(String, usize)>> =
+        children.iter().map(|c| processed_doc(&c.scope)).collect();
 
     // Pre-compute term sets for Jaccard
-    let term_sets: Vec<HashSet<String>> = children.iter().map(|c| extract_terms(&c.scope)).collect();
+    let term_sets: Vec<HashSet<String>> =
+        children.iter().map(|c| extract_terms(&c.scope)).collect();
 
     for i in 0..children.len() {
         for j in (i + 1)..children.len() {
@@ -122,10 +120,8 @@ fn check_orthogonality(children: &[Child]) -> Vec<Flag> {
 
             // Flag if EITHER metric exceeds threshold
             if jaccard > 0.30 || cosine > 0.30 {
-                let shared: Vec<&String> = term_sets[i]
-                    .intersection(&term_sets[j])
-                    .take(5)
-                    .collect();
+                let shared: Vec<&String> =
+                    term_sets[i].intersection(&term_sets[j]).take(5).collect();
                 let shared_str: Vec<&str> = shared.iter().map(|s| s.as_str()).collect();
 
                 flags.push(Flag {
@@ -334,7 +330,10 @@ pub fn complexity_score(spec_text: &str) -> f64 {
     let lines: Vec<&str> = spec_text.lines().collect();
 
     let cross_cutting_set: HashSet<&str> = CROSS_CUTTING.iter().copied().collect();
-    let cross_cutting_count = terms.iter().filter(|t| cross_cutting_set.contains(t.as_str())).count();
+    let cross_cutting_count = terms
+        .iter()
+        .filter(|t| cross_cutting_set.contains(t.as_str()))
+        .count();
 
     let enumeration_count = lines
         .iter()
@@ -342,17 +341,23 @@ pub fn complexity_score(spec_text: &str) -> f64 {
             let trimmed = l.trim();
             trimmed.starts_with("- ")
                 || trimmed.starts_with("* ")
-                || regex::Regex::new(r"^\d+\.")
-                    .unwrap()
-                    .is_match(trimmed)
+                || regex::Regex::new(r"^\d+\.").unwrap().is_match(trimmed)
         })
         .count();
 
     let signals = [
         ("line_count", (lines.len() as f64 / 200.0).min(1.0), 0.15),
         ("term_diversity", (terms.len() as f64 / 80.0).min(1.0), 0.25),
-        ("cross_cutting", (cross_cutting_count as f64 / 5.0).min(1.0), 0.35),
-        ("enumeration", (enumeration_count as f64 / 10.0).min(1.0), 0.25),
+        (
+            "cross_cutting",
+            (cross_cutting_count as f64 / 5.0).min(1.0),
+            0.35,
+        ),
+        (
+            "enumeration",
+            (enumeration_count as f64 / 10.0).min(1.0),
+            0.25,
+        ),
     ];
 
     let score: f64 = signals.iter().map(|(_, val, weight)| val * weight).sum();
@@ -377,7 +382,10 @@ fn allocate_budget(children: &[Child], remaining_budget: usize) -> HashMap<Strin
             .collect();
     }
 
-    let scores: Vec<f64> = children.iter().map(|c| complexity_score(&c.scope)).collect();
+    let scores: Vec<f64> = children
+        .iter()
+        .map(|c| complexity_score(&c.scope))
+        .collect();
     let total_score: f64 = scores.iter().sum();
     let leftover = remaining_budget - n;
 
@@ -410,9 +418,9 @@ fn compute_solve_waves(deps: &HashMap<String, HashSet<String>>) -> Vec<Vec<Strin
             .iter()
             .filter(|n| {
                 !resolved.contains(n.as_str())
-                    && deps.get(n.as_str()).is_none_or(|d| {
-                        d.iter().all(|dep| resolved.contains(dep))
-                    })
+                    && deps
+                        .get(n.as_str())
+                        .is_none_or(|d| d.iter().all(|dep| resolved.contains(dep)))
             })
             .cloned()
             .collect();
@@ -518,14 +526,17 @@ mod tests {
         let children = vec![
             Child {
                 slug: "auth-login".into(),
-                scope: "User authentication login flow with OAuth2 tokens and password validation".into(),
+                scope: "User authentication login flow with OAuth2 tokens and password validation"
+                    .into(),
                 boundaries: String::new(),
                 inputs: "none".into(),
                 outputs: "tokens".into(),
             },
             Child {
                 slug: "auth-session".into(),
-                scope: "User authentication session management with OAuth2 tokens and password reset".into(),
+                scope:
+                    "User authentication session management with OAuth2 tokens and password reset"
+                        .into(),
                 boundaries: String::new(),
                 inputs: "none".into(),
                 outputs: "sessions".into(),
@@ -752,7 +763,10 @@ mod tests {
             .iter()
             .filter(|f| f.category == "coverage")
             .collect();
-        assert!(!coverage_flags.is_empty(), "missing coverage should be flagged");
+        assert!(
+            !coverage_flags.is_empty(),
+            "missing coverage should be flagged"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -771,8 +785,16 @@ mod tests {
         };
         let output = run(&input);
         // No children → no orthogonality/cycle flags
-        let ortho: Vec<_> = output.flags.iter().filter(|f| f.category == "orthogonality").collect();
-        let cycle: Vec<_> = output.flags.iter().filter(|f| f.category == "cycle").collect();
+        let ortho: Vec<_> = output
+            .flags
+            .iter()
+            .filter(|f| f.category == "orthogonality")
+            .collect();
+        let cycle: Vec<_> = output
+            .flags
+            .iter()
+            .filter(|f| f.category == "cycle")
+            .collect();
         assert!(ortho.is_empty());
         assert!(cycle.is_empty());
     }
@@ -782,8 +804,20 @@ mod tests {
         let input = DecomposeInput {
             parent_spec: "Build a system".into(),
             children: vec![
-                Child { slug: "a".into(), scope: "module a".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
-                Child { slug: "b".into(), scope: "module b".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+                Child {
+                    slug: "a".into(),
+                    scope: "module a".into(),
+                    boundaries: String::new(),
+                    inputs: String::new(),
+                    outputs: String::new(),
+                },
+                Child {
+                    slug: "b".into(),
+                    scope: "module b".into(),
+                    boundaries: String::new(),
+                    inputs: String::new(),
+                    outputs: String::new(),
+                },
             ],
             current_depth: 0,
             max_depth: 3,
@@ -791,37 +825,67 @@ mod tests {
             max_total_nodes: 20,
         };
         let output = run(&input);
-        let budget_flags: Vec<_> = output.flags.iter().filter(|f| f.category == "budget").collect();
-        assert!(!budget_flags.is_empty(), "budget should be flagged when > 80% used");
+        let budget_flags: Vec<_> = output
+            .flags
+            .iter()
+            .filter(|f| f.category == "budget")
+            .collect();
+        assert!(
+            !budget_flags.is_empty(),
+            "budget should be flagged when > 80% used"
+        );
     }
 
     #[test]
     fn test_budget_ok_not_flagged() {
         let input = DecomposeInput {
             parent_spec: "Build a system".into(),
-            children: vec![
-                Child { slug: "a".into(), scope: "module a".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
-            ],
+            children: vec![Child {
+                slug: "a".into(),
+                scope: "module a".into(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+            }],
             current_depth: 0,
             max_depth: 3,
             total_nodes: 2, // 2 + 1 = 3/20 = 15%
             max_total_nodes: 20,
         };
         let output = run(&input);
-        let budget_flags: Vec<_> = output.flags.iter().filter(|f| f.category == "budget").collect();
-        assert!(budget_flags.is_empty(), "low budget usage should not be flagged");
+        let budget_flags: Vec<_> = output
+            .flags
+            .iter()
+            .filter(|f| f.category == "budget")
+            .collect();
+        assert!(
+            budget_flags.is_empty(),
+            "low budget usage should not be flagged"
+        );
     }
 
     #[test]
     fn test_complexity_score_range() {
         // Trivial
         let trivial = complexity_score("");
-        assert!((0.0..=1.0).contains(&trivial), "score must be in [0,1]: {}", trivial);
+        assert!(
+            (0.0..=1.0).contains(&trivial),
+            "score must be in [0,1]: {}",
+            trivial
+        );
 
         // Very complex
         let complex = complexity_score(&"authentication authorization logging monitoring caching error-handling validation security testing deployment configuration middleware database migration api\n".repeat(20));
-        assert!((0.0..=1.0).contains(&complex), "score must be in [0,1]: {}", complex);
-        assert!(complex > 0.3, "heavily cross-cutting spec should score high: {}", complex);
+        assert!(
+            (0.0..=1.0).contains(&complex),
+            "score must be in [0,1]: {}",
+            complex
+        );
+        assert!(
+            complex > 0.3,
+            "heavily cross-cutting spec should score high: {}",
+            complex
+        );
     }
 
     #[test]
@@ -833,13 +897,34 @@ mod tests {
     #[test]
     fn test_allocate_budget_all_get_at_least_one() {
         let children = vec![
-            Child { slug: "a".into(), scope: "tiny".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
-            Child { slug: "b".into(), scope: "tiny".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
-            Child { slug: "c".into(), scope: "tiny".into(), boundaries: String::new(), inputs: String::new(), outputs: String::new() },
+            Child {
+                slug: "a".into(),
+                scope: "tiny".into(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+            },
+            Child {
+                slug: "b".into(),
+                scope: "tiny".into(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+            },
+            Child {
+                slug: "c".into(),
+                scope: "tiny".into(),
+                boundaries: String::new(),
+                inputs: String::new(),
+                outputs: String::new(),
+            },
         ];
         let budget = allocate_budget(&children, 10);
         for child in &children {
-            assert!(*budget.get(&child.slug).unwrap_or(&0) >= 1, "every child should get at least 1");
+            assert!(
+                *budget.get(&child.slug).unwrap_or(&0) >= 1,
+                "every child should get at least 1"
+            );
         }
     }
 
@@ -849,7 +934,10 @@ mod tests {
         a.insert("auth".to_string(), 0.5);
         a.insert("system".to_string(), 0.3);
         let sim = cosine_similarity(&a, &a);
-        assert!((sim - 1.0).abs() < 1e-6, "identical vectors should have cosine 1.0");
+        assert!(
+            (sim - 1.0).abs() < 1e-6,
+            "identical vectors should have cosine 1.0"
+        );
     }
 
     #[test]
@@ -859,16 +947,37 @@ mod tests {
         let mut b = HashMap::new();
         b.insert("database".to_string(), 1.0);
         let sim = cosine_similarity(&a, &b);
-        assert!((sim).abs() < 1e-6, "orthogonal vectors should have cosine 0.0");
+        assert!(
+            (sim).abs() < 1e-6,
+            "orthogonal vectors should have cosine 0.0"
+        );
     }
 
     #[test]
     fn test_three_child_dependency_chain() {
         // A → B → C chain
         let children = vec![
-            Child { slug: "a".into(), scope: "foundation".into(), boundaries: String::new(), inputs: "none".into(), outputs: "core-modules".into() },
-            Child { slug: "b".into(), scope: "middleware".into(), boundaries: String::new(), inputs: "core-modules".into(), outputs: "api-layer".into() },
-            Child { slug: "c".into(), scope: "frontend".into(), boundaries: String::new(), inputs: "api-layer".into(), outputs: "ui-components".into() },
+            Child {
+                slug: "a".into(),
+                scope: "foundation".into(),
+                boundaries: String::new(),
+                inputs: "none".into(),
+                outputs: "core-modules".into(),
+            },
+            Child {
+                slug: "b".into(),
+                scope: "middleware".into(),
+                boundaries: String::new(),
+                inputs: "core-modules".into(),
+                outputs: "api-layer".into(),
+            },
+            Child {
+                slug: "c".into(),
+                scope: "frontend".into(),
+                boundaries: String::new(),
+                inputs: "api-layer".into(),
+                outputs: "ui-components".into(),
+            },
         ];
         let input = make_input(children);
         let output = run(&input);
@@ -880,10 +989,34 @@ mod tests {
     fn test_diamond_dependency_pattern() {
         // a → b, a → c, b+c → d
         let children = vec![
-            Child { slug: "a".into(), scope: "base".into(), boundaries: String::new(), inputs: "none".into(), outputs: "foundation".into() },
-            Child { slug: "b".into(), scope: "left-branch".into(), boundaries: String::new(), inputs: "foundation".into(), outputs: "left-output".into() },
-            Child { slug: "c".into(), scope: "right-branch".into(), boundaries: String::new(), inputs: "foundation".into(), outputs: "right-output".into() },
-            Child { slug: "d".into(), scope: "merge-point".into(), boundaries: String::new(), inputs: "left-output right-output".into(), outputs: "final".into() },
+            Child {
+                slug: "a".into(),
+                scope: "base".into(),
+                boundaries: String::new(),
+                inputs: "none".into(),
+                outputs: "foundation".into(),
+            },
+            Child {
+                slug: "b".into(),
+                scope: "left-branch".into(),
+                boundaries: String::new(),
+                inputs: "foundation".into(),
+                outputs: "left-output".into(),
+            },
+            Child {
+                slug: "c".into(),
+                scope: "right-branch".into(),
+                boundaries: String::new(),
+                inputs: "foundation".into(),
+                outputs: "right-output".into(),
+            },
+            Child {
+                slug: "d".into(),
+                scope: "merge-point".into(),
+                boundaries: String::new(),
+                inputs: "left-output right-output".into(),
+                outputs: "final".into(),
+            },
         ];
         let input = make_input(children);
         let output = run(&input);

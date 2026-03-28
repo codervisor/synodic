@@ -69,37 +69,35 @@ fn validate_step(step: &Step, step_names: &HashSet<&str>, errors: &mut Vec<Strin
                 ));
             }
             if b.max_iterations == 0 {
-                errors.push(format!(
-                    "step '{}': max_iterations must be > 0",
-                    step.name
-                ));
+                errors.push(format!("step '{}': max_iterations must be > 0", step.name));
             }
         }
-        StepKind::Fan(f) => {
-            match f.mode {
-                FanMode::Parallel | FanMode::Sequential => {
-                    if f.over.is_none() && f.steps.is_empty() && f.step.is_none() {
-                        errors.push(format!(
-                            "step '{}': fan parallel/sequential needs 'over' or 'steps'/'step'",
-                            step.name
-                        ));
-                    }
-                }
-                FanMode::Loop => {
-                    if f.until.is_none() && f.max_iterations.is_none() {
-                        errors.push(format!(
-                            "step '{}': fan loop needs 'until' or 'max_iterations'",
-                            step.name
-                        ));
-                    }
+        StepKind::Fan(f) => match f.mode {
+            FanMode::Parallel | FanMode::Sequential => {
+                if f.over.is_none() && f.steps.is_empty() && f.step.is_none() {
+                    errors.push(format!(
+                        "step '{}': fan parallel/sequential needs 'over' or 'steps'/'step'",
+                        step.name
+                    ));
                 }
             }
-        }
+            FanMode::Loop => {
+                if f.until.is_none() && f.max_iterations.is_none() {
+                    errors.push(format!(
+                        "step '{}': fan loop needs 'until' or 'max_iterations'",
+                        step.name
+                    ));
+                }
+            }
+        },
     }
 
     // Validate on_fail references.
     if let Some(on_fail) = &step.on_fail {
-        if let Some(target) = on_fail.strip_prefix("rework(").and_then(|s| s.strip_suffix(')')) {
+        if let Some(target) = on_fail
+            .strip_prefix("rework(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
             if !step_names.contains(target) {
                 errors.push(format!(
                     "step '{}': on_fail rework target '{}' not found",
@@ -203,9 +201,7 @@ steps:
     type: run
 "#,
         );
-        assert!(errors
-            .iter()
-            .any(|e| e.contains("command or check")));
+        assert!(errors.iter().any(|e| e.contains("command or check")));
     }
 
     #[test]
@@ -282,7 +278,9 @@ steps:
     command: echo ok
 "#,
         );
-        assert!(errors.iter().any(|e| e.contains("pipeline name is required")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("pipeline name is required")));
     }
 
     #[test]
@@ -301,7 +299,9 @@ steps:
     rework: nonexistent
 "#,
         );
-        assert!(errors.iter().any(|e| e.contains("rework target 'nonexistent'")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("rework target 'nonexistent'")));
     }
 
     #[test]
@@ -321,7 +321,9 @@ steps:
     max_iterations: 0
 "#,
         );
-        assert!(errors.iter().any(|e| e.contains("max_iterations must be > 0")));
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("max_iterations must be > 0")));
     }
 
     #[test]
@@ -353,7 +355,11 @@ steps:
     on_fail: rework(build)
 "#,
         );
-        assert!(errors.is_empty(), "valid on_fail should produce no errors: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "valid on_fail should produce no errors: {:?}",
+            errors
+        );
     }
 
     #[test]
@@ -414,7 +420,11 @@ steps:
     command: gh pr create --title "${spec.title}" --body "${spec.summary}"
 "#,
         );
-        assert!(errors.is_empty(), "factory pipeline should validate: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "factory pipeline should validate: {:?}",
+            errors
+        );
     }
 
     #[test]
@@ -449,7 +459,11 @@ steps:
     command: gh pr create
 "#,
         );
-        assert!(errors.is_empty(), "adversarial pipeline should validate: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "adversarial pipeline should validate: {:?}",
+            errors
+        );
     }
 
     #[test]
@@ -470,6 +484,10 @@ steps:
 "#,
         );
         // Should collect multiple errors, not stop at first
-        assert!(errors.len() >= 3, "should have multiple errors: {:?}", errors);
+        assert!(
+            errors.len() >= 3,
+            "should have multiple errors: {:?}",
+            errors
+        );
     }
 }
