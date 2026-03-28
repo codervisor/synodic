@@ -7,6 +7,14 @@ on:
         description: "What to build, fix, or test (e.g. 'add retry logic to the submit command')"
         required: true
         type: string
+      pipeline:
+        description: "Pipeline topology to use"
+        required: false
+        default: "factory"
+        type: choice
+        options:
+          - factory
+          - adversarial
       max_rework:
         description: "Max dev↔QA rework cycles"
         required: false
@@ -24,15 +32,16 @@ concurrency:
 
 jobs:
   pipeline:
-    name: "Develop → QA → Merge"
+    name: "${{ inputs.pipeline }}: Develop → QA → Merge"
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: write
       pull-requests: write
     env:
-      BRANCH: pipeline/run-${{ github.run_number }}
+      BRANCH: pipeline/${{ inputs.pipeline }}-${{ github.run_number }}
       MAX_REWORK: ${{ inputs.max_rework }}
+      PIPELINE: ${{ inputs.pipeline }}
     steps:
       # ── Setup ──────────────────────────────────────────────────
       - uses: actions/checkout@v4
@@ -68,31 +77,44 @@ jobs:
           echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       # ── Development + QA Loop ──────────────────────────────────
-      - name: "Run dev↔QA loop"
+      - name: "Run dev↔QA loop (${{ inputs.pipeline }})"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PROMPT: ${{ inputs.prompt }}
         run: |
           set +e  # don't exit on failure — we handle it
+          mkdir -p .harness/.runs
 
           ATTEMPT=0
           FEEDBACK=""
           STATUS="running"
 
+          # ── Build system prompt based on pipeline topology ──
+          if [ "$PIPELINE" = "adversarial" ]; then
+            SYSTEM_CONTEXT="You are working in ADVERSARIAL mode. After implementing, harden your code:
+          - Consider edge cases, concurrency issues, malicious inputs
+          - Add defensive checks where appropriate
+          - Think about what an attacker or fuzzer would try"
+          else
+            SYSTEM_CONTEXT="You are working in FACTORY mode. Implement cleanly and correctly:
+          - Focus on correctness and completeness
+          - Follow existing patterns in the codebase"
+          fi
+
           while [ "$ATTEMPT" -lt "$MAX_REWORK" ] && [ "$STATUS" = "running" ]; do
             ATTEMPT=$((ATTEMPT + 1))
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "  Attempt $ATTEMPT / $MAX_REWORK"
+            echo "  [$PIPELINE] Attempt $ATTEMPT / $MAX_REWORK"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-            # ── Phase 1: Development (Claude Code) ──
+            # ── Phase 1: BUILD (Claude Code) ──
             echo ""
-            echo "▸ Phase 1: Development"
+            echo "▸ Phase 1: BUILD"
 
             if [ -n "$FEEDBACK" ]; then
               FULL_PROMPT="$(cat <<PROMPTEOF
-          You are working on a coding task inside the Synodic repository.
+          $SYSTEM_CONTEXT
 
           ## Original Task
           $PROMPT
@@ -111,7 +133,7 @@ jobs:
           )"
             else
               FULL_PROMPT="$(cat <<PROMPTEOF
-          You are working on a coding task inside the Synodic repository.
+          $SYSTEM_CONTEXT
 
           ## Task
           $PROMPT
@@ -127,9 +149,9 @@ jobs:
 
             echo "$FULL_PROMPT" | claude --print - 2>&1 | tee ".harness/.runs/dev-attempt-${ATTEMPT}.log" || true
 
-            # ── Phase 2: QA (L1 static checks) ──
+            # ── Phase 2: INSPECT (L1 static checks) ──
             echo ""
-            echo "▸ Phase 2: QA"
+            echo "▸ Phase 2: INSPECT"
             FEEDBACK=""
             QA_PASSED=true
 
@@ -218,13 +240,14 @@ jobs:
               fi
             fi
 
+            # ── ROUTE verdict ──
             if [ "$QA_PASSED" = true ]; then
               STATUS="passed"
               echo ""
-              echo "✓ QA passed on attempt $ATTEMPT"
+              echo "✓ INSPECT passed on attempt $ATTEMPT — verdict: APPROVE"
             else
               echo ""
-              echo "✗ QA failed on attempt $ATTEMPT — feeding back to dev"
+              echo "✗ INSPECT failed on attempt $ATTEMPT — verdict: REWORK"
             fi
           done
 
@@ -243,14 +266,15 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           branch: ${{ env.BRANCH }}
-          title: "pipeline: ${{ inputs.prompt }}"
+          title: "${{ inputs.pipeline }}: ${{ inputs.prompt }}"
           body: |
             ## Summary
 
-            Automated coding pipeline run triggered via `workflow_dispatch`.
+            Automated **${{ inputs.pipeline }}** pipeline run triggered via `workflow_dispatch`.
 
             **Prompt:** ${{ inputs.prompt }}
-            **Attempts:** ${{ env.attempts }}
+            **Pipeline:** `${{ inputs.pipeline }}` (see `pipelines/${{ inputs.pipeline }}.yml`)
+            **Attempts:** ${{ env.attempts }} / ${{ inputs.max_rework }}
             **Status:** ${{ env.status }}
             **Triggered by:** @${{ github.actor }}
             **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -287,21 +311,22 @@ jobs:
           | | |
           |---|---|
           | **Prompt** | ${{ inputs.prompt }} |
+          | **Pipeline** | \`${{ inputs.pipeline }}\` |
           | **Status** | \`${status}\` |
           | **Attempts** | ${attempts} / ${{ inputs.max_rework }} |
           | **Branch** | \`${BRANCH}\` |
           | **Triggered by** | @${{ github.actor }} |
 
-          ### Pipeline Flow
+          ### Pipeline Flow (\`${{ inputs.pipeline }}\`)
           \`\`\`
-          prompt → [Claude Code] → [QA: fmt + clippy + test + rules] → PR → merge
-                        ↑                       ↓
-                        └── rework feedback ────┘  (up to ${{ inputs.max_rework }}×)
+          prompt → [BUILD: Claude Code] → [INSPECT: fmt+clippy+test+rules] → [ROUTE] → PR
+                         ↑                              ↓
+                         └────── rework feedback ───────┘  (up to ${{ inputs.max_rework }}×)
           \`\`\`
           EOF
 
           if [ "$status" = "passed" ]; then
-            echo "🎉 Pipeline completed successfully." >> "$GITHUB_STEP_SUMMARY"
+            echo "Pipeline completed successfully." >> "$GITHUB_STEP_SUMMARY"
           elif [ "$status" = "error" ]; then
             echo "Agent produced no changes." >> "$GITHUB_STEP_SUMMARY"
             exit 1
