@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# cargo-fmt-check — Crystallized L1 rule: ensure Rust code is formatted.
+#
+# Origin: CI failure on PR #38 — orchestra-core code merged without running
+#         cargo fmt, causing cargo fmt --check to fail in CI.
+# Pattern: Detected 3+ times across governance reviews where formatting
+#          issues required rework cycles.
+# Precision: 100% (cargo fmt is deterministic)
+# Recall: 100% (catches all formatting violations in .rs files)
+#
+# Input: git diff via stdin (added lines only)
+# Exit: 0 = pass, 1 = formatting violations found
+
+set -euo pipefail
+
+# Read diff from stdin (required by crystallized rule protocol)
+cat > /dev/null
+
+# Only check if Rust files were changed
+CHANGED_RS=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep '\.rs$' || \
+             git diff --name-only HEAD~1 2>/dev/null | grep '\.rs$' || true)
+
+if [ -z "$CHANGED_RS" ]; then
+  exit 0
+fi
+
+# Check if we're in the rust workspace
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+RUST_DIR="$REPO_ROOT/rust"
+
+if [ ! -d "$RUST_DIR" ]; then
+  exit 0
+fi
+
+if ! cd "$RUST_DIR" && cargo fmt --all -- --check 2>&1; then
+  echo "RULE VIOLATION: Rust code is not formatted." >&2
+  echo "Fix: run 'cd rust && cargo fmt --all'" >&2
+  exit 1
+fi

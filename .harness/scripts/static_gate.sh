@@ -37,7 +37,7 @@ run_check() {
   fi
 }
 
-# Rust checks
+# Rust checks (cargo fmt handled by crystallized rule in .harness/rules/)
 if has_ext rs; then
   run_check "cargo_check" cargo check --quiet 2>/dev/null || true
   run_check "cargo_clippy" cargo clippy --quiet -- -D warnings 2>/dev/null || true
