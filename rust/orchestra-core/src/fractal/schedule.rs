@@ -29,10 +29,8 @@ pub struct ScheduleOutput {
 fn collect_leaves(tree: &HashMap<String, TreeNode>) -> Vec<TreeNode> {
     tree.values()
         .filter(|node| {
-            matches!(
-                node.status.as_str(),
-                "leaf" | "forced-leaf" | "pending"
-            ) && node.children.is_empty()
+            matches!(node.status.as_str(), "leaf" | "forced-leaf" | "pending")
+                && node.children.is_empty()
         })
         .cloned()
         .collect()
@@ -76,9 +74,9 @@ fn compute_waves(deps: &HashMap<String, HashSet<String>>) -> Vec<Vec<String>> {
             .iter()
             .filter(|n| {
                 !resolved.contains(n.as_str())
-                    && deps.get(n.as_str()).is_none_or(|d| {
-                        d.iter().all(|dep| resolved.contains(dep))
-                    })
+                    && deps
+                        .get(n.as_str())
+                        .is_none_or(|d| d.iter().all(|dep| resolved.contains(dep)))
             })
             .cloned()
             .collect();
@@ -205,10 +203,8 @@ mod tests {
     }
 
     fn make_manifest(nodes: Vec<TreeNode>) -> Manifest {
-        let tree: HashMap<String, TreeNode> = nodes
-            .into_iter()
-            .map(|n| (n.slug.clone(), n))
-            .collect();
+        let tree: HashMap<String, TreeNode> =
+            nodes.into_iter().map(|n| (n.slug.clone(), n)).collect();
         Manifest {
             id: "test".to_string(),
             status: "solving".to_string(),

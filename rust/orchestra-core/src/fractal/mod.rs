@@ -106,11 +106,10 @@ pub struct Manifest {
 
 /// Stop words filtered during term extraction.
 const STOP_WORDS: &[&str] = &[
-    "the", "and", "for", "that", "this", "with", "from", "are", "was", "were",
-    "been", "have", "has", "had", "not", "but", "its", "can", "will", "should",
-    "must", "may", "each", "all", "any", "into", "when", "how", "what", "which",
-    "their", "them", "they", "you", "your", "about", "also", "does", "using",
-    "used", "use", "none",
+    "the", "and", "for", "that", "this", "with", "from", "are", "was", "were", "been", "have",
+    "has", "had", "not", "but", "its", "can", "will", "should", "must", "may", "each", "all",
+    "any", "into", "when", "how", "what", "which", "their", "them", "they", "you", "your", "about",
+    "also", "does", "using", "used", "use", "none",
 ];
 
 /// Extract lowercase alphanumeric terms (>=3 chars), filtering stop words.

@@ -69,10 +69,7 @@ pub fn run(input: &PruneInput) -> PruneOutput {
         }
     }
 
-    let pruned: Vec<String> = pruned_set
-        .iter()
-        .map(|&i| branches[i].id.clone())
-        .collect();
+    let pruned: Vec<String> = pruned_set.iter().map(|&i| branches[i].id.clone()).collect();
     let surviving: Vec<String> = branches
         .iter()
         .enumerate()
@@ -285,7 +282,10 @@ mod tests {
             threshold: 0.99, // Very high — only identical branches pruned
         };
         let result = run(&input);
-        assert!(result.pruned.is_empty(), "high threshold should not prune partial overlaps");
+        assert!(
+            result.pruned.is_empty(),
+            "high threshold should not prune partial overlaps"
+        );
     }
 
     #[test]
@@ -307,7 +307,10 @@ mod tests {
             threshold: 0.8,
         };
         let result = run(&input);
-        assert!(result.surviving.len() >= 2, "must keep at least 2 survivors");
+        assert!(
+            result.surviving.len() >= 2,
+            "must keep at least 2 survivors"
+        );
         assert_eq!(result.pruned.len() + result.surviving.len(), 5);
     }
 

@@ -36,10 +36,7 @@ fn detect_subset_outputs(nodes: &[&TreeNode]) -> HashMap<String, String> {
         let files_a: HashSet<&String> = node_a.files.iter().collect();
 
         if files_a.is_empty() {
-            prunable.insert(
-                node_a.slug.clone(),
-                "produced no file changes".to_string(),
-            );
+            prunable.insert(node_a.slug.clone(), "produced no file changes".to_string());
             continue;
         }
 
@@ -207,7 +204,10 @@ pub fn run(tree: &HashMap<String, TreeNode>) -> PruneOutput {
 
     let mut prunable: Vec<String> = reasons.keys().cloned().collect();
     prunable.sort();
-    let mut kept: Vec<String> = all_slugs.difference(&prunable.iter().cloned().collect()).cloned().collect();
+    let mut kept: Vec<String> = all_slugs
+        .difference(&prunable.iter().cloned().collect())
+        .cloned()
+        .collect();
     kept.sort();
 
     PruneOutput {
@@ -316,10 +316,7 @@ mod tests {
 
     #[test]
     fn test_all_empty_nodes_prunable() {
-        let tree = make_tree(vec![
-            make_node("a", vec![]),
-            make_node("b", vec![]),
-        ]);
+        let tree = make_tree(vec![make_node("a", vec![]), make_node("b", vec![])]);
         let output = run(&tree);
         // Both have no files → both prunable
         assert_eq!(output.prunable.len(), 2);

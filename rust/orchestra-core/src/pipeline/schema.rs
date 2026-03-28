@@ -175,8 +175,7 @@ impl Pipeline {
     pub fn from_file(path: &std::path::Path) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| anyhow::anyhow!("reading {}: {}", path.display(), e))?;
-        Self::from_yaml(&content)
-            .map_err(|e| anyhow::anyhow!("parsing {}: {}", path.display(), e))
+        Self::from_yaml(&content).map_err(|e| anyhow::anyhow!("parsing {}: {}", path.display(), e))
     }
 
     /// Find a step by name.
@@ -570,7 +569,10 @@ steps:
 "#;
         let pipeline = Pipeline::from_yaml(yaml).unwrap();
         let errors = pipeline.validate();
-        assert!(!errors.is_empty(), "validation should catch missing command/check");
+        assert!(
+            !errors.is_empty(),
+            "validation should catch missing command/check"
+        );
     }
 
     #[test]

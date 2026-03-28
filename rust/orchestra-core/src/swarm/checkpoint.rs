@@ -225,7 +225,10 @@ mod tests {
             ],
         };
         let result = run(&manifest);
-        assert!((result.similarities["a:b"]).abs() < 1e-6, "empty file sets → 0.0");
+        assert!(
+            (result.similarities["a:b"]).abs() < 1e-6,
+            "empty file sets → 0.0"
+        );
     }
 
     #[test]

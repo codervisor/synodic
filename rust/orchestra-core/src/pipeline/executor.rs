@@ -57,10 +57,7 @@ pub fn execute(config: &ExecConfig) -> Result<PipelineResult> {
     // Pre-execution validation.
     let errors = pipeline.validate();
     if !errors.is_empty() {
-        anyhow::bail!(
-            "pipeline validation failed:\n  {}",
-            errors.join("\n  ")
-        );
+        anyhow::bail!("pipeline validation failed:\n  {}", errors.join("\n  "));
     }
 
     let start = std::time::Instant::now();
@@ -83,7 +80,11 @@ pub fn execute(config: &ExecConfig) -> Result<PipelineResult> {
     if config.dry_run {
         eprintln!("[dry-run] Pipeline: {}", pipeline.name);
         for step in &pipeline.steps {
-            eprintln!("[dry-run]   Step: {} (type: {:?})", step.name, step_type_name(&step.kind));
+            eprintln!(
+                "[dry-run]   Step: {} (type: {:?})",
+                step.name,
+                step_type_name(&step.kind)
+            );
         }
         return Ok(PipelineResult {
             pipeline: pipeline.name.clone(),
@@ -170,12 +171,7 @@ pub fn execute(config: &ExecConfig) -> Result<PipelineResult> {
             }
 
             // Route based on verdict.
-            let verdict = result
-                .output
-                .as_deref()
-                .unwrap_or("")
-                .trim()
-                .to_lowercase();
+            let verdict = result.output.as_deref().unwrap_or("").trim().to_lowercase();
 
             let target = if verdict.contains("approve") || verdict.contains("pass") {
                 &b.approve
@@ -193,8 +189,9 @@ pub fn execute(config: &ExecConfig) -> Result<PipelineResult> {
         // Handle on_fail rework routing.
         if matches!(result.status, StepStatus::Failed) {
             if let Some(on_fail) = &step.on_fail {
-                if let Some(target) =
-                    on_fail.strip_prefix("rework(").and_then(|s| s.strip_suffix(')'))
+                if let Some(target) = on_fail
+                    .strip_prefix("rework(")
+                    .and_then(|s| s.strip_suffix(')'))
                 {
                     if let Some(pos) = pipeline.steps.iter().position(|s| s.name == target) {
                         step_results.push(step_result.clone());
@@ -240,7 +237,12 @@ fn execute_step_with_middleware(
             if let Some(log_path) = &step.log {
                 let _ = append_log(
                     log_path,
-                    &format!("step '{}' attempt {}/{}", step.name, attempt + 1, max_attempts),
+                    &format!(
+                        "step '{}' attempt {}/{}",
+                        step.name,
+                        attempt + 1,
+                        max_attempts
+                    ),
                 );
             }
         }
@@ -305,8 +307,7 @@ fn execute_agent(
     }
 
     if !agent.tools.is_empty() {
-        cmd.arg("--allowedTools")
-            .arg(agent.tools.join(","));
+        cmd.arg("--allowedTools").arg(agent.tools.join(","));
     }
 
     if let Some(schema_path) = &agent.output_schema {
@@ -318,9 +319,9 @@ fn execute_agent(
 
     cmd.current_dir(&config.repo_root);
 
-    let output = cmd.output().with_context(|| {
-        format!("step '{}': failed to execute claude -p", step.name)
-    })?;
+    let output = cmd
+        .output()
+        .with_context(|| format!("step '{}': failed to execute claude -p", step.name))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let exit_code = output.status.code().unwrap_or(1);
@@ -347,8 +348,12 @@ fn execute_run(
 ) -> Result<StepResult> {
     // If check is specified, run gate groups.
     if !run.check.is_empty() {
-        let gate_result =
-            gates::run_gate_groups(&run.check, &run.match_patterns, &config.harness_dir, &config.repo_root)?;
+        let gate_result = gates::run_gate_groups(
+            &run.check,
+            &run.match_patterns,
+            &config.harness_dir,
+            &config.repo_root,
+        )?;
         return Ok(StepResult {
             name: step.name.clone(),
             status: if gate_result.passed {
@@ -451,10 +456,7 @@ fn execute_poll(
 
 /// Execute a branch step (verdict routing).
 fn execute_branch(step: &Step, branch: &BranchStep, ctx: &VarContext) -> Result<StepResult> {
-    let value = ctx
-        .get(&branch.input)
-        .unwrap_or("unknown")
-        .to_string();
+    let value = ctx.get(&branch.input).unwrap_or("unknown").to_string();
 
     Ok(StepResult {
         name: step.name.clone(),
@@ -474,9 +476,7 @@ fn execute_fan(
 ) -> Result<StepResult> {
     match fan.mode {
         FanMode::Loop => execute_fan_loop(step, fan, ctx, config),
-        FanMode::Parallel | FanMode::Sequential => {
-            execute_fan_collection(step, fan, ctx, config)
-        }
+        FanMode::Parallel | FanMode::Sequential => execute_fan_collection(step, fan, ctx, config),
     }
 }
 
@@ -555,7 +555,9 @@ fn execute_fan_collection(
         }
     }
 
-    let all_passed = results.iter().all(|r| matches!(r.status, StepStatus::Passed));
+    let all_passed = results
+        .iter()
+        .all(|r| matches!(r.status, StepStatus::Passed));
 
     Ok(StepResult {
         name: step.name.clone(),
