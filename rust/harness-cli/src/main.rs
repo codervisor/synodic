@@ -45,6 +45,12 @@ enum Cli {
 
     /// Legacy governance harness (L1/L2 evaluation loop)
     Harness(cmd::harness_legacy::HarnessCmd),
+
+    /// Fractal algorithmic spine — decomposition, scheduling, reunification, pruning
+    Fractal(cmd::fractal::FractalCmd),
+
+    /// Swarm algorithmic spine — checkpoint similarity, convergence pruning
+    Swarm(cmd::swarm::SwarmCmd),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -61,5 +67,7 @@ fn main() -> anyhow::Result<()> {
         Cli::Watch(cmd) => cmd.run(),
         Cli::Serve(cmd) => cmd.run(),
         Cli::Harness(cmd) => cmd.run(),
+        Cli::Fractal(cmd) => cmd.run(),
+        Cli::Swarm(cmd) => cmd.run(),
     }
 }
