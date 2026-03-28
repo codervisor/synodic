@@ -111,7 +111,6 @@ pub fn execute(config: RunConfig) -> Result<()> {
     let mut last_agent_exit: i32 = 0;
     let feedback_file = run_dir.join("feedback.md");
     let mut all_rework_items: Vec<Value> = Vec::new();
-    let mut all_static_failures: Vec<String> = Vec::new();
     let start_time = Utc::now();
 
     // Pre-compile regexes used inside the governance loop
@@ -187,147 +186,8 @@ pub fn execute(config: RunConfig) -> Result<()> {
             log_info(&config, &format!("  {line}"));
         }
 
-        // =================================================================
-        // Layer 1 — Static Rules
-        // =================================================================
-        log_info(&config, "");
-        log_info(&config, "Layer 1: Static rules...");
-
-        let mut l1_passed = true;
-        let mut l1_failures: Vec<Value> = Vec::new();
-
-        // Run static_gate.sh if available
-        let static_gate = harness_dir.join("scripts/static_gate.sh");
-        if static_gate.exists() && is_executable(&static_gate) {
-            match Command::new(&static_gate)
-                .args([&base_ref, "HEAD"])
-                .output()
-            {
-                Ok(output) if output.status.success() => {
-                    log_info(&config, "  Static gate: PASS");
-                }
-                Ok(output) => {
-                    l1_passed = false;
-                    log_info(&config, "  Static gate: FAIL");
-                    let gate_out = String::from_utf8_lossy(&output.stdout);
-                    if let Ok(report) = serde_json::from_str::<Value>(&gate_out) {
-                        if let Some(failures) = report.get("failures").and_then(|v| v.as_array()) {
-                            l1_failures.extend(failures.iter().cloned());
-                        }
-                    }
-                }
-                Err(_) => {
-                    log_info(&config, "  Static gate: error running script");
-                }
-            }
-        } else {
-            log_info(&config, "  Static gate: not found (skipping)");
-        }
-
-        // Run crystallized rules
-        let rules_dir = harness_dir.join("rules");
-        if rules_dir.is_dir() {
-            let mut rule_count = 0u32;
-            let diff_content = fs::read_to_string(&diff_file).unwrap_or_default();
-
-            if let Ok(entries) = fs::read_dir(&rules_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if !path.is_file() || name == ".gitkeep" || !is_executable(&path) {
-                        continue;
-                    }
-                    rule_count += 1;
-
-                    let result = Command::new(&path)
-                        .stdin(std::process::Stdio::piped())
-                        .stdout(std::process::Stdio::piped())
-                        .stderr(std::process::Stdio::piped())
-                        .spawn()
-                        .and_then(|mut child| {
-                            if let Some(mut stdin) = child.stdin.take() {
-                                let _ = stdin.write_all(diff_content.as_bytes());
-                            }
-                            child.wait_with_output()
-                        });
-
-                    match result {
-                        Ok(output) if output.status.success() => {
-                            log_info(&config, &format!("  Rule [{name}]: PASS"));
-                        }
-                        Ok(output) => {
-                            l1_passed = false;
-                            let rule_output = String::from_utf8_lossy(&output.stderr);
-                            let truncated: String =
-                                rule_output.lines().take(10).collect::<Vec<_>>().join("\n");
-                            log_info(&config, &format!("  Rule [{name}]: FAIL"));
-                            l1_failures.push(json!({
-                                "checker": format!("rule:{name}"),
-                                "output": truncated
-                            }));
-                        }
-                        Err(e) => {
-                            log_info(&config, &format!("  Rule [{name}]: error ({e})"));
-                        }
-                    }
-                }
-            }
-            if rule_count > 0 {
-                log_info(&config, &format!("  Ran {rule_count} crystallized rule(s)"));
-            }
-        }
-
-        // Save L1 report
-        let l1_report = json!({ "passed": l1_passed, "failures": &l1_failures });
-        fs::write(
-            run_dir.join(format!("l1-attempt-{attempt}.json")),
-            serde_json::to_string_pretty(&l1_report)?,
-        )?;
-
-        // Track static failures
-        for f in &l1_failures {
-            let checker = f.get("checker").and_then(|v| v.as_str()).unwrap_or("");
-            let output = f.get("output").and_then(|v| v.as_str()).unwrap_or("");
-            let desc = format!("{}: {}", checker, &output[..output.len().min(100)]);
-            if !all_static_failures.contains(&desc) {
-                all_static_failures.push(desc);
-            }
-        }
-
-        if !l1_passed {
-            log_info(&config, "");
-            log_info(&config, "Layer 1 REJECTED. Generating rework feedback...");
-
-            if attempt > config.max_rework {
-                log_info(
-                    &config,
-                    "Rework limit reached at Layer 1. Escalating to human.",
-                );
-                status = "escalated".to_string();
-                break;
-            }
-
-            // Format L1 failures as structured feedback
-            let mut feedback_lines = vec!["## Layer 1 (Static Rules) Failures\n".to_string()];
-            for f in &l1_failures {
-                let checker = f
-                    .get("checker")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown");
-                let output = f
-                    .get("output")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("no details");
-                feedback_lines.push(format!("- **{checker}**: {output}"));
-            }
-            feedback_lines
-                .push("\nFix these issues before your changes can be accepted.".to_string());
-            fs::write(&feedback_file, feedback_lines.join("\n"))?;
-
-            continue;
-        }
-
-        log_info(&config, "Layer 1: PASSED");
+        // L1 (lint, format, test) is handled by git hooks and CI.
+        // The governance loop focuses on L2: semantic AI review.
 
         // =================================================================
         // Layer 2 — AI Judge
@@ -514,7 +374,7 @@ pub fn execute(config: RunConfig) -> Result<()> {
         "status": status,
         "agent_command": config.agent_cmd.join(" "),
         "rework_items": all_rework_items,
-        "static_failures": all_static_failures,
+        "static_failures": [],
         "metrics": {
             "attempt_count": attempt,
             "duration_s": duration,
@@ -544,7 +404,7 @@ pub fn execute(config: RunConfig) -> Result<()> {
         "agent_command": config.agent_cmd.join(" "),
         "base_ref": base_ref,
         "rework_items": all_rework_items,
-        "static_failures": all_static_failures,
+        "static_failures": [],
         "workdir": workdir.display().to_string(),
         "harness_dir": harness_dir.display().to_string()
     });
@@ -725,17 +585,4 @@ fn observe_changes(workdir: &Path, base_ref: &str, diff_file: &Path) -> Result<(
         .output()?;
     let stat = String::from_utf8_lossy(&stat_output.stdout).to_string();
     Ok((true, stat))
-}
-
-#[cfg(unix)]
-fn is_executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    path.metadata()
-        .map(|m| m.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
-}
-
-#[cfg(not(unix))]
-fn is_executable(_path: &Path) -> bool {
-    true
 }
