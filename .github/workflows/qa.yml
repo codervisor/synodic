@@ -1,44 +1,50 @@
-name: QA Pipeline
+name: Coding Pipeline
 
 on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: "Prompt or task for the QA pipeline (e.g. 'add input validation to the submit command')"
+        description: "What to build, fix, or test (e.g. 'add retry logic to the submit command')"
         required: true
         type: string
       max_rework:
-        description: "Max rework cycles before escalation"
+        description: "Max dev↔QA rework cycles"
         required: false
         default: "3"
         type: string
-      skip_l2:
-        description: "Skip L2 AI judge (run L1 static checks only)"
+      auto_merge:
+        description: "Auto-merge PR on pass (otherwise just creates PR)"
         required: false
         default: false
         type: boolean
 
 concurrency:
-  group: qa-pipeline-${{ github.ref }}
-  cancel-in-progress: true
+  group: coding-pipeline
+  cancel-in-progress: false
 
 jobs:
-  qa:
-    name: Run QA Pipeline
+  pipeline:
+    name: "Develop → QA → Merge"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: rust
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BRANCH: pipeline/run-${{ github.run_number }}
+      MAX_REWORK: ${{ inputs.max_rework }}
     steps:
+      # ── Setup ──────────────────────────────────────────────────
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
-      - name: Cache cargo registry & build
+      - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
@@ -47,66 +53,259 @@ jobs:
             rust/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
 
-      - name: Build Synodic CLI
-        run: cargo build --release
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
 
-      - name: L1 — Static checks
-        id: l1
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create pipeline branch
         run: |
-          echo "## L1 Static Checks" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git checkout -b "$BRANCH"
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-          PASS=true
-
-          echo "--- cargo fmt ---"
-          if ! cargo fmt --all -- --check 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"; then
-            PASS=false
-          fi
-
-          echo "--- cargo clippy ---"
-          if ! cargo clippy --all-targets -- -D warnings 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"; then
-            PASS=false
-          fi
-
-          echo "--- cargo test ---"
-          if ! cargo test 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"; then
-            PASS=false
-          fi
-
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$PASS" = false ]; then
-            echo "l1_passed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::L1 static checks found issues"
-          else
-            echo "l1_passed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Log prompt
+      # ── Development + QA Loop ──────────────────────────────────
+      - name: "Run dev↔QA loop"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROMPT: ${{ inputs.prompt }}
         run: |
-          echo "## QA Pipeline Run" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Prompt:** ${{ inputs.prompt }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Max rework:** ${{ inputs.max_rework }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Skip L2:** ${{ inputs.skip_l2 }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          set +e  # don't exit on failure — we handle it
 
-      - name: L1 — Custom rules
-        working-directory: .
+          ATTEMPT=0
+          FEEDBACK=""
+          STATUS="running"
+
+          while [ "$ATTEMPT" -lt "$MAX_REWORK" ] && [ "$STATUS" = "running" ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "  Attempt $ATTEMPT / $MAX_REWORK"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            # ── Phase 1: Development (Claude Code) ──
+            echo ""
+            echo "▸ Phase 1: Development"
+
+            if [ -n "$FEEDBACK" ]; then
+              FULL_PROMPT="$(cat <<PROMPTEOF
+          You are working on a coding task inside the Synodic repository.
+
+          ## Original Task
+          $PROMPT
+
+          ## Rework Required — QA Feedback (attempt $ATTEMPT)
+          The previous attempt failed QA. Fix ALL of the following issues:
+
+          $FEEDBACK
+
+          Rules:
+          - Fix every issue listed above
+          - Do not break existing functionality
+          - Run \`cd rust && cargo fmt && cargo clippy --fix --allow-dirty\` before finishing
+          - Commit your changes with a clear message
+          PROMPTEOF
+          )"
+            else
+              FULL_PROMPT="$(cat <<PROMPTEOF
+          You are working on a coding task inside the Synodic repository.
+
+          ## Task
+          $PROMPT
+
+          Rules:
+          - Implement the task described above
+          - Follow existing code conventions in the repository
+          - Run \`cd rust && cargo fmt\` before finishing
+          - Commit your changes with a clear message
+          PROMPTEOF
+          )"
+            fi
+
+            echo "$FULL_PROMPT" | claude --print - 2>&1 | tee ".harness/.runs/dev-attempt-${ATTEMPT}.log" || true
+
+            # ── Phase 2: QA (L1 static checks) ──
+            echo ""
+            echo "▸ Phase 2: QA"
+            FEEDBACK=""
+            QA_PASSED=true
+
+            # Check if there are changes
+            if git diff --quiet "$base_sha"...HEAD 2>/dev/null; then
+              echo "  No code changes detected."
+              if [ "$ATTEMPT" -eq 1 ]; then
+                echo "  Agent produced no changes on first attempt. Exiting."
+                STATUS="error"
+                break
+              fi
+            fi
+
+            # L1: cargo fmt
+            echo "  ▸ cargo fmt --check"
+            if ! FMT_OUT=$(cd rust && cargo fmt --all -- --check 2>&1); then
+              QA_PASSED=false
+              FEEDBACK="${FEEDBACK}
+          ### Formatting failures (cargo fmt)
+          \`\`\`
+          ${FMT_OUT}
+          \`\`\`
+          Run \`cd rust && cargo fmt --all\` to fix."
+              echo "    FAIL"
+            else
+              echo "    PASS"
+            fi
+
+            # L1: clippy
+            echo "  ▸ cargo clippy"
+            if ! CLIPPY_OUT=$(cd rust && cargo clippy --all-targets -- -D warnings 2>&1); then
+              QA_PASSED=false
+              FEEDBACK="${FEEDBACK}
+          ### Clippy warnings (cargo clippy)
+          \`\`\`
+          $(echo "$CLIPPY_OUT" | tail -40)
+          \`\`\`"
+              echo "    FAIL"
+            else
+              echo "    PASS"
+            fi
+
+            # L1: cargo test
+            echo "  ▸ cargo test"
+            if ! TEST_OUT=$(cd rust && cargo test 2>&1); then
+              QA_PASSED=false
+              FEEDBACK="${FEEDBACK}
+          ### Test failures (cargo test)
+          \`\`\`
+          $(echo "$TEST_OUT" | tail -40)
+          \`\`\`"
+              echo "    FAIL"
+            else
+              echo "    PASS"
+            fi
+
+            # L1: custom rules
+            if [ -x .harness/scripts/static_gate.sh ]; then
+              echo "  ▸ custom rules"
+              if ! GATE_OUT=$(.harness/scripts/static_gate.sh "$base_sha" HEAD 2>&1); then
+                QA_PASSED=false
+                FEEDBACK="${FEEDBACK}
+          ### Custom rule failures
+          \`\`\`
+          ${GATE_OUT}
+          \`\`\`"
+                echo "    FAIL"
+              else
+                echo "    PASS"
+              fi
+            fi
+
+            # L1: UI build (if UI files changed)
+            if git diff --name-only "$base_sha"...HEAD | grep -qE '\.(ts|tsx|js|jsx)$'; then
+              echo "  ▸ UI build"
+              if ! UI_OUT=$(cd packages/ui && pnpm run build 2>&1); then
+                QA_PASSED=false
+                FEEDBACK="${FEEDBACK}
+          ### UI build failure
+          \`\`\`
+          $(echo "$UI_OUT" | tail -20)
+          \`\`\`"
+                echo "    FAIL"
+              else
+                echo "    PASS"
+              fi
+            fi
+
+            if [ "$QA_PASSED" = true ]; then
+              STATUS="passed"
+              echo ""
+              echo "✓ QA passed on attempt $ATTEMPT"
+            else
+              echo ""
+              echo "✗ QA failed on attempt $ATTEMPT — feeding back to dev"
+            fi
+          done
+
+          # Write results for downstream steps
+          echo "status=$STATUS" >> "$GITHUB_ENV"
+          echo "attempts=$ATTEMPT" >> "$GITHUB_ENV"
+
+      # ── Create PR ─────────────────────────────────────────────
+      - name: Push branch
+        if: env.status == 'passed'
+        run: git push -u origin "$BRANCH"
+
+      - name: Create Pull Request
+        if: env.status == 'passed'
+        id: create_pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: ${{ env.BRANCH }}
+          title: "pipeline: ${{ inputs.prompt }}"
+          body: |
+            ## Summary
+
+            Automated coding pipeline run triggered via `workflow_dispatch`.
+
+            **Prompt:** ${{ inputs.prompt }}
+            **Attempts:** ${{ env.attempts }}
+            **Status:** ${{ env.status }}
+            **Triggered by:** @${{ github.actor }}
+            **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            ## QA Results
+
+            All L1 static checks passed:
+            - `cargo fmt --check`
+            - `cargo clippy -- -D warnings`
+            - `cargo test`
+            - Custom harness rules
+          labels: automated,pipeline
+          delete-branch: true
+
+      # ── Auto-merge (optional) ─────────────────────────────────
+      - name: Auto-merge PR
+        if: env.status == 'passed' && inputs.auto_merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -x .harness/scripts/static_gate.sh ]; then
-            echo "## Custom Rules" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            git diff HEAD~1 2>/dev/null | .harness/scripts/static_gate.sh 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "No custom rules script found, skipping."
+          PR_NUM=$(gh pr list --head "$BRANCH" --json number -q '.[0].number')
+          if [ -n "$PR_NUM" ]; then
+            gh pr merge "$PR_NUM" --squash --delete-branch
+            echo "Merged PR #${PR_NUM}"
           fi
 
-      - name: Summary
+      # ── Summary ────────────────────────────────────────────────
+      - name: Write summary
         if: always()
         run: |
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "---" >> "$GITHUB_STEP_SUMMARY"
-          echo "Triggered by: @${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Branch: ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Coding Pipeline Results
+
+          | | |
+          |---|---|
+          | **Prompt** | ${{ inputs.prompt }} |
+          | **Status** | \`${status}\` |
+          | **Attempts** | ${attempts} / ${{ inputs.max_rework }} |
+          | **Branch** | \`${BRANCH}\` |
+          | **Triggered by** | @${{ github.actor }} |
+
+          ### Pipeline Flow
+          \`\`\`
+          prompt → [Claude Code] → [QA: fmt + clippy + test + rules] → PR → merge
+                        ↑                       ↓
+                        └── rework feedback ────┘  (up to ${{ inputs.max_rework }}×)
+          \`\`\`
+          EOF
+
+          if [ "$status" = "passed" ]; then
+            echo "🎉 Pipeline completed successfully." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$status" = "error" ]; then
+            echo "Agent produced no changes." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            echo "Pipeline exhausted ${{ inputs.max_rework }} rework cycles without passing QA." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
