@@ -90,8 +90,7 @@ fn check_scope_violations(children: &[ReunifyChild]) -> Vec<Conflict> {
             if sibling.slug == child.slug {
                 continue;
             }
-            let sibling_files: std::collections::HashSet<&String> =
-                sibling.files.iter().collect();
+            let sibling_files: std::collections::HashSet<&String> = sibling.files.iter().collect();
             let overlap: Vec<String> = child_files
                 .intersection(&sibling_files)
                 .map(|f| f.to_string())
@@ -124,10 +123,7 @@ fn check_redundant_files(children: &[ReunifyChild]) -> Vec<Conflict> {
 
     for child in children {
         for f in &child.files {
-            file_owners
-                .entry(f)
-                .or_default()
-                .push(child.slug.clone());
+            file_owners.entry(f).or_default().push(child.slug.clone());
         }
     }
 
@@ -163,11 +159,7 @@ fn check_interface_gaps(children: &[ReunifyChild]) -> Vec<Conflict> {
         if inputs.is_empty() {
             continue;
         }
-        let missing: Vec<String> = inputs
-            .difference(&all_outputs)
-            .take(5)
-            .cloned()
-            .collect();
+        let missing: Vec<String> = inputs.difference(&all_outputs).take(5).cloned().collect();
         if !missing.is_empty() {
             gaps.push(Conflict {
                 category: "gap".to_string(),
@@ -389,10 +381,7 @@ mod tests {
         let output = run(&input);
         assert!(!output.conflicts.is_empty());
 
-        let boundary = output
-            .conflicts
-            .iter()
-            .find(|c| c.category == "boundary");
+        let boundary = output.conflicts.iter().find(|c| c.category == "boundary");
         assert!(boundary.is_some(), "should detect boundary violation");
     }
 
@@ -436,10 +425,7 @@ mod tests {
                 make_child("z-last", vec!["src/z.rs"]),
                 make_child("a-first", vec!["src/a.rs"]),
             ],
-            dependency_order: vec![
-                vec!["a-first".to_string()],
-                vec!["z-last".to_string()],
-            ],
+            dependency_order: vec![vec!["a-first".to_string()], vec!["z-last".to_string()]],
             node_slug: "root".to_string(),
         };
         let output = run(&input);
@@ -463,7 +449,10 @@ mod tests {
         };
         let output = run(&input);
         let redundancy = output.conflicts.iter().find(|c| c.category == "redundancy");
-        assert!(redundancy.is_some(), "should detect redundant file modification");
+        assert!(
+            redundancy.is_some(),
+            "should detect redundant file modification"
+        );
         assert!(redundancy.unwrap().description.contains("shared.rs"));
     }
 
@@ -488,17 +477,15 @@ mod tests {
     fn test_interface_gap_needs_ai() {
         let input = ReunifyInput {
             base_ref: "main".to_string(),
-            children: vec![
-                ReunifyChild {
-                    slug: "consumer".to_string(),
-                    branch: String::new(),
-                    scope: String::new(),
-                    boundaries: String::new(),
-                    inputs: "missing-dependency".to_string(),
-                    outputs: "result".to_string(),
-                    files: vec!["src/consumer.rs".to_string()],
-                },
-            ],
+            children: vec![ReunifyChild {
+                slug: "consumer".to_string(),
+                branch: String::new(),
+                scope: String::new(),
+                boundaries: String::new(),
+                inputs: "missing-dependency".to_string(),
+                outputs: "result".to_string(),
+                files: vec!["src/consumer.rs".to_string()],
+            }],
             dependency_order: Vec::new(),
             node_slug: "root".to_string(),
         };
@@ -564,8 +551,15 @@ mod tests {
         };
         let output = run(&input);
         // Should have both boundary and gap conflicts
-        let categories: Vec<&str> = output.conflicts.iter().map(|c| c.category.as_str()).collect();
-        assert!(categories.contains(&"boundary"), "should detect boundary violation");
+        let categories: Vec<&str> = output
+            .conflicts
+            .iter()
+            .map(|c| c.category.as_str())
+            .collect();
+        assert!(
+            categories.contains(&"boundary"),
+            "should detect boundary violation"
+        );
         assert!(categories.contains(&"gap"), "should detect interface gap");
     }
 }
