@@ -20,8 +20,6 @@ impl InitCmd {
 
         let harness_dir = root.join(".harness");
         std::fs::create_dir_all(&harness_dir)?;
-        std::fs::create_dir_all(harness_dir.join("rules"))?;
-        std::fs::create_dir_all(harness_dir.join("scripts"))?;
         std::fs::create_dir_all(harness_dir.join(".runs"))?;
 
         // Create SQLite database

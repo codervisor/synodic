@@ -1,12 +1,7 @@
-## Standard lint/test checks (cargo fmt, clippy, cargo test) are handled by:
-##   - Git hooks (.githooks/pre-commit, pre-push)
-##   - CI (.github/workflows/ci.yml)
+## Pipeline preflight gates.
 ##
-## Harness gates are reserved for governance-specific checks that go
-## beyond what standard tooling provides.
+## Used by the orchestra pipeline executor when a step has `check: [preflight]`.
+## NOT used for L1 governance — that's handled by git hooks and CI.
 
 gates:
-  preflight:
-    - name: governance-rules
-      match: "*"
-      command: .harness/scripts/static_gate.sh 2>&1
+  preflight: []

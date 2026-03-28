@@ -1,6 +1,5 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::events::{Event, EventType, Severity};
 
@@ -25,20 +24,10 @@ pub struct RuleMatch {
     pub severity: Severity,
 }
 
-/// Tracks pattern frequency for rule crystallization.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct PatternTracker {
-    /// pattern -> occurrence count
-    pub counts: HashMap<String, usize>,
-    /// Threshold for promotion to L1 rule
-    pub promotion_threshold: usize,
-}
-
-/// Engine that evaluates rules against content and tracks patterns.
+/// Engine that evaluates rules against content.
 pub struct RuleEngine {
     rules: Vec<Rule>,
     compiled: Vec<(usize, Regex)>,
-    pub tracker: PatternTracker,
 }
 
 impl RuleEngine {
@@ -49,14 +38,7 @@ impl RuleEngine {
             .filter(|(_, r)| r.enabled)
             .filter_map(|(i, r)| Regex::new(&r.pattern).ok().map(|re| (i, re)))
             .collect();
-        Self {
-            rules,
-            compiled,
-            tracker: PatternTracker {
-                counts: HashMap::new(),
-                promotion_threshold: 3,
-            },
-        }
+        Self { rules, compiled }
     }
 
     /// Evaluate all enabled rules against the given content.
@@ -71,7 +53,6 @@ impl RuleEngine {
                     event_type: rule.event_type,
                     severity: rule.severity,
                 });
-                *self.tracker.counts.entry(rule.name.clone()).or_default() += 1;
             }
         }
         matches
@@ -92,17 +73,6 @@ impl RuleEngine {
                         "matched": m.matched_text,
                     }),
                 )
-            })
-            .collect()
-    }
-
-    /// Return rules that have met the promotion threshold.
-    pub fn promotion_candidates(&self) -> Vec<&Rule> {
-        self.rules
-            .iter()
-            .filter(|r| {
-                self.tracker.counts.get(&r.name).copied().unwrap_or(0)
-                    >= self.tracker.promotion_threshold
             })
             .collect()
     }
@@ -202,17 +172,6 @@ mod tests {
         assert_eq!(events.len(), matches.len());
         assert_eq!(events[0].source, "claude");
         assert_eq!(events[0].event_type, EventType::ComplianceViolation);
-    }
-
-    #[test]
-    fn test_promotion_candidates() {
-        let mut engine = RuleEngine::new(default_rules());
-        // Trigger secret rule 3 times
-        for _ in 0..3 {
-            engine.evaluate("API_KEY=secret123");
-        }
-        let candidates = engine.promotion_candidates();
-        assert!(candidates.iter().any(|r| r.name == "secret-in-output"));
     }
 
     #[test]
