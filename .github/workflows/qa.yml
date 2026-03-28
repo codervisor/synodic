@@ -1,0 +1,112 @@
+name: QA Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Prompt or task for the QA pipeline (e.g. 'add input validation to the submit command')"
+        required: true
+        type: string
+      max_rework:
+        description: "Max rework cycles before escalation"
+        required: false
+        default: "3"
+        type: string
+      skip_l2:
+        description: "Skip L2 AI judge (run L1 static checks only)"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: qa-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    name: Run QA Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Build Synodic CLI
+        run: cargo build --release
+
+      - name: L1 — Static checks
+        id: l1
+        run: |
+          echo "## L1 Static Checks" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          PASS=true
+
+          echo "--- cargo fmt ---"
+          if ! cargo fmt --all -- --check 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"; then
+            PASS=false
+          fi
+
+          echo "--- cargo clippy ---"
+          if ! cargo clippy --all-targets -- -D warnings 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"; then
+            PASS=false
+          fi
+
+          echo "--- cargo test ---"
+          if ! cargo test 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"; then
+            PASS=false
+          fi
+
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$PASS" = false ]; then
+            echo "l1_passed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::L1 static checks found issues"
+          else
+            echo "l1_passed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log prompt
+        run: |
+          echo "## QA Pipeline Run" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Prompt:** ${{ inputs.prompt }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Max rework:** ${{ inputs.max_rework }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Skip L2:** ${{ inputs.skip_l2 }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: L1 — Custom rules
+        working-directory: .
+        run: |
+          if [ -x .harness/scripts/static_gate.sh ]; then
+            echo "## Custom Rules" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            git diff HEAD~1 2>/dev/null | .harness/scripts/static_gate.sh 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No custom rules script found, skipping."
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "---" >> "$GITHUB_STEP_SUMMARY"
+          echo "Triggered by: @${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Branch: ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
