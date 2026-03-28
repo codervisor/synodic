@@ -1,5 +1,8 @@
 gates:
   preflight:
+    - name: rust-fmt
+      match: "*.rs"
+      command: cd rust && cargo fmt --all -- --check 2>&1
     - name: rust-check
       match: "*.rs"
       command: cd rust && cargo check 2>&1
