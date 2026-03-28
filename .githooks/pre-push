@@ -40,7 +40,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   # L1: cargo clippy
   echo "  ▸ cargo clippy"
-  if ! (cd "$REPO_ROOT/rust" && cargo clippy --all-targets -- -D warnings 2>&1 | tail -5); then
+  if ! (cd "$REPO_ROOT/rust" && cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tail -5); then
     echo "    FAIL"
     exit 1
   fi
