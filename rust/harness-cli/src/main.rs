@@ -43,7 +43,7 @@ enum Cli {
     /// Start API server and dashboard
     Serve(cmd::serve::ServeCmd),
 
-    /// Legacy governance harness (L1/L2 evaluation loop)
+    /// Governance harness (AI judge + rework loop)
     Harness(cmd::harness_legacy::HarnessCmd),
 
     /// Fractal algorithmic spine — decomposition, scheduling, reunification, pruning

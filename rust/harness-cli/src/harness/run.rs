@@ -82,23 +82,16 @@ pub fn execute(config: RunConfig) -> Result<()> {
         );
         log_info(
             &config,
-            &format!(
-                "  3. Layer 1: static rules from {}/rules/ + language checkers",
-                harness_dir.display()
-            ),
+            &format!("  3. AI judge via {}", config.judge),
         );
         log_info(
             &config,
-            &format!("  4. Layer 2: AI judge via {}", config.judge),
-        );
-        log_info(
-            &config,
-            &format!("  5. Rework loop (up to {} times)", config.max_rework),
+            &format!("  4. Rework loop (up to {} times)", config.max_rework),
         );
         log_info(
             &config,
             &format!(
-                "  6. Log to {}/harness.governance.jsonl",
+                "  5. Log to {}/harness.governance.jsonl",
                 harness_dir.display()
             ),
         );
@@ -186,11 +179,9 @@ pub fn execute(config: RunConfig) -> Result<()> {
             log_info(&config, &format!("  {line}"));
         }
 
-        // L1 (lint, format, test) is handled by git hooks and CI.
-        // The governance loop focuses on L2: semantic AI review.
-
         // =================================================================
-        // Layer 2 — AI Judge
+        // AI Judge (L2) — semantic review
+        // L1 (lint, format, test) is handled by git hooks and CI.
         // =================================================================
         if config.no_l2 {
             log_info(&config, "");
@@ -374,7 +365,6 @@ pub fn execute(config: RunConfig) -> Result<()> {
         "status": status,
         "agent_command": config.agent_cmd.join(" "),
         "rework_items": all_rework_items,
-        "static_failures": [],
         "metrics": {
             "attempt_count": attempt,
             "duration_s": duration,
@@ -404,7 +394,6 @@ pub fn execute(config: RunConfig) -> Result<()> {
         "agent_command": config.agent_cmd.join(" "),
         "base_ref": base_ref,
         "rework_items": all_rework_items,
-        "static_failures": [],
         "workdir": workdir.display().to_string(),
         "harness_dir": harness_dir.display().to_string()
     });
