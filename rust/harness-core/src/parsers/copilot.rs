@@ -216,8 +216,9 @@ mod tests {
     #[test]
     fn test_parse_dangerous_command() {
         let parser = CopilotLogParser::new();
-        let log =
-            write_temp_log(&[r#"{"event": "suggestion", "output": "rm -rf / --no-preserve-root"}"#]);
+        let log = write_temp_log(&[
+            r#"{"event": "suggestion", "output": "rm -rf / --no-preserve-root"}"#,
+        ]);
         let events = parser.parse(log.path()).unwrap();
         assert!(events
             .iter()
@@ -253,7 +254,9 @@ mod tests {
         let events = parser.parse(log.path()).unwrap();
         // None of these should produce ToolCallError events
         assert!(
-            !events.iter().any(|e| e.event_type == EventType::ToolCallError),
+            !events
+                .iter()
+                .any(|e| e.event_type == EventType::ToolCallError),
             "L1 concerns should not be detected by copilot parser"
         );
     }

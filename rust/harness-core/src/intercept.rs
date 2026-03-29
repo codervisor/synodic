@@ -120,11 +120,9 @@ impl InterceptEngine {
         input_str: &str,
     ) -> bool {
         match condition {
-            InterceptCondition::Pattern { pattern } => {
-                regex::Regex::new(pattern)
-                    .map(|re| re.is_match(input_str))
-                    .unwrap_or(false)
-            }
+            InterceptCondition::Pattern { pattern } => regex::Regex::new(pattern)
+                .map(|re| re.is_match(input_str))
+                .unwrap_or(false),
             InterceptCondition::Path { glob } => {
                 let file_path = extract_file_path(request);
                 match file_path {
