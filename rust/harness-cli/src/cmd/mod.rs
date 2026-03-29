@@ -1,7 +1,7 @@
 pub mod collect;
-pub mod fractal;
 pub mod harness_legacy;
 pub mod init;
+pub mod intercept;
 pub mod list;
 pub mod resolve;
 pub mod rules;
@@ -9,5 +9,4 @@ pub mod search;
 pub mod serve;
 pub mod stats;
 pub mod submit;
-pub mod swarm;
 pub mod watch;
