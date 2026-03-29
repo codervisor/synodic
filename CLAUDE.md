@@ -2,7 +2,7 @@
 
 ## Project: Synodic
 
-Open-source AI agent event governance and orchestration platform — monitor, audit, enforce governance rules, and coordinate multi-agent coding pipelines.
+Open-source AI agent event governance platform — monitor, audit, enforce governance rules on AI coding agent sessions.
 
 **Core identity:** The tool that watches the AI agents.
 
@@ -17,95 +17,61 @@ pnpm install                   # install node deps (spec validation tooling)
 
 ## Architecture
 
-Cargo workspace (`rust/`) with four crates: governance (harness-core/cli/http) + orchestration (orchestra-core).
+Cargo workspace (`rust/`) with three crates focused on governance.
 
 ```
 synodic/
 ├── rust/
-│   ├── Cargo.toml                     # [workspace] members = ["harness-core", "harness-cli", "harness-http", "orchestra-core"]
+│   ├── Cargo.toml                     # [workspace] members = ["harness-core", "harness-cli", "harness-http"]
 │   ├── harness-core/                  # Event types, detection rules, storage, log parsers
 │   │   └── src/
 │   │       ├── lib.rs                 # Public API: events, storage, rules, parsers
 │   │       ├── events.rs              # EventType, Severity, Event
 │   │       ├── storage/
 │   │       │   ├── mod.rs             # EventStore trait, EventFilter, Stats
-│   │       │   └── sqlite.rs          # SQLite backend (default)
+│   │       │   ├── sqlite.rs          # SQLite backend (default)
+│   │       │   └── postgres.rs        # PostgreSQL backend (feature-gated)
 │   │       ├── rules/
-│   │       │   └── mod.rs             # Rule, RuleEngine, crystallization
+│   │       │   └── mod.rs             # Rule, RuleEngine, pattern detection
 │   │       └── parsers/
-│   │           └── mod.rs             # Claude Code, Copilot log parsers
-│   ├── harness-cli/                   # CLI: submit, collect, query, resolve, watch, serve, fractal, swarm
+│   │           ├── mod.rs             # LogParser trait
+│   │           ├── claude.rs          # Claude Code JSONL log parser
+│   │           └── copilot.rs         # GitHub Copilot log parser
+│   ├── harness-cli/                   # CLI: submit, collect, query, resolve, watch, serve
 │   │   └── src/
 │   │       ├── main.rs                # CLI entry: top-level subcommands
 │   │       ├── cmd/
-│   │       │   ├── harness.rs         # Governance run, eval, log, rules, meta
-│   │       │   ├── fractal.rs         # Fractal spine: gate, schedule, reunify, prune, complexity
-│   │       │   └── swarm.rs           # Swarm spine: checkpoint, prune
+│   │       │   └── harness_legacy.rs  # Governance run, log
 │   │       ├── harness/               # Governance loop
-│   │       │   ├── run.rs             # L1 static rules + L2 AI judge + rework loop
-│   │       │   ├── log.rs             # Governance log display
-│   │       │   └── rules.rs           # Crystallized rules list
-│   │       ├── meta/                  # AI meta-testing framework
-│   │       │   ├── mod.rs             # Orchestration + phase logic + rework loop
-│   │       │   ├── consult.rs         # AI project analysis + diagnosis
-│   │       │   ├── execute.rs         # Test execution pipeline
-│   │       │   └── validate.rs        # Result reliability assessment
-│   │       └── util.rs                # find_repo_root(), exec_script()
-│   ├── harness-http/                  # Axum REST API + dashboard static files
-│   │   └── src/
-│   │       └── main.rs                # HTTP server
-│   └── orchestra-core/                # Pipeline engine, fractal algorithms, swarm algorithms
+│   │       │   ├── run.rs             # L2 AI judge + rework loop
+│   │       │   └── log.rs             # Governance log display
+│   │       └── util.rs                # find_repo_root()
+│   └── harness-http/                  # Axum REST API + dashboard static files
 │       └── src/
-│           ├── lib.rs                 # Public API: pipeline, fractal, swarm
-│           ├── pipeline/
-│           │   ├── schema.rs          # Pipeline YAML schema (Agent, Run, Branch, Fan steps)
-│           │   ├── executor.rs        # Sequential step execution + middleware
-│           │   ├── gates.rs           # Preflight gate system
-│           │   ├── validate.rs        # Pre-execution pipeline validation
-│           │   └── vars.rs            # Variable interpolation (${scope.field})
-│           ├── fractal/
-│           │   ├── decompose.rs       # TF-IDF orthogonality, cycle detection, complexity scoring
-│           │   ├── schedule.rs        # DAG topological sort into parallel waves
-│           │   ├── reunify.rs         # Merge conflict analysis (structural + git merge-tree)
-│           │   └── prune.rs           # Redundancy detection (greedy set cover)
-│           └── swarm/
-│               ├── checkpoint.rs      # Pairwise Jaccard similarity, cross-pollination
-│               └── prune.rs           # Convergence-based branch removal (min 2 survivors)
-├── pipelines/                         # Declarative pipeline definitions
-│   ├── factory.yml                    # Linear BUILD → INSPECT → route → PR
-│   ├── adversarial.yml                # Generative-adversarial hardening loop
-│   ├── fractal.yml                    # Recursive DECOMPOSE → SOLVE → REUNIFY
-│   └── swarm.yml                      # Speculative parallel exploration → merge
+│           └── main.rs                # HTTP server
 ├── skills/
-│   ├── harness-governance/            # Agent self-reporting skill
-│   ├── factory/                       # Factory pipeline skill (prompts, evals)
-│   ├── fractal/                       # Fractal pipeline skill (prompts, evals)
-│   ├── swarm/                         # Swarm pipeline skill (prompts)
-│   └── adversarial/                   # Adversarial pipeline skill (prompts)
-├── schemas/                           # Structured output JSON schemas
-│   ├── build-report.json              # BUILD step output
-│   ├── inspect-verdict.json           # INSPECT step verdict
-│   ├── decompose-verdict.json         # Fractal decomposition output
-│   ├── strategy-set.json              # Swarm strategy generation
-│   └── ...                            # attack-report, solve-report, merge-report, etc.
+│   └── harness-governance/            # Agent self-reporting skill
 ├── packages/
 │   ├── cli/                           # npm wrapper for Rust binary
 │   └── ui/                            # Vite React dashboard
+├── docs/
+│   └── orchestration-patterns/        # Concept reference for pipeline topologies
 ├── docs-site/                         # Docusaurus documentation
 ├── docker/                            # Multi-stage Dockerfile
 ├── deploy/                            # Fly.io, Railway, Render configs
 ├── specs/                             # LeanSpec specs
 ├── .harness/                          # Governance config
-│   ├── gates.yml                      # Preflight gates
-│   ├── harness.governance.jsonl       # Governance log
-│   ├── rules/                         # Crystallized rules
-│   └── scripts/                       # Utility scripts
+│   └── README.md                      # Governance protocol reference
+├── .githooks/                         # Git hooks (L1 governance)
+│   ├── pre-commit                     # cargo fmt --check
+│   └── pre-push                       # fmt + clippy + test
 └── HARNESS.md                         # Governance protocol
 ```
 
 ### Extracted repositories
 
 - **[codervisor/eval](https://github.com/codervisor/eval)** — Standalone eval framework (SWE-bench, FeatureBench, DevBench)
+- **[codervisor/orchestra](https://github.com/codervisor/orchestra)** — Pipeline engine, fractal/swarm algorithms, coordination skills
 
 ### Event types
 
@@ -116,17 +82,17 @@ synodic/
 
 ### Two-layer governance (from HARNESS.md)
 
-- **L1**: Static/deterministic rules (zero AI cost, fast)
-- **L2**: AI judge (independent LLM, fresh context, semantic analysis)
+- **L1**: Git hooks + CI (deterministic, fast, tool-agnostic)
+- **L2**: Synodic AI judge + event collection + pattern detection (semantic, unique value)
 
-### Pipeline topologies
+### Pipeline topologies (concept reference)
 
-Four coordination patterns for different task complexities:
+Four coordination patterns documented in `docs/orchestration-patterns/`:
 
-- **Factory** (`pipelines/factory.yml`): Linear BUILD → INSPECT → route → PR. Best for clear, spec-driven tasks.
-- **Adversarial** (`pipelines/adversarial.yml`): Generate-attack loop with escalating critic modes. Best for security hardening.
-- **Fractal** (`pipelines/fractal.yml`): Recursive decompose → parallel solve → reunify. Best for large, complex tasks.
-- **Swarm** (`pipelines/swarm.yml`): Speculative parallel exploration → checkpoint → prune → merge. Best for ambiguous tasks.
+- **Factory**: Linear BUILD -> INSPECT -> route -> PR. Best for clear, spec-driven tasks.
+- **Adversarial**: Generate-attack loop with escalating critic modes. Best for security hardening.
+- **Fractal**: Recursive decompose -> parallel solve -> reunify. Best for large, complex tasks.
+- **Swarm**: Speculative parallel exploration -> checkpoint -> prune -> merge. Best for ambiguous tasks.
 
 ## Claude Code Cloud Environment
 
@@ -152,26 +118,26 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 ## CLI commands
 
 ```bash
-# Governance run (L1 + L2)
-synodic harness run -- <agent_cmd>
-
-# Log and rules
+# Governance
+synodic harness run -- <agent_cmd>   # L2 AI judge + rework loop
 synodic harness log [--json] [--tail N]
-synodic harness rules
 
-# Meta-testing
-synodic harness meta [--spec <path>] [--dry-run]
+# Event management
+synodic submit --type <type> --title "<title>" [--severity <level>]
+synodic collect [--source claude|copilot|auto] [--since <duration>]
+synodic list [--type <type>] [--severity <level>] [--unresolved]
+synodic search "<query>"
+synodic stats [--since <duration>]
+synodic resolve <id> [--notes "<notes>"]
 
-# Fractal operations
-synodic fractal gate -i input.json       # Validate decomposition
-synodic fractal schedule -i manifest.json # DAG topological sort
-synodic fractal reunify -i input.json    # Merge conflict analysis
-synodic fractal prune -i tree.json       # Redundancy detection
-synodic fractal complexity -i spec.md    # Complexity scoring
+# Rules
+synodic rules list
 
-# Swarm operations
-synodic swarm checkpoint -i manifest.json # Pairwise similarity
-synodic swarm prune -i input.json        # Convergence pruning
+# Live monitoring
+synodic watch [--filter "<expr>"]
+
+# Server
+synodic serve
 ```
 
 ### Skill installation

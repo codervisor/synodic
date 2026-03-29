@@ -1,7 +1,0 @@
-## Pipeline preflight gates.
-##
-## Used by the orchestra pipeline executor when a step has `check: [preflight]`.
-## NOT used for L1 governance — that's handled by git hooks and CI.
-
-gates:
-  preflight: []

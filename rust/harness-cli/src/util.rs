@@ -1,5 +1,4 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 /// Walk up from CWD to find the repo root (contains `.harness/` or `.git`).
 ///
@@ -23,19 +22,4 @@ pub fn find_repo_root() -> anyhow::Result<PathBuf> {
             );
         }
     }
-}
-
-/// Spawn a script with the given args, inheriting stdio.
-/// Exits the process with the script's exit code.
-pub fn exec_script(script: &Path, args: &[String]) -> anyhow::Result<()> {
-    let status = Command::new(script)
-        .args(args)
-        .status()
-        .map_err(|e| anyhow::anyhow!("failed to execute {}: {}", script.display(), e))?;
-
-    if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
-    }
-
-    Ok(())
 }

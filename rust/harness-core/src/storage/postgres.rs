@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use postgres::{Client, NoTls};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use crate::events::{Event, EventFilter, Stats};
@@ -7,7 +8,7 @@ use crate::storage::EventStore;
 
 /// PostgreSQL-backed event store for team/org deployments.
 pub struct PostgresStore {
-    client: Client,
+    client: RefCell<Client>,
 }
 
 impl PostgresStore {
@@ -15,17 +16,19 @@ impl PostgresStore {
     ///
     /// URL format: `postgres://user:pass@host:port/dbname`
     pub fn connect(url: &str) -> Result<Self> {
-        let client = Client::connect(url, NoTls)
+        let mut client = Client::connect(url, NoTls)
             .with_context(|| format!("connecting to PostgreSQL: {url}"))?;
-        let mut store = Self { client };
-        store.migrate()?;
-        Ok(store)
+        migrate(&mut client)?;
+        Ok(Self {
+            client: RefCell::new(client),
+        })
     }
+}
 
-    fn migrate(&mut self) -> Result<()> {
-        self.client
-            .batch_execute(
-                "CREATE TABLE IF NOT EXISTS events (
+fn migrate(client: &mut Client) -> Result<()> {
+    client
+        .batch_execute(
+            "CREATE TABLE IF NOT EXISTS events (
                     id TEXT PRIMARY KEY,
                     event_type TEXT NOT NULL,
                     title TEXT NOT NULL,
@@ -45,17 +48,15 @@ impl PostgresStore {
 
                 -- GIN index on title for full-text search
                 CREATE INDEX IF NOT EXISTS idx_events_title_gin ON events USING gin(to_tsvector('english', title));",
-            )
-            .context("running PostgreSQL migrations")?;
-        Ok(())
-    }
+        )
+        .context("running PostgreSQL migrations")?;
+    Ok(())
 }
 
 impl EventStore for PostgresStore {
     fn insert(&self, event: &Event) -> Result<()> {
-        // Need a mutable reference for postgres execute
-        let client = unsafe { &mut *(self as *const Self as *mut Self) };
-        client.client.execute(
+        let mut client = self.client.borrow_mut();
+        client.execute(
             "INSERT INTO events (id, event_type, title, severity, source, metadata, resolved, resolution_notes, created_at, resolved_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
             &[
@@ -75,10 +76,8 @@ impl EventStore for PostgresStore {
     }
 
     fn get(&self, id: &str) -> Result<Option<Event>> {
-        let client = unsafe { &mut *(self as *const Self as *mut Self) };
-        let rows = client
-            .client
-            .query("SELECT * FROM events WHERE id = $1", &[&id])?;
+        let mut client = self.client.borrow_mut();
+        let rows = client.query("SELECT * FROM events WHERE id = $1", &[&id])?;
         match rows.first() {
             Some(row) => Ok(Some(row_to_event(row)?)),
             None => Ok(None),
@@ -122,12 +121,12 @@ impl EventStore for PostgresStore {
             sql.push_str(&format!(" LIMIT {limit}"));
         }
 
-        let client = unsafe { &mut *(self as *const Self as *mut Self) };
+        let mut client = self.client.borrow_mut();
         let param_refs: Vec<&(dyn postgres::types::ToSql + Sync)> = params
             .iter()
             .map(|s| s as &(dyn postgres::types::ToSql + Sync))
             .collect();
-        let rows = client.client.query(&sql as &str, &param_refs)?;
+        let rows = client.query(&sql as &str, &param_refs)?;
 
         let mut events = Vec::new();
         for row in &rows {
@@ -137,8 +136,8 @@ impl EventStore for PostgresStore {
     }
 
     fn resolve(&self, id: &str, notes: &str) -> Result<()> {
-        let client = unsafe { &mut *(self as *const Self as *mut Self) };
-        let updated = client.client.execute(
+        let mut client = self.client.borrow_mut();
+        let updated = client.execute(
             "UPDATE events SET resolved = TRUE, resolution_notes = $1, resolved_at = $2 WHERE id = $3",
             &[&notes, &chrono::Utc::now(), &id],
         )?;
@@ -173,8 +172,8 @@ impl EventStore for PostgresStore {
     }
 
     fn search(&self, query: &str, limit: usize) -> Result<Vec<Event>> {
-        let client = unsafe { &mut *(self as *const Self as *mut Self) };
-        let rows = client.client.query(
+        let mut client = self.client.borrow_mut();
+        let rows = client.query(
             "SELECT * FROM events
              WHERE to_tsvector('english', title) @@ plainto_tsquery('english', $1)
              ORDER BY created_at DESC

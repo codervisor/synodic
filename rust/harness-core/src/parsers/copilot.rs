@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use crate::events::{Event, EventType, Severity};
+use crate::events::Event;
 use crate::parsers::LogParser;
 use crate::rules::{self, RuleEngine};
 
@@ -11,8 +11,10 @@ use crate::rules::{self, RuleEngine};
 /// - VS Code: `~/.vscode/extensions/github.copilot-chat-*/` conversation logs
 /// - Copilot agent: `~/.config/github-copilot/events.jsonl`
 ///
-/// Each line is a JSON object. We look for fields like "event", "type",
-/// "outcome", "error", "suggestion", and "properties".
+/// Each line is a JSON object. The parser focuses on L2-relevant signals:
+/// semantic pattern detection via the rule engine (secrets, dangerous commands,
+/// hallucination indicators). L1 concerns (tool errors, command failures,
+/// content filter blocks) are handled by git hooks and CI, not Synodic.
 pub struct CopilotLogParser {
     engine: std::cell::RefCell<RuleEngine>,
 }
@@ -24,132 +26,24 @@ impl CopilotLogParser {
         }
     }
 
-    /// Parse a single JSONL line and detect events.
+    /// Parse a single JSONL line and detect L2-relevant events.
     fn parse_line(&self, line: &str) -> Vec<Event> {
-        let mut events = Vec::new();
-
         let obj: serde_json::Value = match serde_json::from_str(line) {
             Ok(v) => v,
-            Err(_) => return events,
+            Err(_) => return Vec::new(),
         };
 
-        // Copilot events use "event" or "type" as discriminator
-        let event_name = obj
-            .get("event")
-            .or_else(|| obj.get("type"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-
-        // Detect tool/command errors
-        if matches!(event_name, "error" | "tool_error" | "command_error") {
-            let message = obj
-                .get("message")
-                .or_else(|| obj.get("error"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown error");
-            let tool = obj
-                .get("tool")
-                .or_else(|| obj.get("command"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-
-            events.push(Event::new(
-                EventType::ToolCallError,
-                format!("Copilot tool error in {tool}: {}", truncate(message, 120)),
-                Severity::Medium,
-                "copilot".to_string(),
-                serde_json::json!({
-                    "tool": tool,
-                    "error": message,
-                }),
-            ));
-        }
-
-        // Detect outcome=error in completion/suggestion events
-        if let Some(outcome) = obj.get("outcome").and_then(|v| v.as_str()) {
-            if outcome == "error" || outcome == "failed" {
-                let detail = obj
-                    .get("message")
-                    .or_else(|| obj.get("reason"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("no details");
-
-                events.push(Event::new(
-                    EventType::ToolCallError,
-                    format!("Copilot {event_name} failed: {}", truncate(detail, 120)),
-                    Severity::Low,
-                    "copilot".to_string(),
-                    serde_json::json!({
-                        "event": event_name,
-                        "outcome": outcome,
-                        "detail": detail,
-                    }),
-                ));
-            }
-        }
-
-        // Detect rejected/blocked completions (potential misalignment indicator)
-        if event_name == "completion_rejected" || event_name == "suggestion_rejected" {
-            let reason = obj
-                .get("reason")
-                .and_then(|v| v.as_str())
-                .unwrap_or("no reason");
-            if reason.contains("content_filter") || reason.contains("blocked") {
-                events.push(Event::new(
-                    EventType::ComplianceViolation,
-                    format!("Copilot completion blocked: {}", truncate(reason, 120)),
-                    Severity::High,
-                    "copilot".to_string(),
-                    serde_json::json!({
-                        "event": event_name,
-                        "reason": reason,
-                    }),
-                ));
-            }
-        }
-
-        // Detect agent action events with error states
-        if event_name == "agent_action" || event_name == "chat_action" {
-            if let Some(status) = obj.get("status").and_then(|v| v.as_str()) {
-                if status == "error" || status == "failed" {
-                    let action = obj
-                        .get("action")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    let detail = obj
-                        .get("error")
-                        .or_else(|| obj.get("message"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("no details");
-
-                    events.push(Event::new(
-                        EventType::ToolCallError,
-                        format!(
-                            "Copilot agent action failed: {action}: {}",
-                            truncate(detail, 120)
-                        ),
-                        Severity::Medium,
-                        "copilot".to_string(),
-                        serde_json::json!({
-                            "action": action,
-                            "status": status,
-                            "error": detail,
-                        }),
-                    ));
-                }
-            }
-        }
-
-        // Run rule engine against content fields
+        // Run rule engine against content fields for L2 pattern detection
+        // (secrets, dangerous commands, hallucination indicators)
         let content_str = extract_content(&obj);
-        if let Some(content) = content_str {
-            let mut engine = self.engine.borrow_mut();
-            let matches = engine.evaluate(&content);
-            let rule_events = engine.matches_to_events(&matches, "copilot");
-            events.extend(rule_events);
+        match content_str {
+            Some(content) => {
+                let mut engine = self.engine.borrow_mut();
+                let matches = engine.evaluate(&content);
+                engine.matches_to_events(&matches, "copilot")
+            }
+            None => Vec::new(),
         }
-
-        events
     }
 }
 
@@ -219,14 +113,6 @@ fn extract_content(obj: &serde_json::Value) -> Option<String> {
     }
 }
 
-fn truncate(s: &str, max: usize) -> &str {
-    if s.len() <= max {
-        s
-    } else {
-        &s[..max]
-    }
-}
-
 /// Find Copilot event log files in common locations.
 pub fn find_copilot_logs(project_dir: &Path) -> Result<Vec<std::path::PathBuf>> {
     let mut logs = Vec::new();
@@ -293,6 +179,7 @@ fn dirs_path() -> Option<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::EventType;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -302,55 +189,6 @@ mod tests {
             writeln!(f, "{}", line).unwrap();
         }
         f
-    }
-
-    #[test]
-    fn test_parse_tool_error() {
-        let parser = CopilotLogParser::new();
-        let log = write_temp_log(&[
-            r#"{"event": "tool_error", "tool": "terminal", "message": "Command failed with exit code 1"}"#,
-        ]);
-        let events = parser.parse(log.path()).unwrap();
-        assert!(events
-            .iter()
-            .any(|e| e.event_type == EventType::ToolCallError));
-        assert!(events.iter().any(|e| e.source == "copilot"));
-    }
-
-    #[test]
-    fn test_parse_outcome_error() {
-        let parser = CopilotLogParser::new();
-        let log = write_temp_log(&[
-            r#"{"event": "completion", "outcome": "error", "message": "Rate limit exceeded"}"#,
-        ]);
-        let events = parser.parse(log.path()).unwrap();
-        assert!(events
-            .iter()
-            .any(|e| e.event_type == EventType::ToolCallError));
-    }
-
-    #[test]
-    fn test_parse_content_filter_blocked() {
-        let parser = CopilotLogParser::new();
-        let log = write_temp_log(&[
-            r#"{"event": "completion_rejected", "reason": "content_filter: potentially unsafe"}"#,
-        ]);
-        let events = parser.parse(log.path()).unwrap();
-        assert!(events
-            .iter()
-            .any(|e| e.event_type == EventType::ComplianceViolation));
-    }
-
-    #[test]
-    fn test_parse_agent_action_failed() {
-        let parser = CopilotLogParser::new();
-        let log = write_temp_log(&[
-            r#"{"event": "agent_action", "action": "file_edit", "status": "error", "error": "Permission denied"}"#,
-        ]);
-        let events = parser.parse(log.path()).unwrap();
-        assert!(events
-            .iter()
-            .any(|e| e.event_type == EventType::ToolCallError));
     }
 
     #[test]
@@ -376,6 +214,17 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_dangerous_command() {
+        let parser = CopilotLogParser::new();
+        let log =
+            write_temp_log(&[r#"{"event": "suggestion", "output": "rm -rf / --no-preserve-root"}"#]);
+        let events = parser.parse(log.path()).unwrap();
+        assert!(events
+            .iter()
+            .any(|e| e.event_type == EventType::ComplianceViolation));
+    }
+
+    #[test]
     fn test_parse_empty_file() {
         let parser = CopilotLogParser::new();
         let log = write_temp_log(&[]);
@@ -389,6 +238,24 @@ mod tests {
         let log = write_temp_log(&["not json", "{bad", ""]);
         let events = parser.parse(log.path()).unwrap();
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_l1_concerns_not_detected() {
+        // L1 concerns (tool errors, command failures) should NOT be detected
+        // These are handled by git hooks and CI, not Synodic's L2 layer
+        let parser = CopilotLogParser::new();
+        let log = write_temp_log(&[
+            r#"{"event": "tool_error", "tool": "terminal", "message": "Command failed with exit code 1"}"#,
+            r#"{"event": "completion", "outcome": "error", "message": "Rate limit exceeded"}"#,
+            r#"{"event": "agent_action", "action": "file_edit", "status": "error", "error": "Permission denied"}"#,
+        ]);
+        let events = parser.parse(log.path()).unwrap();
+        // None of these should produce ToolCallError events
+        assert!(
+            !events.iter().any(|e| e.event_type == EventType::ToolCallError),
+            "L1 concerns should not be detected by copilot parser"
+        );
     }
 
     #[test]
