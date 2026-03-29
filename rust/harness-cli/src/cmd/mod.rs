@@ -1,5 +1,5 @@
 pub mod collect;
-pub mod harness_legacy;
+pub mod governance;
 pub mod init;
 pub mod intercept;
 pub mod list;

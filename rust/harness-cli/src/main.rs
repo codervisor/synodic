@@ -42,8 +42,8 @@ enum Cli {
     /// Start API server and dashboard
     Serve(cmd::serve::ServeCmd),
 
-    /// Legacy governance harness (L1/L2 evaluation loop)
-    Harness(cmd::harness_legacy::HarnessCmd),
+    /// Governance harness (L2 AI judge + rework loop)
+    Harness(cmd::governance::GovernanceCmd),
 
     /// Evaluate agent tool call against interception rules (L2 intercept)
     Intercept(cmd::intercept::InterceptCmd),

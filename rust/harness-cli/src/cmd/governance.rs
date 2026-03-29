@@ -4,13 +4,13 @@ use crate::harness;
 use crate::util;
 
 #[derive(Args)]
-pub struct HarnessCmd {
+pub struct GovernanceCmd {
     #[command(subcommand)]
-    command: HarnessSubcommand,
+    command: GovernanceSubcommand,
 }
 
 #[derive(Subcommand)]
-enum HarnessSubcommand {
+enum GovernanceSubcommand {
     /// Execute an agent command with governance checkpoints
     Run {
         /// Max rework cycles before escalation
@@ -62,10 +62,10 @@ enum HarnessSubcommand {
     },
 }
 
-impl HarnessCmd {
+impl GovernanceCmd {
     pub fn run(self) -> anyhow::Result<()> {
         match self.command {
-            HarnessSubcommand::Run {
+            GovernanceSubcommand::Run {
                 max_rework,
                 workdir,
                 no_l2,
@@ -91,7 +91,7 @@ impl HarnessCmd {
                     agent_cmd,
                 })
             }
-            HarnessSubcommand::Log { json, tail } => {
+            GovernanceSubcommand::Log { json, tail } => {
                 let repo_root = util::find_repo_root()?;
                 let harness_dir = resolve_harness_dir(&repo_root)?;
                 harness::log::display(&harness_dir, json, tail)

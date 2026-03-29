@@ -2,7 +2,7 @@
 FROM rust:1.83-bookworm AS rust-builder
 WORKDIR /build
 COPY rust/ rust/
-RUN cd rust && cargo build --release
+RUN cd rust && cargo build --release --features harness-http/postgres
 
 # Stage 2: Build dashboard
 FROM node:22-bookworm-slim AS ui-builder
@@ -22,6 +22,10 @@ COPY --from=rust-builder /build/rust/target/release/synodic-http /usr/local/bin/
 COPY --from=ui-builder /build/dist /srv/dashboard
 
 ENV SYNODIC_DASHBOARD_DIR=/srv/dashboard
+ENV DATABASE_URL=/data/synodic.db
 EXPOSE 3000
 
-ENTRYPOINT ["synodic-http"]
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["entrypoint.sh"]
