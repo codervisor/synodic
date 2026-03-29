@@ -7,7 +7,6 @@ use serde::Deserialize;
 
 use harness_core::events::{Event, EventFilter, EventType, Severity};
 use harness_core::rules;
-use harness_core::storage::EventStore;
 
 use crate::state::AppState;
 use crate::ws;

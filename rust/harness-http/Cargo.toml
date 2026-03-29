@@ -8,6 +8,10 @@ description = "Synodic harness-http — Axum REST API and dashboard server"
 name = "synodic-http"
 path = "src/main.rs"
 
+[features]
+default = []
+postgres = ["harness-core/postgres"]
+
 [dependencies]
 harness-core = { path = "../harness-core" }
 axum = { version = "0.8", features = ["ws"] }

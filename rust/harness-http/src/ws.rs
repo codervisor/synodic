@@ -5,7 +5,6 @@ use futures::stream::StreamExt;
 use tokio::sync::broadcast;
 
 use harness_core::events::Event;
-use harness_core::storage::EventStore;
 
 use crate::state::AppState;
 
