@@ -14,33 +14,40 @@ depends_on:
 - "069"
 ---
 
-# Codebase Cleanup — Remove Dead Code and Misaligned Features
+# Codebase Cleanup — Remove Dead Code, Keep Orchestration Concepts
 
 > **Status**: draft · **Priority**: high · **Created**: 2026-03-29
 
 ## Overview
 
-Spec 067 repositioned Synodic as a governance platform and extracted coordination patterns to `codervisor/orchestra`. Spec 068 removed L1 infrastructure. But the extraction was incomplete — `orchestra-core` (5,583 LOC) is still in the workspace, pipeline definitions and orchestration skills are still in the repo, and the CLI still exposes `fractal` and `swarm` commands. Additionally, the `meta/` module (2,081 LOC) is an orthogonal AI meta-testing framework that doesn't serve the governance mission, and several `.harness/` scripts are dead.
+Spec 067 repositioned Synodic as a governance platform. Spec 068 removed L1 infrastructure. But the codebase still carries `orchestra-core` implementation (5,583 LOC), pipeline skills, and CLI commands that should have been extracted. The `meta/` module (2,081 LOC) is orthogonal to governance. Several `.harness/` scripts are dead.
 
-This spec identifies everything that should be removed, consolidated, or fixed.
+**Principle**: Remove implementation code, but preserve orchestration *concepts* (factory, fractal, swarm, adversarial patterns) as lightweight documentation. These coordination topologies are part of Synodic's identity — the governance platform that understands how multi-agent pipelines work. The ideas stay; the Rust code goes.
 
 ## Inventory
 
-### A. Orchestra remnants (should have been extracted in spec 067)
+### A. Orchestra implementation (remove code, keep concepts)
 
-| Item | Size | Status |
+**Remove** (Rust implementation):
+
+| Item | Size | Action |
 |------|------|--------|
-| `rust/orchestra-core/` | 5,583 LOC | Full crate still in workspace |
-| `rust/Cargo.toml` workspace member `orchestra-core` | — | Still listed |
-| `rust/harness-cli/Cargo.toml` dep on `orchestra-core` | — | Still declared |
-| `rust/harness-cli/src/cmd/fractal.rs` | 99 LOC | CLI command wrapping orchestra |
-| `rust/harness-cli/src/cmd/swarm.rs` | 64 LOC | CLI command wrapping orchestra |
-| `Cli::Fractal` / `Cli::Swarm` in `main.rs` | — | Enum variants + dispatch |
-| `pipelines/*.yml` (factory, adversarial, fractal, swarm) | 4 files | Pipeline definitions for orchestra |
-| `schemas/` (build-report, inspect-verdict, decompose-verdict, etc.) | 9 files | Pipeline output schemas |
-| `skills/factory/`, `skills/fractal/`, `skills/swarm/`, `skills/adversarial/` | 4 dirs | Orchestra pipeline skills |
+| `rust/orchestra-core/` | 5,583 LOC | Delete crate |
+| `rust/Cargo.toml` workspace member `orchestra-core` | — | Remove |
+| `rust/harness-cli/Cargo.toml` dep on `orchestra-core` | — | Remove |
+| `rust/harness-cli/src/cmd/fractal.rs` | 99 LOC | Delete |
+| `rust/harness-cli/src/cmd/swarm.rs` | 64 LOC | Delete |
+| `Cli::Fractal` / `Cli::Swarm` in `main.rs` | — | Remove |
+| `schemas/` (9 pipeline output schemas) | 9 files | Delete |
 
-**Total**: ~5,750 LOC + 17 files/dirs that belong in `codervisor/orchestra`.
+**Consolidate** (keep concepts as lightweight docs):
+
+| Item | Action |
+|------|--------|
+| `pipelines/*.yml` (factory, adversarial, fractal, swarm) | Move to `docs/orchestration-patterns/` as reference |
+| `skills/factory/`, `skills/fractal/`, `skills/swarm/`, `skills/adversarial/` | Extract SKILL.md content into a single `docs/orchestration-patterns/README.md`, delete skill dirs |
+
+The four pipeline topologies (factory, adversarial, fractal, swarm) are core concepts for how Synodic governs multi-agent work. They inform what the governance layer needs to understand — but they don't need a Rust implementation in this repo.
 
 ### B. Meta-testing module (orthogonal to governance)
 
@@ -86,7 +93,7 @@ This spec identifies everything that should be removed, consolidated, or fixed.
 
 ## Plan
 
-### Phase 1: Remove orchestra remnants
+### Phase 1: Remove orchestra implementation, preserve concepts
 
 - [ ] Delete `rust/orchestra-core/` directory
 - [ ] Remove `orchestra-core` from `rust/Cargo.toml` workspace members
@@ -95,10 +102,11 @@ This spec identifies everything that should be removed, consolidated, or fixed.
 - [ ] Delete `rust/harness-cli/src/cmd/swarm.rs`
 - [ ] Remove `Fractal` and `Swarm` variants from `Cli` enum in `main.rs`
 - [ ] Remove `fractal`/`swarm` from `cmd/mod.rs`
-- [ ] Delete `pipelines/` directory (4 YAML files)
-- [ ] Delete `schemas/` directory (9 JSON files) — these are orchestra pipeline schemas
-- [ ] Delete `skills/factory/`, `skills/fractal/`, `skills/swarm/`, `skills/adversarial/`
-- [ ] Update CLAUDE.md: remove orchestra references, pipeline topologies section, fractal/swarm CLI commands
+- [ ] Delete `schemas/` directory (9 JSON files — pipeline output schemas)
+- [ ] Create `docs/orchestration-patterns/README.md` — consolidate the four topologies (factory, adversarial, fractal, swarm) as concept docs: what each pattern does, when to use it, what governance checkpoints apply
+- [ ] Move `pipelines/*.yml` to `docs/orchestration-patterns/` as reference examples
+- [ ] Extract key ideas from `skills/{factory,fractal,swarm,adversarial}/SKILL.md` into the patterns doc, then delete skill dirs
+- [ ] Update CLAUDE.md: remove orchestra code references, keep conceptual mention of pipeline topologies, remove fractal/swarm CLI commands
 
 ### Phase 2: Remove or quarantine meta-testing
 
@@ -150,12 +158,14 @@ This spec identifies everything that should be removed, consolidated, or fixed.
 - [ ] No `unsafe` blocks remain in postgres.rs
 - [ ] Copilot parser only emits L2-relevant events (no ToolCallError from generic errors)
 - [ ] `.harness/` directory contains only: README.md, harness.governance.jsonl, scripts/evaluate_harness.py (if kept)
-- [ ] No references to orchestra, fractal, swarm, pipeline, factory, adversarial in Rust source
+- [ ] No references to orchestra in Rust source (conceptual references in docs/ are fine)
+- [ ] `docs/orchestration-patterns/README.md` covers all four topologies
 
 ## Notes
 
-- **LOC removed**: ~7,800 (orchestra-core 5,583 + meta 2,081 + CLI commands 163)
-- **Files removed**: ~30+ (orchestra crate, pipelines, schemas, skills, scripts)
-- The `harness eval` → `evaluate_harness.py` pattern is an anti-pattern (Rust CLI shelling out to Python). If eval functionality is needed, it should be reimplemented in Rust or removed entirely.
+- **LOC removed**: ~7,800 Rust (orchestra-core 5,583 + meta 2,081 + CLI commands 163)
+- **Files removed**: ~30+ (orchestra crate, schemas, scripts). Pipeline YAMLs and skill content preserved as docs.
+- **Why keep the concepts**: Synodic governs multi-agent pipelines. Understanding the topologies (factory = linear, adversarial = generate-attack loop, fractal = recursive decompose, swarm = speculative parallel) is essential context for writing governance rules. The docs serve as a reference for what patterns the governance layer is designed to observe.
+- The `harness eval` → `evaluate_harness.py` pattern is an anti-pattern (Rust CLI shelling out to Python). Remove with the `Eval` subcommand.
 - `harness.governance.jsonl` is 0 bytes — the governance log is never written to by current code. The `harness run` command writes to `.runs/` manifests instead. Consider whether the JSONL log is still needed or if `.runs/` is the canonical persistence layer.
-- The `Search` command largely overlaps with `List`. Consider merging `Search` into `List --search <query>` in a future cleanup, but this is low priority.
+- The `Search` command largely overlaps with `List`. Consider merging into `List --search <query>` in a future pass.
