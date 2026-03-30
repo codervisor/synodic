@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@10.6.2",
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks",
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "cd rust && cargo build --release",
     "build:ui": "cd packages/ui && pnpm install && npx vite build",
     "dev": "cd rust && cargo build",
