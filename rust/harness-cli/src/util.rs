@@ -1,9 +1,8 @@
 use std::path::PathBuf;
 
-/// Walk up from CWD to find the repo root (contains `.harness/` or `.git`).
+/// Walk up from CWD to find the repo root (contains `.git`).
 ///
-/// Respects `SYNODIC_ROOT` env var — set by `harness run` so that agent
-/// subprocesses can find the correct project root.
+/// Respects `SYNODIC_ROOT` env var for explicit override.
 pub fn find_repo_root() -> anyhow::Result<PathBuf> {
     if let Ok(root) = std::env::var("SYNODIC_ROOT") {
         let p = PathBuf::from(&root);
@@ -13,13 +12,11 @@ pub fn find_repo_root() -> anyhow::Result<PathBuf> {
     }
     let mut dir = std::env::current_dir()?;
     loop {
-        if dir.join(".harness").is_dir() || dir.join(".git").exists() {
+        if dir.join(".git").exists() {
             return Ok(dir);
         }
         if !dir.pop() {
-            anyhow::bail!(
-                "could not find repo root (no .harness/ or .git/ in any parent directory)"
-            );
+            anyhow::bail!("could not find repo root (no .git/ in any parent directory)");
         }
     }
 }

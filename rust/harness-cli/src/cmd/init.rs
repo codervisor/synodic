@@ -27,21 +27,6 @@ impl InitCmd {
             None => util::find_repo_root()?,
         };
 
-        // --- .harness/ infrastructure ---
-        let harness_dir = root.join(".harness");
-        std::fs::create_dir_all(&harness_dir)?;
-        std::fs::create_dir_all(harness_dir.join(".runs"))?;
-
-        let db_path = harness_dir.join("synodic.db");
-        if !db_path.exists() {
-            harness_core::storage::sqlite::SqliteStore::open(&db_path)?;
-            eprintln!("Created database: {}", db_path.display());
-        } else {
-            eprintln!("Database already exists: {}", db_path.display());
-        }
-
-        eprintln!("Initialized .harness/ at {}", harness_dir.display());
-
         // --- L1: Git hooks ---
         if !self.no_git_hooks {
             setup_git_hooks(&root)?;
@@ -79,7 +64,7 @@ fn setup_git_hooks(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Create .claude/settings.json and hook scripts for L2 interception.
+/// Create .claude/settings.json and intercept hook for L2 interception.
 fn setup_claude_hooks(root: &Path) -> Result<()> {
     let claude_dir = root.join(".claude");
     let hooks_dir = claude_dir.join("hooks");
@@ -94,17 +79,6 @@ fn setup_claude_hooks(root: &Path) -> Result<()> {
         eprintln!("L2: created {}", intercept_path.display());
     } else {
         eprintln!("L2: {} already exists, skipping", intercept_path.display());
-    }
-
-    // Write post-tool-log.sh
-    let log_path = hooks_dir.join("post-tool-log.sh");
-    if !log_path.exists() {
-        std::fs::write(&log_path, POST_TOOL_LOG_HOOK)?;
-        #[cfg(unix)]
-        set_executable(&log_path)?;
-        eprintln!("L2: created {}", log_path.display());
-    } else {
-        eprintln!("L2: {} already exists, skipping", log_path.display());
     }
 
     // Write settings.json
@@ -181,48 +155,6 @@ fi
 exit 0
 "##;
 
-const POST_TOOL_LOG_HOOK: &str = r##"#!/usr/bin/env bash
-# PostToolUse event logger for Synodic governance.
-#
-# Logs tool usage events to .harness/events.jsonl for post-session
-# analysis and pattern detection (L2 audit trail).
-#
-# Runs async — does not block the agent.
-
-set -euo pipefail
-
-PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-HARNESS_DIR="${PROJECT_DIR}/.harness"
-LOG_FILE="${HARNESS_DIR}/events.jsonl"
-
-# Ensure .harness directory exists
-mkdir -p "$HARNESS_DIR"
-
-# Read hook input from stdin
-INPUT="$(cat)"
-
-TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // empty')"
-
-# Skip if we can't parse
-if [[ -z "$TOOL_NAME" ]]; then
-  exit 0
-fi
-
-# Build a lightweight log entry (no tool_result to keep logs small)
-TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-SESSION_ID="$(echo "$INPUT" | jq -r '.session_id // "unknown"')"
-
-jq -n \
-  --arg ts "$TIMESTAMP" \
-  --arg tool "$TOOL_NAME" \
-  --arg session "$SESSION_ID" \
-  --arg event "tool_use" \
-  '{timestamp: $ts, event: $event, tool: $tool, session_id: $session}' \
-  >> "$LOG_FILE"
-
-exit 0
-"##;
-
 const CLAUDE_SETTINGS: &str = r##"{
   "hooks": {
     "PreToolUse": [
@@ -234,19 +166,6 @@ const CLAUDE_SETTINGS: &str = r##"{
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/intercept.sh",
             "timeout": 5,
             "statusMessage": "Synodic L2 intercept check..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash|Write|Edit|Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-tool-log.sh",
-            "async": true,
-            "timeout": 5
           }
         ]
       }

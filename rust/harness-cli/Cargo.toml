@@ -2,7 +2,7 @@
 name = "harness-cli"
 version = "0.1.0"
 edition = "2021"
-description = "Synodic — AI agent event governance CLI"
+description = "Synodic — AI agent governance CLI (L1 git hooks + L2 Claude Code hooks)"
 
 [[bin]]
 name = "synodic"
@@ -11,14 +11,5 @@ path = "src/main.rs"
 [dependencies]
 harness-core = { path = "../harness-core" }
 clap = { version = "4", features = ["derive"] }
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
-chrono = { version = "0.4", features = ["serde"] }
-regex = "1"
-ratatui = "0.29"
-crossterm = "0.28"
-
-[dev-dependencies]
-tempfile = "3"
-serde_json = "1"

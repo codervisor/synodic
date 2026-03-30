@@ -2,53 +2,45 @@
 
 ## Project: Synodic
 
-Open-source AI agent event governance platform — monitor, audit, enforce governance rules on AI coding agent sessions.
+Open-source AI agent governance via hooks — enforce rules on AI coding agent sessions.
 
 **Core identity:** The tool that watches the AI agents.
 
 ## Build & Test
 
 ```bash
-cd rust && cargo build          # debug build (all crates)
+cd rust && cargo build          # debug build
 cd rust && cargo test           # run all tests
 cd rust && cargo build --release # release build
-pnpm install                   # install node deps (spec validation tooling)
+pnpm install                   # install node deps + activate git hooks
 ```
 
 ## Architecture
 
-Cargo workspace (`rust/`) with three crates focused on governance.
+Two-layer governance, no custom databases or log files — just hooks.
 
 ```
 synodic/
 ├── rust/
-│   ├── Cargo.toml                     # [workspace] members = ["harness-core", "harness-cli", "harness-http"]
-│   ├── harness-core/                  # Event types, detection rules, storage, log parsers
+│   ├── Cargo.toml                     # [workspace] members = ["harness-core", "harness-cli"]
+│   ├── harness-core/                  # L2 interception engine
 │   │   └── src/
-│   │       ├── lib.rs                 # Public API: events, storage, rules, parsers
-│   │       ├── events.rs              # EventType, Severity, Event
-│   │       ├── storage/
-│   │       │   ├── mod.rs             # EventStore trait, EventFilter, Stats
-│   │       │   ├── sqlite.rs          # SQLite backend (default)
-│   │       │   └── postgres.rs        # PostgreSQL backend (feature-gated)
-│   │       ├── rules/
-│   │       │   └── mod.rs             # Rule, RuleEngine, pattern detection
-│   │       └── parsers/
-│   │           ├── mod.rs             # LogParser trait
-│   │           ├── claude.rs          # Claude Code JSONL log parser
-│   │           └── copilot.rs         # GitHub Copilot log parser
-│   ├── harness-cli/                   # CLI: submit, collect, query, resolve, watch, serve
-│   │   └── src/
-│   │       ├── main.rs                # CLI entry: top-level subcommands
-│   │       ├── cmd/
-│   │       │   └── harness_legacy.rs  # Governance run, log
-│   │       ├── harness/               # Governance loop
-│   │       │   ├── run.rs             # L2 AI judge + rework loop
-│   │       │   └── log.rs             # Governance log display
-│   │       └── util.rs                # find_repo_root()
-│   └── harness-http/                  # Axum REST API + dashboard static files
+│   │       ├── lib.rs                 # Public API
+│   │       └── intercept.rs           # InterceptEngine, rules, allow/block decisions
+│   └── harness-cli/                   # CLI: init + intercept
 │       └── src/
-│           └── main.rs                # HTTP server
+│           ├── main.rs                # CLI entry: init, intercept
+│           ├── cmd/
+│           │   ├── init.rs            # Setup L1 git hooks + L2 Claude Code hooks
+│           │   └── intercept.rs       # PreToolUse hook backend
+│           └── util.rs                # find_repo_root()
+├── .githooks/                         # L1: Git hooks (deterministic, fast)
+│   ├── pre-commit                     # cargo fmt --check
+│   └── pre-push                       # fmt + clippy + test
+├── .claude/                           # L2: Claude Code hooks (pattern-based blocking)
+│   ├── settings.json                  # PreToolUse → intercept.sh
+│   └── hooks/
+│       └── intercept.sh               # stdin JSON → synodic intercept → exit 0/2
 ├── skills/
 │   └── harness-governance/            # Agent self-reporting skill
 ├── packages/
@@ -57,14 +49,7 @@ synodic/
 ├── docs/
 │   └── orchestration-patterns/        # Concept reference for pipeline topologies
 ├── docs-site/                         # Docusaurus documentation
-├── docker/                            # Multi-stage Dockerfile
-├── deploy/                            # Fly.io, Railway, Render configs
 ├── specs/                             # LeanSpec specs
-├── .harness/                          # Governance config
-│   └── README.md                      # Governance protocol reference
-├── .githooks/                         # Git hooks (L1 governance)
-│   ├── pre-commit                     # cargo fmt --check
-│   └── pre-push                       # fmt + clippy + test
 └── HARNESS.md                         # Governance protocol
 ```
 
@@ -73,17 +58,18 @@ synodic/
 - **[codervisor/eval](https://github.com/codervisor/eval)** — Standalone eval framework (SWE-bench, FeatureBench, DevBench)
 - **[codervisor/orchestra](https://github.com/codervisor/orchestra)** — Pipeline engine, fractal/swarm algorithms, coordination skills
 
-### Event types
+### Two-layer governance
 
-- `tool_call_error` — tool execution failures
-- `hallucination` — references to nonexistent files/APIs
-- `compliance_violation` — secrets, dangerous commands, prod access
-- `misalignment` — agent actions diverge from user intent
+- **L1: Git hooks + CI** — deterministic, fast, tool-agnostic
+  - `pre-commit`: `cargo fmt --check`
+  - `pre-push`: fmt + clippy + test
+  - CI: GitHub Actions (same checks, enforced)
+- **L2: Claude Code hooks** — pattern-based real-time blocking
+  - `PreToolUse` → `synodic intercept` evaluates tool calls against rules
+  - 5 default rules: destructive-git, secrets-in-args, writes-outside-project, writes-to-system, dangerous-rm
+  - Exit 0 = allow, Exit 2 = block
 
-### Two-layer governance (from HARNESS.md)
-
-- **L1**: Git hooks + CI (deterministic, fast, tool-agnostic)
-- **L2**: Synodic AI judge + event collection + pattern detection (semantic, unique value)
+**No databases, no jsonl files, no custom event stores.** Governance is enforced through standard hook mechanisms.
 
 ### Pipeline topologies (concept reference)
 
@@ -118,26 +104,8 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 ## CLI commands
 
 ```bash
-# Governance
-synodic harness run -- <agent_cmd>   # L2 AI judge + rework loop
-synodic harness log [--json] [--tail N]
-
-# Event management
-synodic submit --type <type> --title "<title>" [--severity <level>]
-synodic collect [--source claude|copilot|auto] [--since <duration>]
-synodic list [--type <type>] [--severity <level>] [--unresolved]
-synodic search "<query>"
-synodic stats [--since <duration>]
-synodic resolve <id> [--notes "<notes>"]
-
-# Rules
-synodic rules list
-
-# Live monitoring
-synodic watch [--filter "<expr>"]
-
-# Server
-synodic serve
+synodic init                    # Setup L1 git hooks + L2 Claude Code hooks
+synodic intercept --tool <name> --input '<json>'  # Evaluate tool call (called by hooks)
 ```
 
 ### Skill installation
