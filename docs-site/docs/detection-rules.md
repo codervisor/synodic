@@ -1,113 +1,78 @@
 ---
-sidebar_position: 7
+sidebar_position: 4
 ---
 
-# Detection Rules
+# Interception Rules
 
-Synodic uses a two-layer governance model for detecting issues in AI agent sessions.
+Synodic uses a two-layer governance model enforced entirely through hooks.
 
-## Layer 1 — Static rules
+## Layer 1 — Git hooks
 
-L1 rules are fast, deterministic pattern matchers that run at zero AI cost. They use regex patterns to detect known issues.
+L1 rules run as standard git hooks in `.githooks/`. They are deterministic, fast, and tool-agnostic.
 
-### Built-in rules
+| Hook | Checks | When |
+|------|--------|------|
+| `pre-commit` | `cargo fmt --check` | Every commit |
+| `pre-push` | fmt + clippy + test | Every push |
 
-| Rule | Detects | Type | Severity |
-|------|---------|------|----------|
-| `secret-in-output` | API keys, passwords, tokens in output | `compliance_violation` | Critical |
-| `rm-rf-dangerous` | `rm -rf /`, `rm -rf ~`, `rm -rf $HOME` | `compliance_violation` | Critical |
-| `force-push` | `git push --force` to main/master | `compliance_violation` | High |
-| `nonexistent-file-ref` | "No such file or directory", ENOENT, FileNotFoundError | `hallucination` | Medium |
-| `tool-error` | Generic error/failed/exception patterns | `tool_call_error` | Medium |
+Activated by `synodic init` or `git config core.hooksPath .githooks`.
 
-### L1 evaluator
+## Layer 2 — Claude Code hooks
 
-The `L1Evaluator` in `harness-core` provides a high-level API for running L1 rules:
+L2 rules block dangerous tool calls in real-time via the `PreToolUse` hook. The intercept engine evaluates tool calls against pattern-based rules.
 
-```rust
-use harness_core::l1::L1Evaluator;
+### Default rules
 
-let mut eval = L1Evaluator::new("my-source");
+| Rule ID | Description | Tools | Condition |
+|---------|-------------|-------|-----------|
+| `destructive-git` | Block `git reset --hard`, `git push --force`, `git clean -fd` | Bash | Command regex |
+| `secrets-in-args` | Block API keys, passwords, tokens in tool arguments | All | Pattern regex |
+| `writes-outside-project` | Block writes to `/etc/**` | Write, Edit | Path glob |
+| `writes-to-system` | Block writes to `/usr/**` | Write, Edit | Path glob |
+| `dangerous-rm` | Block `rm -rf /` or `rm -rf ~` | Bash | Command regex |
 
-// Evaluate arbitrary content
-let result = eval.evaluate("some agent output");
-assert!(result.passed);
+### Rule conditions
 
-// Evaluate a diff (only checks added lines)
-let result = eval.evaluate_diff(&diff_content);
-if !result.passed {
-    for finding in &result.matches {
-        println!("[{}] {}: {}", finding.severity, finding.rule_name, finding.matched_text);
-    }
-}
-```
+Rules use three condition types:
+
+- **Pattern** — regex match against the full serialized tool input JSON
+- **Path** — glob match against `file_path` in Write/Edit tool input
+- **Command** — regex match against `command` in Bash tool input
 
 ### Custom rules
 
-Rules are defined as structs with a regex pattern:
-
-```rust
-use harness_core::rules::Rule;
-use harness_core::events::{EventType, Severity};
-
-Rule {
-    name: "no-todos".to_string(),
-    description: "Detects TODO comments left in code".to_string(),
-    pattern: r"TODO|FIXME|HACK".to_string(),
-    event_type: EventType::Misalignment,
-    severity: Severity::Low,
-    enabled: true,
-}
-```
-
-### Rule crystallization
-
-When a pattern is detected 3+ times, Synodic promotes it to a candidate L1 rule:
-
-1. **Detection** — pattern appears repeatedly across sessions
-2. **Candidacy** — meets promotion threshold (default: 3 occurrences)
-3. **Backtest** — validate against historical logs
-4. **Promotion** — becomes an enforceable L1 rule
-
-Access promotion candidates via:
-```rust
-let candidates = eval.engine().promotion_candidates();
-```
-
-## Layer 2 — AI judge
-
-L2 uses an independent LLM to perform semantic analysis of agent output. It evaluates against five dimensions:
-
-1. **Completeness** — does the change address a coherent goal?
-2. **Correctness** — logic errors, bugs, null handling?
-3. **Security** — injection, hardcoded secrets, unsafe operations?
-4. **Conformance** — does the approach fit the codebase?
-5. **Quality** — clean, maintainable, no dead code?
-
-The AI judge sees only the diff — never the agent's reasoning — ensuring an independent review.
-
-### Verdicts
-
-- **APPROVE** — changes pass review
-- **REWORK** — specific issues must be addressed (triggers rework loop)
-
-### Rework loop
-
-When L1 or L2 rejects changes, Synodic generates structured feedback and re-runs the agent (up to `max_rework` times). If the limit is reached, the issue escalates to human review.
+Pass a custom rules file (JSON) to override defaults:
 
 ```bash
-synodic harness run --max-rework 3 -- claude "implement feature X"
+synodic intercept --tool Bash --input '{"command":"..."}' --rules my-rules.json
 ```
 
-## Managing rules
+Rules file format:
 
-```bash
-# List all active rules
-synodic rules list
+```json
+[
+  {
+    "id": "no-prod-config",
+    "description": "Block modifications to production config",
+    "tools": ["Write", "Edit"],
+    "condition": {
+      "type": "path",
+      "glob": "**/config/production.*"
+    }
+  }
+]
+```
 
-# Test a rule against a log file
-synodic rules test secret-in-output --against session.jsonl
+### How it works
 
-# Add a custom rule pattern
-synodic rules add "(?i)drop\s+table"
+```
+Agent tool call → Claude Code PreToolUse hook
+                      ↓
+                intercept.sh (reads stdin JSON)
+                      ↓
+                synodic intercept --tool X --input '{...}'
+                      ↓
+                InterceptEngine evaluates against rules
+                      ↓
+                exit 0 (allow) or exit 2 + stderr (block)
 ```

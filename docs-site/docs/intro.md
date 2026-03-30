@@ -7,44 +7,32 @@ slug: /
 
 **The tool that watches the AI agents.**
 
-Synodic is an open-source AI agent event governance platform. It monitors, audits, and enforces governance rules on AI coding agent sessions (Claude Code, GitHub Copilot, Cursor, and more).
+Synodic is open-source AI agent governance via hooks — enforcing rules on AI coding agent sessions through standard git and Claude Code hook mechanisms.
 
 ## What it does
 
-- **Collects events** from AI agent session logs automatically
-- **Detects issues** using pattern-based rules (secrets, dangerous commands, hallucinations)
-- **Two-layer governance** — fast L1 static rules + L2 AI judge for semantic analysis
-- **Crystallizes patterns** — recurring issues become enforceable rules automatically
-- **Dashboard & TUI** — visual event feed, resolution queue, and live monitoring
+- **L1: Git hooks** — deterministic checks (format, lint, test) on commit and push
+- **L2: Claude Code hooks** — real-time pattern-based blocking of dangerous tool calls
+- **No databases, no log files** — governance is enforced through standard hook mechanisms
 
-## Product surface
+## Default interception rules
 
-| Interface | Description |
-|-----------|-------------|
-| **CLI** | Submit events, collect from logs, query, resolve, watch live |
-| **Web Dashboard** | Event feed, resolution queue, analytics |
-| **TUI** | Terminal-based live event monitoring |
-| **REST API** | Programmatic access with WebSocket streaming |
-| **Skill** | `harness-governance` makes agents self-reporting |
-
-## Event types
-
-| Type | Description |
-|------|-------------|
-| `tool_call_error` | Tool execution failures |
-| `hallucination` | References to nonexistent files, APIs, or symbols |
-| `compliance_violation` | Secrets exposure, dangerous commands, unauthorized access |
-| `misalignment` | Agent actions diverge from user intent |
+| Rule | Blocks | Tools |
+|------|--------|-------|
+| `destructive-git` | `git reset --hard`, `git push --force`, `git clean -fd` | Bash |
+| `secrets-in-args` | API keys, passwords, tokens in tool arguments | All |
+| `writes-outside-project` | Writes to `/etc/**` | Write, Edit |
+| `writes-to-system` | Writes to `/usr/**` | Write, Edit |
+| `dangerous-rm` | `rm -rf /`, `rm -rf ~` | Bash |
 
 ## Architecture
 
-Synodic is a Rust workspace with three crates:
+Synodic is a minimal Rust workspace with two crates:
 
 ```
 rust/
-├── harness-core    # Event types, storage, detection rules, log parsers
-├── harness-cli     # CLI: submit, collect, query, resolve, watch, serve
-└── harness-http    # Axum REST API + WebSocket + dashboard static files
+├── harness-core    # L2 interception engine (pattern matching, rules)
+└── harness-cli     # CLI: init + intercept
 ```
 
 ### Related repositories
