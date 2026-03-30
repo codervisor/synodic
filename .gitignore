@@ -12,8 +12,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# Project
-/.claude
+# Project — track shared config, ignore local state
+/.claude/*
+!/.claude/settings.json
+!/.claude/hooks/
 
 # Rust
 rust/target/
