@@ -1,10 +1,9 @@
 mod cmd;
-mod harness;
 mod util;
 
 use clap::Parser;
 
-/// Synodic — AI agent event governance platform
+/// Synodic — AI agent governance via git hooks (L1) and Claude Code hooks (L2)
 #[derive(Parser)]
 #[command(
     name = "synodic",
@@ -12,38 +11,8 @@ use clap::Parser;
     about = "The tool that watches the AI agents."
 )]
 enum Cli {
-    /// Initialize .harness/ directory and SQLite database
+    /// Initialize governance: git hooksPath (L1) + Claude Code hooks (L2)
     Init(cmd::init::InitCmd),
-
-    /// Submit a governance event
-    Submit(cmd::submit::SubmitCmd),
-
-    /// Collect events from AI agent session logs
-    Collect(cmd::collect::CollectCmd),
-
-    /// List governance events
-    List(cmd::list::ListCmd),
-
-    /// Search events by text
-    Search(cmd::search::SearchCmd),
-
-    /// Show aggregate event statistics
-    Stats(cmd::stats::StatsCmd),
-
-    /// Resolve a governance event
-    Resolve(cmd::resolve::ResolveCmd),
-
-    /// Manage detection rules
-    Rules(cmd::rules::RulesCmd),
-
-    /// Live event monitoring (TUI)
-    Watch(cmd::watch::WatchCmd),
-
-    /// Start API server and dashboard
-    Serve(cmd::serve::ServeCmd),
-
-    /// Governance harness (L2 AI judge + rework loop)
-    Harness(cmd::governance::GovernanceCmd),
 
     /// Evaluate agent tool call against interception rules (L2 intercept)
     Intercept(cmd::intercept::InterceptCmd),
@@ -53,16 +22,6 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli {
         Cli::Init(cmd) => cmd.run(),
-        Cli::Submit(cmd) => cmd.run(),
-        Cli::Collect(cmd) => cmd.run(),
-        Cli::List(cmd) => cmd.run(),
-        Cli::Search(cmd) => cmd.run(),
-        Cli::Stats(cmd) => cmd.run(),
-        Cli::Resolve(cmd) => cmd.run(),
-        Cli::Rules(cmd) => cmd.run(),
-        Cli::Watch(cmd) => cmd.run(),
-        Cli::Serve(cmd) => cmd.run(),
-        Cli::Harness(cmd) => cmd.run(),
         Cli::Intercept(cmd) => cmd.run(),
     }
 }
