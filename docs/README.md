@@ -27,7 +27,6 @@ Project documentation for understanding Synodic — its architecture, decisions,
 
 | Location | What it covers |
 |----------|---------------|
-| [HARNESS.md](../HARNESS.md) | Governance protocol — two-layer evaluation model (static rules + AI judge), feedback taxonomy, rule crystallization lifecycle |
 | [skills/factory/SKILL.md](../skills/factory/SKILL.md) | Factory skill definition — 7-step orchestration protocol, BUILD/INSPECT prompts, static gate, rework loop |
 | [skills/fractal/SKILL.md](../skills/fractal/SKILL.md) | Fractal skill definition — 6-step protocol, complexity pre-filter, decompose/solve/reunify gates, DAG scheduler |
 | [specs/](../specs/) | Actionable specifications in LeanSpec format — the requirements that skills implement |

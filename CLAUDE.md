@@ -49,8 +49,7 @@ synodic/
 ├── docs/
 │   └── orchestration-patterns/        # Concept reference for pipeline topologies
 ├── docs-site/                         # Docusaurus documentation
-├── specs/                             # LeanSpec specs
-└── HARNESS.md                         # Governance protocol
+└── specs/                             # LeanSpec specs
 ```
 
 ### Extracted repositories
@@ -99,7 +98,7 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 
 - **Specs first**: Create a spec before starting non-trivial work
 - **LeanSpec format**: All specs use YAML frontmatter (status, created, tags, priority)
-- **Governance**: All agent operations follow [HARNESS.md](./HARNESS.md)
+- **Governance**: L1 via git hooks, L2 via Claude Code hooks (see `.githooks/` and `.claude/`)
 
 ## CLI commands
 
