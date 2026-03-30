@@ -17,22 +17,32 @@ pnpm install                   # install node deps + activate git hooks
 
 ## Architecture
 
-Two-layer governance, no custom databases or log files — just hooks.
+Two-layer governance with persistent storage (PostgreSQL / SQLite).
 
 ```
 synodic/
 ├── rust/
 │   ├── Cargo.toml                     # [workspace] members = ["harness-core", "harness-cli"]
-│   ├── harness-core/                  # L2 interception engine
-│   │   └── src/
-│   │       ├── lib.rs                 # Public API
-│   │       └── intercept.rs           # InterceptEngine, rules, allow/block decisions
-│   └── harness-cli/                   # CLI: init + intercept
+│   ├── harness-core/                  # L2 interception engine + storage
+│   │   ├── src/
+│   │   │   ├── lib.rs                 # Public API
+│   │   │   ├── intercept.rs           # InterceptEngine, rules, allow/block decisions
+│   │   │   └── storage/
+│   │   │       ├── mod.rs             # Storage trait, domain types (Rule, ThreatCategory, etc.)
+│   │   │       ├── pool.rs            # Connection factory (auto-detects PG/SQLite)
+│   │   │       └── sqlite.rs          # SQLite implementation
+│   │   └── migrations/
+│   │       ├── 001_initial_schema.sql # Tables: rules, threat_categories, feedback_events, etc.
+│   │       └── 002_seed_data.sql      # 10 threat categories + 5 default rules
+│   └── harness-cli/                   # CLI: init, intercept, feedback, rules, status
 │       └── src/
-│           ├── main.rs                # CLI entry: init, intercept
+│           ├── main.rs                # CLI entry (async via tokio)
 │           ├── cmd/
 │           │   ├── init.rs            # Setup L1 git hooks + L2 Claude Code hooks
-│           │   └── intercept.rs       # PreToolUse hook backend
+│           │   ├── intercept.rs       # PreToolUse hook backend
+│           │   ├── feedback.rs        # Record override/confirmed/ci_failure/incident
+│           │   ├── rules.rs           # List/show rules with Beta stats
+│           │   └── status.rs          # Coverage scores, gaps, recommendations
 │           └── util.rs                # find_repo_root()
 ├── .githooks/                         # L1: Git hooks (deterministic, fast)
 │   ├── pre-commit                     # cargo fmt --check
@@ -68,7 +78,7 @@ synodic/
   - 5 default rules: destructive-git, secrets-in-args, writes-outside-project, writes-to-system, dangerous-rm
   - Exit 0 = allow, Exit 2 = block
 
-**No databases, no jsonl files, no custom event stores.** Governance is enforced through standard hook mechanisms.
+**Storage**: PostgreSQL for production, SQLite for local/demo. Rules, feedback events, and telemetry are persisted in DB. The intercept engine itself is stateless (reads rules from cache, <100ms).
 
 ### Pipeline topologies (concept reference)
 
@@ -103,9 +113,32 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 ## CLI commands
 
 ```bash
+# Core
 synodic init                    # Setup L1 git hooks + L2 Claude Code hooks
 synodic intercept --tool <name> --input '<json>'  # Evaluate tool call (called by hooks)
+
+# Feedback loop (spec 073)
+synodic feedback --rule <id> --signal <type> [--reason <text>]  # Record override/confirmed
+synodic feedback analyze <rule-id>   # Cluster override reasons
+
+# Rules & status (spec 072, 074)
+synodic rules list [--all]      # List rules with precision stats
+synodic rules show <id>         # Show rule details + recent feedback
+synodic status [--json]         # S/F/C scores, coverage gaps, convergence
+
+# Adversarial probing (spec 075)
+synodic probe [--rule <id>] [--auto-apply]  # Test rules against evasion variants
+
+# Lifecycle management (spec 076)
+synodic lifecycle promote <id>      # Candidate → active (clear and convincing)
+synodic lifecycle crystallize <id>  # Tuned → L1 git hook (beyond reasonable doubt)
+synodic lifecycle deprecate <id>    # Disable rule
+synodic lifecycle check             # Auto-transition active rules (tuned/deprecated)
+synodic optimize [--dry-run]        # Propose rule candidates from patterns
 ```
+
+**Environment**: Set `DATABASE_URL` for storage (default: `sqlite://~/.synodic/synodic.db`).
+All commands accept `--db-url` to override.
 
 ### Skill installation
 

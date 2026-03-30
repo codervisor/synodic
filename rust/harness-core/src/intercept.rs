@@ -196,6 +196,33 @@ fn glob_match(pattern: &str, path: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Convert a storage Rule into an InterceptRule.
+impl From<&crate::storage::Rule> for InterceptRule {
+    fn from(r: &crate::storage::Rule) -> Self {
+        let condition = match r.condition_type.as_str() {
+            "pattern" => InterceptCondition::Pattern {
+                pattern: r.condition_value.clone(),
+            },
+            "path" => InterceptCondition::Path {
+                glob: r.condition_value.clone(),
+            },
+            "command" => InterceptCondition::Command {
+                pattern: r.condition_value.clone(),
+            },
+            _ => InterceptCondition::Pattern {
+                pattern: r.condition_value.clone(),
+            },
+        };
+
+        InterceptRule {
+            id: r.id.clone(),
+            description: r.description.clone(),
+            tools: r.tools.clone(),
+            condition,
+        }
+    }
+}
+
 /// Default interception rules shipped with Synodic.
 pub fn default_rules() -> Vec<InterceptRule> {
     vec![
