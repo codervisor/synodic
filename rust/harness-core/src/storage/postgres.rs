@@ -187,6 +187,14 @@ impl EventStore for PostgresStore {
         }
         Ok(events)
     }
+
+    fn ping(&self) -> Result<()> {
+        let mut client = self.client.borrow_mut();
+        client
+            .execute("SELECT 1", &[])
+            .context("PostgreSQL ping failed")?;
+        Ok(())
+    }
 }
 
 fn row_to_event(row: &postgres::Row) -> Result<Event> {
