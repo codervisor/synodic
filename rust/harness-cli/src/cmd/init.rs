@@ -70,16 +70,16 @@ fn setup_claude_hooks(root: &Path) -> Result<()> {
     let hooks_dir = claude_dir.join("hooks");
     std::fs::create_dir_all(&hooks_dir)?;
 
-    // Write intercept.sh
+    // Write intercept.sh (always ensure executable)
     let intercept_path = hooks_dir.join("intercept.sh");
     if !intercept_path.exists() {
         std::fs::write(&intercept_path, INTERCEPT_HOOK)?;
-        #[cfg(unix)]
-        set_executable(&intercept_path)?;
         eprintln!("L2: created {}", intercept_path.display());
     } else {
         eprintln!("L2: {} already exists, skipping", intercept_path.display());
     }
+    #[cfg(unix)]
+    set_executable(&intercept_path)?;
 
     // Write settings.json
     let settings_path = claude_dir.join("settings.json");
@@ -112,6 +112,12 @@ const INTERCEPT_HOOK: &str = r##"#!/usr/bin/env bash
 
 set -euo pipefail
 
+# Fail-open if jq is not available
+if ! command -v jq &>/dev/null; then
+  cat >/dev/null  # drain stdin
+  exit 0
+fi
+
 PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 SYNODIC_BIN="${SYNODIC_BIN:-${PROJECT_DIR}/rust/target/release/synodic}"
 
@@ -128,9 +134,9 @@ fi
 # Read hook input from stdin
 INPUT="$(cat)"
 
-# Extract tool_name and tool_input from the hook's JSON payload
-TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // empty')"
-TOOL_INPUT="$(echo "$INPUT" | jq -c '.tool_input // {}')"
+# Extract tool_name and tool_input from the hook's JSON payload (fail-open on parse error)
+TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)" || true
+TOOL_INPUT="$(echo "$INPUT" | jq -c '.tool_input // {}' 2>/dev/null)" || TOOL_INPUT='{}'
 
 # If we couldn't parse the input, allow
 if [[ -z "$TOOL_NAME" ]]; then
@@ -143,11 +149,11 @@ RESULT="$("$SYNODIC_BIN" intercept --tool "$TOOL_NAME" --input "$TOOL_INPUT" 2>/
   exit 0
 }
 
-DECISION="$(echo "$RESULT" | jq -r '.decision // "allow"')"
+DECISION="$(echo "$RESULT" | jq -r '.decision // "allow"' 2>/dev/null)" || true
 
 if [[ "$DECISION" == "block" ]]; then
-  REASON="$(echo "$RESULT" | jq -r '.reason // "Blocked by Synodic governance rule"')"
-  RULE="$(echo "$RESULT" | jq -r '.rule // "unknown"')"
+  REASON="$(echo "$RESULT" | jq -r '.reason // "Blocked by Synodic governance rule"' 2>/dev/null)" || REASON="Blocked by Synodic governance rule"
+  RULE="$(echo "$RESULT" | jq -r '.rule // "unknown"' 2>/dev/null)" || RULE="unknown"
   echo "Synodic L2 interception [$RULE]: $REASON" >&2
   exit 2
 fi
