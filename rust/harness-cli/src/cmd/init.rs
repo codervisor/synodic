@@ -40,12 +40,6 @@ impl InitCmd {
             eprintln!("Database already exists: {}", db_path.display());
         }
 
-        let gates_path = harness_dir.join("gates.yml");
-        if !gates_path.exists() {
-            std::fs::write(&gates_path, "gates:\n  preflight: []\n")?;
-            eprintln!("Created: {}", gates_path.display());
-        }
-
         eprintln!("Initialized .harness/ at {}", harness_dir.display());
 
         // --- L1: Git hooks ---

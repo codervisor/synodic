@@ -46,7 +46,7 @@ fn test_init_creates_harness_dir() {
     let dir = init_project();
     assert!(dir.path().join(".harness").is_dir());
     assert!(dir.path().join(".harness/synodic.db").exists());
-    assert!(dir.path().join(".harness/gates.yml").exists());
+    // gates.yml removed — was dead code (empty preflight: [])
 }
 
 #[test]
