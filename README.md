@@ -63,8 +63,7 @@ synodic/
 │       └── intercept.sh       # stdin JSON → synodic intercept → exit 0/2
 ├── skills/                    # Claude Code skills
 ├── docs-site/                 # Docusaurus documentation
-├── specs/                     # LeanSpec specs
-└── HARNESS.md                 # Governance protocol
+└── specs/                     # LeanSpec specs
 ```
 
 ## CLI
@@ -78,7 +77,6 @@ synodic intercept --tool <name> --input '<json>'  # Evaluate tool call against r
 
 | Document | Description |
 |----------|-------------|
-| [HARNESS.md](./HARNESS.md) | Governance protocol — evaluation model, feedback taxonomy |
 | [CLAUDE.md](./CLAUDE.md) | Claude Code project instructions |
 | [docs-site/](./docs-site/) | Full documentation site |
 
