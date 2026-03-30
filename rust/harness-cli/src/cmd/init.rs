@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Args;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::util;
@@ -63,7 +63,7 @@ impl InitCmd {
 }
 
 /// Configure git to use .githooks/ for L1 governance (fmt, clippy, test).
-fn setup_git_hooks(root: &PathBuf) -> Result<()> {
+fn setup_git_hooks(root: &Path) -> Result<()> {
     let githooks_dir = root.join(".githooks");
     if !githooks_dir.exists() {
         eprintln!("No .githooks/ directory found, skipping git hooks setup");
@@ -86,7 +86,7 @@ fn setup_git_hooks(root: &PathBuf) -> Result<()> {
 }
 
 /// Create .claude/settings.json and hook scripts for L2 interception.
-fn setup_claude_hooks(root: &PathBuf) -> Result<()> {
+fn setup_claude_hooks(root: &Path) -> Result<()> {
     let claude_dir = root.join(".claude");
     let hooks_dir = claude_dir.join("hooks");
     std::fs::create_dir_all(&hooks_dir)?;
@@ -126,7 +126,7 @@ fn setup_claude_hooks(root: &PathBuf) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn set_executable(path: &PathBuf) -> Result<()> {
+fn set_executable(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mut perms = std::fs::metadata(path)?.permissions();
     perms.set_mode(0o755);
