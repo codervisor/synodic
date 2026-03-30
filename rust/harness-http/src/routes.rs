@@ -24,8 +24,22 @@ pub fn api_router() -> Router<AppState> {
 
 // ── Health ──────────────────────────────────────────────
 
-async fn health() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "status": "ok" }))
+async fn health(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let store = state.store.lock().map_err(|e| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "status": "error", "error": format!("lock error: {e}") })),
+        )
+    })?;
+    store.ping().map_err(|e| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "status": "error", "error": format!("{e}") })),
+        )
+    })?;
+    Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
 // ── Events ──────────────────────────────────────────────

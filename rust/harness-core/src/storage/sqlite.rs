@@ -238,6 +238,13 @@ impl EventStore for SqliteStore {
         }
         Ok(events)
     }
+
+    fn ping(&self) -> Result<()> {
+        self.conn
+            .execute_batch("SELECT 1")
+            .context("SQLite ping failed")?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -428,5 +435,11 @@ mod tests {
             })
             .unwrap();
         assert_eq!(limited.len(), 3);
+    }
+
+    #[test]
+    fn test_ping() {
+        let store = test_store();
+        assert!(store.ping().is_ok());
     }
 }

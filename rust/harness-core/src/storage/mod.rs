@@ -14,4 +14,9 @@ pub trait EventStore {
     fn resolve(&self, id: &str, notes: &str) -> Result<()>;
     fn stats(&self, filter: &EventFilter) -> Result<Stats>;
     fn search(&self, query: &str, limit: usize) -> Result<Vec<Event>>;
+
+    /// Check that the storage backend is reachable.
+    fn ping(&self) -> Result<()> {
+        Ok(())
+    }
 }

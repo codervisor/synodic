@@ -67,7 +67,77 @@ fly deploy
 
 ## Railway
 
-Deploy from the repository using the `deploy/railway.json` configuration.
+Railway deploys from the repository using `deploy/railway.json`.
+
+### Prerequisites
+
+- A [Railway](https://railway.app) account
+- The Railway CLI installed: `npm install -g @railway/cli`
+
+### SQLite deployment (single instance)
+
+1. **Create the project:**
+
+   ```bash
+   railway login
+   railway init
+   ```
+
+2. **Add a persistent volume** (required — data is lost on redeploy without this):
+
+   ```bash
+   railway volume add --mount /data
+   ```
+
+3. **Set environment variables:**
+
+   ```bash
+   railway variables set DATABASE_URL=/data/synodic.db
+   ```
+
+4. **Deploy:**
+
+   ```bash
+   cd deploy
+   railway up --config railway.json
+   ```
+
+5. **Verify** the health endpoint:
+
+   ```bash
+   curl https://<your-app>.up.railway.app/api/health
+   # {"status":"ok"}
+   ```
+
+### PostgreSQL deployment
+
+For team deployments, use Railway's managed PostgreSQL instead of SQLite:
+
+1. **Create the project and add a PostgreSQL plugin:**
+
+   ```bash
+   railway login
+   railway init
+   railway add --plugin postgresql
+   ```
+
+2. **Link the DATABASE_URL** — Railway automatically provides `DATABASE_URL` when a PostgreSQL plugin is attached. No manual variable configuration needed.
+
+3. **Deploy:**
+
+   ```bash
+   cd deploy
+   railway up --config railway.json
+   ```
+
+   The entrypoint script auto-detects the `postgres://` URL and uses the PostgreSQL backend.
+
+### Important notes
+
+- **Volumes:** Railway volumes are configured via the dashboard or CLI, not in `railway.json`. Without a volume, SQLite data is ephemeral and will be lost on each deploy.
+- **Single replica:** The config sets `numReplicas: 1`. Do not increase this when using SQLite, as concurrent writes from multiple replicas will corrupt the database. PostgreSQL deployments can safely scale to multiple replicas.
+- **Port:** Railway injects the `PORT` environment variable automatically. The Synodic HTTP server reads `PORT` and defaults to 3000 if unset.
+- **HTTPS:** Railway provides HTTPS termination by default on all public domains.
 
 ## Render
 
