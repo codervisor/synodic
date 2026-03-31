@@ -94,6 +94,67 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  npm-publish:
+    name: Publish npm packages
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set versions across all packages
+        run: bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare platform packages
+        run: |
+          # Map artifact names to npm package directories
+          declare -A ARTIFACT_MAP=(
+            ["synodic-darwin-arm64"]="npm/cli-darwin-arm64"
+            ["synodic-darwin-x64"]="npm/cli-darwin-x64"
+            ["synodic-linux-x64"]="npm/cli-linux-x64"
+            ["synodic-linux-arm64"]="npm/cli-linux-arm64"
+          )
+
+          for artifact in "${!ARTIFACT_MAP[@]}"; do
+            pkg_dir="${ARTIFACT_MAP[$artifact]}"
+            echo "Extracting $artifact -> $pkg_dir"
+            tar xzf "artifacts/$artifact/$artifact.tar.gz" -C "$pkg_dir"
+            chmod +x "$pkg_dir/synodic"
+            ls -la "$pkg_dir/"
+          done
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in npm/cli-darwin-arm64 npm/cli-darwin-x64 npm/cli-linux-x64 npm/cli-linux-arm64; do
+            echo "Publishing $(node -e "console.log(require('./$dir/package.json').name)")..."
+            npm publish "$dir" --access public || echo "Skipped (may already exist)"
+          done
+
+      - name: Publish wrapper package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "Publishing @synodic/cli..."
+          npm publish packages/cli --access public || echo "Skipped (may already exist)"
+
   release:
     name: Create GitHub Release
     needs: [build, docker]

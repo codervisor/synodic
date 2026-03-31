@@ -1,8 +1,24 @@
 {
   "name": "@synodic/cli",
   "version": "0.1.0",
-  "description": "Synodic — AI agent event governance CLI",
+  "description": "Synodic — AI agent governance via hooks. Enforce rules on AI coding agent sessions.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codervisor/synodic.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/codervisor/synodic",
+  "keywords": [
+    "synodic",
+    "ai",
+    "agent",
+    "governance",
+    "hooks",
+    "claude",
+    "coding-agent",
+    "security"
+  ],
   "bin": {
     "synodic": "bin/synodic"
   },
