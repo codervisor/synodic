@@ -9,6 +9,11 @@ on:
         description: 'Version to release (e.g. 0.1.0)'
         required: true
         type: string
+      dry_run:
+        description: 'Dry run — build and validate without publishing'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -21,6 +26,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       sha: ${{ steps.resolve-sha.outputs.sha }}
+      dry_run: ${{ steps.flags.outputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,8 +59,18 @@ jobs:
           echo "tag=v$RAW_VERSION" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $RAW_VERSION (tag: v$RAW_VERSION)"
 
+      - name: Set flags
+        id: flags
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+            echo "🏃 Dry run mode — will build and validate but skip publishing"
+          else
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Bump versions and commit
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
         run: |
           bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
           git config user.name "github-actions[bot]"
@@ -64,6 +80,12 @@ jobs:
             git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
             git push origin HEAD:main
           fi
+
+      - name: Bump versions (dry run — no commit)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        run: |
+          bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
+          echo "Dry run: version bumped locally but not committed"
 
       - name: Resolve build SHA
         id: resolve-sha
@@ -114,7 +136,6 @@ jobs:
         run: |
           mkdir -p dist
           cp rust/target/${{ matrix.target }}/release/synodic dist/ 2>/dev/null || true
-          cp rust/target/${{ matrix.target }}/release/synodic-http dist/ 2>/dev/null || true
           tar czf ${{ matrix.artifact }}.tar.gz -C dist .
 
       - name: Upload artifact
@@ -139,6 +160,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
+        if: needs.prepare.outputs.dry_run != 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -150,7 +172,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          push: true
+          push: ${{ needs.prepare.outputs.dry_run != 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.version }}
             ghcr.io/${{ github.repository }}:latest
@@ -200,34 +222,49 @@ jobs:
       - name: Publish platform packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
         run: |
+          DRY_RUN_FLAG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+            echo "=== DRY RUN MODE ==="
+          fi
+
           for dir in npm/cli-darwin-arm64 npm/cli-darwin-x64 npm/cli-linux-x64 npm/cli-linux-arm64; do
             pkg_name=$(node -p "require('./$dir/package.json').name")
             pkg_version=$(node -p "require('./$dir/package.json').version")
-            if npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
+            if [ -z "$DRY_RUN_FLAG" ] && npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
               echo "Skipping $pkg_name@$pkg_version (already exists)"
               continue
             fi
-            echo "Publishing $pkg_name@$pkg_version..."
-            npm publish "$dir" --access public
+            echo "Publishing $pkg_name@$pkg_version... $DRY_RUN_FLAG"
+            npm publish "$dir" --access public $DRY_RUN_FLAG
           done
 
       - name: Publish wrapper package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
         run: |
+          DRY_RUN_FLAG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+            echo "=== DRY RUN MODE ==="
+          fi
+
           pkg_name=$(node -p "require('./packages/cli/package.json').name")
           pkg_version=$(node -p "require('./packages/cli/package.json').version")
-          if npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
+          if [ -z "$DRY_RUN_FLAG" ] && npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
             echo "Skipping $pkg_name@$pkg_version (already exists)"
           else
-            echo "Publishing $pkg_name@$pkg_version..."
-            npm publish packages/cli --access public
+            echo "Publishing $pkg_name@$pkg_version... $DRY_RUN_FLAG"
+            npm publish packages/cli --access public $DRY_RUN_FLAG
           fi
 
   release:
     name: Create GitHub Release
     needs: [prepare, build, docker, npm-publish]
+    if: needs.prepare.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -244,3 +281,19 @@ jobs:
           target_commitish: ${{ needs.prepare.outputs.sha }}
           generate_release_notes: true
           files: artifacts/**/*.tar.gz
+
+  summary:
+    name: Dry run summary
+    needs: [prepare, build, docker, npm-publish]
+    if: needs.prepare.outputs.dry_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## Dry Run Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Version:** ${{ needs.prepare.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tag:** ${{ needs.prepare.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**SHA:** ${{ needs.prepare.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "All jobs passed. Re-run without dry_run to publish for real." >> "$GITHUB_STEP_SUMMARY"
