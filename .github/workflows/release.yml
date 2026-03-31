@@ -83,7 +83,7 @@ jobs:
           fi
 
       - name: Bump versions and commit
-        if: inputs.dry_run != true && github.ref_type == 'tag' || (inputs.version != '' && inputs.dry_run != true)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
         run: |
           bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
           git config user.name "github-actions[bot]"
@@ -95,7 +95,7 @@ jobs:
           fi
 
       - name: Bump versions (dry run — no commit)
-        if: inputs.dry_run == true && inputs.version != ''
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.dry_run == true && inputs.version != ''
         run: |
           bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
           echo "Dry run: version bumped locally but not committed"
