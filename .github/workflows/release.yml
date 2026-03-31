@@ -3,6 +3,17 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.1.0)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run — build and validate without publishing'
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       version:
@@ -33,12 +44,14 @@ jobs:
       - name: Resolve version from tag or input
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ -n "${{ inputs.version }}" ]; then
             RAW_VERSION="${{ inputs.version }}"
-            # Strip optional leading "v" (so "v0.1.0" doesn't become "vv0.1.0")
             RAW_VERSION="${RAW_VERSION#v}"
-          else
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
             RAW_VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            # Default: read from package.json (used by CI dry-run)
+            RAW_VERSION=$(node -p "require('./packages/cli/package.json').version")
           fi
 
           # Reject whitespace
@@ -64,13 +77,13 @@ jobs:
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             echo "dry_run=true" >> "$GITHUB_OUTPUT"
-            echo "🏃 Dry run mode — will build and validate but skip publishing"
+            echo "Dry run mode — will build and validate but skip publishing"
           else
             echo "dry_run=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Bump versions and commit
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
+        if: inputs.dry_run != true && github.ref_type == 'tag' || (inputs.version != '' && inputs.dry_run != true)
         run: |
           bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
           git config user.name "github-actions[bot]"
@@ -82,7 +95,7 @@ jobs:
           fi
 
       - name: Bump versions (dry run — no commit)
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        if: inputs.dry_run == true && inputs.version != ''
         run: |
           bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
           echo "Dry run: version bumped locally but not committed"
