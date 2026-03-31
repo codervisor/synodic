@@ -15,9 +15,12 @@ PACKAGES=(
 )
 
 for pkg in "${PACKAGES[@]}"; do
-  if [ -f "$pkg" ]; then
-    # Update both the package version and any optionalDependencies referencing @codervisor/*
-    node -e "
+  if [ ! -f "$pkg" ]; then
+    echo "Error: expected package file not found: $pkg" >&2
+    exit 1
+  fi
+  # Update both the package version and any optionalDependencies referencing @codervisor/*
+  node -e "
       const fs = require('fs');
       const pkg = JSON.parse(fs.readFileSync('$pkg', 'utf8'));
       pkg.version = '$VERSION';
@@ -31,5 +34,4 @@ for pkg in "${PACKAGES[@]}"; do
       fs.writeFileSync('$pkg', JSON.stringify(pkg, null, 2) + '\n');
     "
     echo "Updated $pkg -> $VERSION"
-  fi
 done

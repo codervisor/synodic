@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 // Postinstall script: resolves the platform-specific binary from optional deps.
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const binDir = join(__dirname, '..', 'bin');
+const require = createRequire(import.meta.url);
 
 const PLATFORM_MAP = {
   'darwin-arm64': '@codervisor/synodic-darwin-arm64',
@@ -23,7 +20,7 @@ if (!pkg) {
 }
 
 try {
-  const resolved = import.meta.resolve(pkg);
+  require.resolve(`${pkg}/package.json`);
   console.log(`synodic: using ${pkg}`);
 } catch {
   console.warn(`synodic: platform package ${pkg} not installed. Build from source.`);

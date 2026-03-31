@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { execFileSync } from 'child_process';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
+import { createRequire } from 'module';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const args = process.argv.slice(2);
 
 // Try platform-specific binary from optional deps
@@ -20,8 +20,8 @@ const pkg = PLATFORM_MAP[key];
 
 if (pkg) {
   try {
-    const pkgPath = import.meta.resolve(pkg);
-    const binPath = join(dirname(fileURLToPath(pkgPath)), 'synodic');
+    const pkgDir = dirname(require.resolve(`${pkg}/package.json`));
+    const binPath = join(pkgDir, 'synodic');
     if (existsSync(binPath)) {
       execFileSync(binPath, args, { stdio: 'inherit' });
       process.exit(0);
