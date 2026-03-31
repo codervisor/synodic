@@ -16,14 +16,14 @@ PACKAGES=(
 
 for pkg in "${PACKAGES[@]}"; do
   if [ -f "$pkg" ]; then
-    # Update both the package version and any optionalDependencies referencing @synodic/*
+    # Update both the package version and any optionalDependencies referencing @codervisor/*
     node -e "
       const fs = require('fs');
       const pkg = JSON.parse(fs.readFileSync('$pkg', 'utf8'));
       pkg.version = '$VERSION';
       if (pkg.optionalDependencies) {
         for (const key of Object.keys(pkg.optionalDependencies)) {
-          if (key.startsWith('@synodic/cli-')) {
+          if (key.startsWith('@codervisor/synodic-')) {
             pkg.optionalDependencies[key] = '$VERSION';
           }
         }

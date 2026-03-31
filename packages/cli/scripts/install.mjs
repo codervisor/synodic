@@ -8,10 +8,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const binDir = join(__dirname, '..', 'bin');
 
 const PLATFORM_MAP = {
-  'darwin-arm64': '@synodic/cli-darwin-arm64',
-  'darwin-x64': '@synodic/cli-darwin-x64',
-  'linux-x64': '@synodic/cli-linux-x64',
-  'linux-arm64': '@synodic/cli-linux-arm64',
+  'darwin-arm64': '@codervisor/synodic-darwin-arm64',
+  'darwin-x64': '@codervisor/synodic-darwin-x64',
+  'linux-x64': '@codervisor/synodic-linux-x64',
+  'linux-arm64': '@codervisor/synodic-linux-arm64',
 };
 
 const key = `${process.platform}-${process.arch}`;
