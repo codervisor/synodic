@@ -232,46 +232,50 @@ jobs:
             ls -la "$pkg_dir/"
           done
 
-      - name: Publish platform packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
+      - name: Validate platform packages (dry run)
+        if: needs.prepare.outputs.dry_run == 'true'
         run: |
-          DRY_RUN_FLAG=""
-          if [ "$DRY_RUN" = "true" ]; then
-            DRY_RUN_FLAG="--dry-run"
-            echo "=== DRY RUN MODE ==="
-          fi
-
+          echo "=== DRY RUN: validating packages with npm pack ==="
           for dir in npm/cli-darwin-arm64 npm/cli-darwin-x64 npm/cli-linux-x64 npm/cli-linux-arm64; do
             pkg_name=$(node -p "require('./$dir/package.json').name")
             pkg_version=$(node -p "require('./$dir/package.json').version")
-            if [ -z "$DRY_RUN_FLAG" ] && npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
+            echo "Validating $pkg_name@$pkg_version..."
+            npm pack "$dir" --dry-run
+          done
+          echo ""
+          pkg_name=$(node -p "require('./packages/cli/package.json').name")
+          pkg_version=$(node -p "require('./packages/cli/package.json').version")
+          echo "Validating $pkg_name@$pkg_version..."
+          npm pack packages/cli --dry-run
+
+      - name: Publish platform packages
+        if: needs.prepare.outputs.dry_run != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in npm/cli-darwin-arm64 npm/cli-darwin-x64 npm/cli-linux-x64 npm/cli-linux-arm64; do
+            pkg_name=$(node -p "require('./$dir/package.json').name")
+            pkg_version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
               echo "Skipping $pkg_name@$pkg_version (already exists)"
               continue
             fi
-            echo "Publishing $pkg_name@$pkg_version... $DRY_RUN_FLAG"
-            npm publish "$dir" --access public $DRY_RUN_FLAG
+            echo "Publishing $pkg_name@$pkg_version..."
+            npm publish "$dir" --access public
           done
 
       - name: Publish wrapper package
+        if: needs.prepare.outputs.dry_run != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          DRY_RUN: ${{ needs.prepare.outputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=""
-          if [ "$DRY_RUN" = "true" ]; then
-            DRY_RUN_FLAG="--dry-run"
-            echo "=== DRY RUN MODE ==="
-          fi
-
           pkg_name=$(node -p "require('./packages/cli/package.json').name")
           pkg_version=$(node -p "require('./packages/cli/package.json').version")
-          if [ -z "$DRY_RUN_FLAG" ] && npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
+          if npm view "$pkg_name@$pkg_version" >/dev/null 2>&1; then
             echo "Skipping $pkg_name@$pkg_version (already exists)"
           else
-            echo "Publishing $pkg_name@$pkg_version... $DRY_RUN_FLAG"
-            npm publish packages/cli --access public $DRY_RUN_FLAG
+            echo "Publishing $pkg_name@$pkg_version..."
+            npm publish packages/cli --access public
           fi
 
   release:
