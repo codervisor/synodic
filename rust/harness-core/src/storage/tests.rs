@@ -1,6 +1,7 @@
 //! Tests for the storage layer (runs against in-memory SQLite).
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use crate::storage::*;
     use chrono::Utc;
