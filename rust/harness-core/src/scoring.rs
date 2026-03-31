@@ -64,10 +64,7 @@ pub struct ConvergenceState {
 // ---------------------------------------------------------------------------
 
 /// Compute coverage score: fraction of threat taxonomy covered by active rules.
-pub fn compute_coverage(
-    rules: &[Rule],
-    categories: &[ThreatCategory],
-) -> CoverageResult {
+pub fn compute_coverage(rules: &[Rule], categories: &[ThreatCategory]) -> CoverageResult {
     let mut total_weight = 0.0;
     let mut covered_weight = 0.0;
     let mut gaps = Vec::new();
@@ -130,10 +127,7 @@ pub fn compute_coverage(
 // ---------------------------------------------------------------------------
 
 /// Compute friction score: blocks / estimated total tool calls.
-pub async fn compute_friction(
-    store: &dyn Storage,
-    since: DateTime<Utc>,
-) -> Result<f64> {
+pub async fn compute_friction(store: &dyn Storage, since: DateTime<Utc>) -> Result<f64> {
     let events = store
         .get_feedback(FeedbackFilters {
             since: Some(since),
@@ -295,10 +289,16 @@ impl std::fmt::Display for ConstraintViolation {
         match self {
             Self::ReadFreedom => write!(f, "read-freedom: no rule may block file reads"),
             Self::BoundedScope => {
-                write!(f, "bounded-scope: every rule must specify target tools or paths")
+                write!(
+                    f,
+                    "bounded-scope: every rule must specify target tools or paths"
+                )
             }
             Self::RightOfExplanation => {
-                write!(f, "right-of-explanation: every rule must have a description")
+                write!(
+                    f,
+                    "right-of-explanation: every rule must have a description"
+                )
             }
         }
     }
@@ -389,10 +389,7 @@ mod tests {
             make_category("a", "critical", 1.0),
             make_category("b", "high", 0.7),
         ];
-        let rules = vec![
-            make_rule("r1", "a", true),
-            make_rule("r2", "b", true),
-        ];
+        let rules = vec![make_rule("r1", "a", true), make_rule("r2", "b", true)];
 
         let result = compute_coverage(&rules, &cats);
         assert!((result.score - 1.0).abs() < 0.001);
@@ -451,13 +448,11 @@ mod tests {
 
     #[test]
     fn rule_health_converges_with_enough_evidence() {
-        let rules = vec![
-            Rule {
-                alpha: 100,
-                beta: 5,
-                ..make_rule("r1", "a", true)
-            },
-        ];
+        let rules = vec![Rule {
+            alpha: 100,
+            beta: 5,
+            ..make_rule("r1", "a", true)
+        }];
 
         let health = compute_rule_health(&rules);
         assert_eq!(health.len(), 1);
@@ -479,8 +474,16 @@ mod tests {
             make_category("b", "high", 0.7),
         ];
         let rules = vec![
-            Rule { alpha: 100, beta: 5, ..make_rule("r1", "a", true) },
-            Rule { alpha: 100, beta: 5, ..make_rule("r2", "b", true) },
+            Rule {
+                alpha: 100,
+                beta: 5,
+                ..make_rule("r1", "a", true)
+            },
+            Rule {
+                alpha: 100,
+                beta: 5,
+                ..make_rule("r2", "b", true)
+            },
         ];
 
         let coverage = compute_coverage(&rules, &cats);
@@ -495,7 +498,11 @@ mod tests {
     #[test]
     fn convergence_fails_with_high_churn() {
         let cats = vec![make_category("a", "critical", 1.0)];
-        let rules = vec![Rule { alpha: 25, beta: 2, ..make_rule("r1", "a", true) }];
+        let rules = vec![Rule {
+            alpha: 25,
+            beta: 2,
+            ..make_rule("r1", "a", true)
+        }];
 
         let coverage = compute_coverage(&rules, &cats);
         let state = check_convergence(&rules, &coverage, 0.15); // 15% churn
@@ -508,11 +515,8 @@ mod tests {
 
     #[test]
     fn constitutional_read_freedom() {
-        let result = validate_constitutional(
-            &["Read".to_string()],
-            "path",
-            "Block reading secrets",
-        );
+        let result =
+            validate_constitutional(&["Read".to_string()], "path", "Block reading secrets");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err()[0], ConstraintViolation::ReadFreedom);
     }
@@ -522,30 +526,26 @@ mod tests {
         let result = validate_constitutional(
             &["Bash".to_string()],
             "command",
-            "",  // empty description
+            "", // empty description
         );
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err()[0], ConstraintViolation::RightOfExplanation);
+        assert_eq!(
+            result.unwrap_err()[0],
+            ConstraintViolation::RightOfExplanation
+        );
     }
 
     #[test]
     fn constitutional_valid_rule_passes() {
-        let result = validate_constitutional(
-            &["Bash".to_string()],
-            "command",
-            "Block dangerous commands",
-        );
+        let result =
+            validate_constitutional(&["Bash".to_string()], "command", "Block dangerous commands");
         assert!(result.is_ok());
     }
 
     #[test]
     fn constitutional_pattern_rule_without_tools_ok() {
         // secrets-in-args style: no tools specified, pattern-based
-        let result = validate_constitutional(
-            &[],
-            "pattern",
-            "Block secrets in arguments",
-        );
+        let result = validate_constitutional(&[], "pattern", "Block secrets in arguments");
         assert!(result.is_ok());
     }
 }

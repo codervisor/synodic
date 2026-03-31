@@ -65,7 +65,11 @@ impl ProbeStrategy for SyntacticVariation {
 
         // Detect and generate flag variants
         if pattern.contains("--force") {
-            variants.push(rule.condition_value.replace("--force", "-f").replace("\\s+", " "));
+            variants.push(
+                rule.condition_value
+                    .replace("--force", "-f")
+                    .replace("\\s+", " "),
+            );
             // Try the literal command that matches
             if pattern.contains("push") {
                 variants.push("git push -f origin main".to_string());
@@ -269,10 +273,7 @@ pub fn run_probe(rule: &Rule, strategy: &dyn ProbeStrategy) -> ProbeReport {
         let response = engine.evaluate(&request);
         let bypassed = response.decision == "allow";
 
-        variants.push(ProbeVariant {
-            input,
-            bypassed,
-        });
+        variants.push(ProbeVariant { input, bypassed });
     }
 
     ProbeReport {
@@ -456,10 +457,7 @@ mod tests {
 
     #[test]
     fn indirection_generates_subshell_variants() {
-        let rule = make_command_rule(
-            "destructive-git",
-            r"git\s+(push\s+--force)\b",
-        );
+        let rule = make_command_rule("destructive-git", r"git\s+(push\s+--force)\b");
         let strategy = Indirection;
         let variants = strategy.generate(&rule);
         assert!(variants.iter().any(|v| v.contains("bash -c")));

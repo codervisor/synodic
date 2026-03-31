@@ -156,8 +156,7 @@ impl StatusCmd {
                 );
             }
             for rule in &flagged {
-                let fp_rate =
-                    rule.beta as f64 / (rule.alpha + rule.beta) as f64 * 100.0;
+                let fp_rate = rule.beta as f64 / (rule.alpha + rule.beta) as f64 * 100.0;
                 println!(
                     "  - Review '{}' (FP rate: {:.0}%, beta={})",
                     rule.id, fp_rate, rule.beta

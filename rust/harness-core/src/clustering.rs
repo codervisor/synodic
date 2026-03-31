@@ -42,7 +42,9 @@ pub fn cluster_reasons(reasons: &[String]) -> Vec<ReasonCluster> {
         clusters.push(ReasonCluster {
             cluster_id: "non-production".to_string(),
             label: "Non-production context".to_string(),
-            suggestion: "Consider adding context-aware exception (e.g., allow on non-protected branches)".to_string(),
+            suggestion:
+                "Consider adding context-aware exception (e.g., allow on non-protected branches)"
+                    .to_string(),
             reasons: non_production,
         });
     }
@@ -80,26 +82,52 @@ pub fn cluster_reasons(reasons: &[String]) -> Vec<ReasonCluster> {
 
 fn is_non_production(s: &str) -> bool {
     let keywords = [
-        "test", "demo", "throwaway", "scratch", "dev ", "development",
-        "staging", "sandbox", "ci branch", "ci env", "non-prod",
-        "feature branch", "local", "playground", "experiment",
+        "test",
+        "demo",
+        "throwaway",
+        "scratch",
+        "dev ",
+        "development",
+        "staging",
+        "sandbox",
+        "ci branch",
+        "ci env",
+        "non-prod",
+        "feature branch",
+        "local",
+        "playground",
+        "experiment",
     ];
     keywords.iter().any(|k| s.contains(k))
 }
 
 fn is_expert_override(s: &str) -> bool {
     let keywords = [
-        "know what", "intentional", "on purpose", "deliberate",
-        "i understand", "i'm aware", "expected", "by design",
+        "know what",
+        "intentional",
+        "on purpose",
+        "deliberate",
+        "i understand",
+        "i'm aware",
+        "expected",
+        "by design",
     ];
     keywords.iter().any(|k| s.contains(k))
 }
 
 fn is_rule_error(s: &str) -> bool {
     let keywords = [
-        "false", "not dangerous", "wrong", "incorrect", "bug",
-        "false positive", "false alarm", "safe", "harmless",
-        "shouldn't block", "should not block",
+        "false",
+        "not dangerous",
+        "wrong",
+        "incorrect",
+        "bug",
+        "false positive",
+        "false alarm",
+        "safe",
+        "harmless",
+        "shouldn't block",
+        "should not block",
     ];
     keywords.iter().any(|k| s.contains(k))
 }

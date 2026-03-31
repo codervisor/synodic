@@ -56,7 +56,12 @@ impl Storage for SqliteStorage {
                 sqlx::query(stmt)
                     .execute(&self.pool)
                     .await
-                    .with_context(|| format!("migration statement failed: {}", &stmt[..stmt.len().min(80)]))?;
+                    .with_context(|| {
+                        format!(
+                            "migration statement failed: {}",
+                            &stmt[..stmt.len().min(80)]
+                        )
+                    })?;
             }
         }
 
@@ -76,11 +81,9 @@ impl Storage for SqliteStorage {
 
     async fn get_rules(&self, active_only: bool) -> Result<Vec<Rule>> {
         let rows = if active_only {
-            sqlx::query_as::<_, RuleRow>(
-                "SELECT * FROM rules WHERE enabled = 1 ORDER BY id",
-            )
-            .fetch_all(&self.pool)
-            .await?
+            sqlx::query_as::<_, RuleRow>("SELECT * FROM rules WHERE enabled = 1 ORDER BY id")
+                .fetch_all(&self.pool)
+                .await?
         } else {
             sqlx::query_as::<_, RuleRow>("SELECT * FROM rules ORDER BY id")
                 .fetch_all(&self.pool)
@@ -201,14 +204,12 @@ impl Storage for SqliteStorage {
 
         if let Some(ts) = &update.crystallized_at {
             let ts_str = ts.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-            sqlx::query(
-                "UPDATE rules SET crystallized_at = ?, updated_at = ? WHERE id = ?",
-            )
-            .bind(&ts_str)
-            .bind(&now)
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("UPDATE rules SET crystallized_at = ?, updated_at = ? WHERE id = ?")
+                .bind(&ts_str)
+                .bind(&now)
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
         }
 
         Ok(())
@@ -235,12 +236,10 @@ impl Storage for SqliteStorage {
     }
 
     async fn get_threat_category(&self, id: &str) -> Result<Option<ThreatCategory>> {
-        let row = sqlx::query_as::<_, CategoryRow>(
-            "SELECT * FROM threat_categories WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = sqlx::query_as::<_, CategoryRow>("SELECT * FROM threat_categories WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
 
         row.map(|r| r.into_category()).transpose()
     }
@@ -594,8 +593,7 @@ fn parse_datetime(s: &str) -> Result<DateTime<Utc>> {
         .map(|dt| dt.and_utc())
         .or_else(|_| {
             // Try alternative format
-            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
-                .map(|dt| dt.and_utc())
+            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").map(|dt| dt.and_utc())
         })
         .with_context(|| format!("parsing datetime: {s}"))
 }

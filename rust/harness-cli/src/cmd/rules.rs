@@ -96,8 +96,18 @@ async fn show_rule(store: &dyn storage::Storage, id: &str) -> Result<()> {
     println!("  Category:     {}", rule.category_id);
     println!("  Lifecycle:    {}", rule.lifecycle);
     println!("  Enabled:      {}", rule.enabled);
-    println!("  Tools:        {}", if rule.tools.is_empty() { "all".to_string() } else { rule.tools.join(", ") });
-    println!("  Condition:    {} = {}", rule.condition_type, rule.condition_value);
+    println!(
+        "  Tools:        {}",
+        if rule.tools.is_empty() {
+            "all".to_string()
+        } else {
+            rule.tools.join(", ")
+        }
+    );
+    println!(
+        "  Condition:    {} = {}",
+        rule.condition_type, rule.condition_value
+    );
     println!("  Alpha (TP):   {}", rule.alpha);
     println!("  Beta (FP):    {}", rule.beta);
     println!("  Precision:    {:.1}%", precision);

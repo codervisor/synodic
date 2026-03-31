@@ -37,7 +37,8 @@ impl OptimizeCmd {
         let mut flagged = 0;
 
         for rule in &rules {
-            if rule.lifecycle == Lifecycle::Deprecated || rule.lifecycle == Lifecycle::Crystallized {
+            if rule.lifecycle == Lifecycle::Deprecated || rule.lifecycle == Lifecycle::Crystallized
+            {
                 continue;
             }
 
