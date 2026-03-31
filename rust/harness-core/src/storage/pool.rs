@@ -24,8 +24,7 @@ pub async fn create_storage(database_url: &str) -> Result<Box<dyn Storage>> {
         {
             anyhow::bail!("SQLite support not compiled in — enable the `sqlite` feature");
         }
-    } else if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://")
-    {
+    } else if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
         #[cfg(feature = "postgres")]
         {
             let _ = database_url;
@@ -44,8 +43,7 @@ pub async fn create_storage(database_url: &str) -> Result<Box<dyn Storage>> {
 
 /// Resolve the DATABASE_URL from environment or default to a local SQLite file.
 pub fn resolve_database_url() -> String {
-    std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| default_sqlite_url())
+    std::env::var("DATABASE_URL").unwrap_or_else(|_| default_sqlite_url())
 }
 
 /// Default SQLite path: `~/.synodic/synodic.db`

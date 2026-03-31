@@ -92,15 +92,16 @@ async fn promote(store: &dyn storage::Storage, id: &str) -> Result<()> {
     }
 
     // Constitutional constraints
-    if let Err(violations) = validate_constitutional(
-        &rule.tools,
-        &rule.condition_type,
-        &rule.description,
-    ) {
+    if let Err(violations) =
+        validate_constitutional(&rule.tools, &rule.condition_type, &rule.description)
+    {
         for v in &violations {
             eprintln!("Constitutional violation: {}", v);
         }
-        anyhow::bail!("rule violates {} constitutional constraint(s)", violations.len());
+        anyhow::bail!(
+            "rule violates {} constitutional constraint(s)",
+            violations.len()
+        );
     }
 
     store
@@ -171,9 +172,7 @@ async fn crystallize(store: &dyn storage::Storage, id: &str) -> Result<()> {
 
     // Check cross-project validation
     if !rule.cross_project_validated {
-        anyhow::bail!(
-            "rule not validated across >=2 projects — set cross_project_validated first"
-        );
+        anyhow::bail!("rule not validated across >=2 projects — set cross_project_validated first");
     }
 
     // Check age (30+ days)
@@ -377,7 +376,10 @@ if git diff --cached -p | grep -qE '{}'; then
 fi"#,
             rule.id, rule.description, rule.condition_value, rule.id, rule.description
         )),
-        other => anyhow::bail!("condition type '{}' cannot be crystallized to git hook", other),
+        other => anyhow::bail!(
+            "condition type '{}' cannot be crystallized to git hook",
+            other
+        ),
     }
 }
 

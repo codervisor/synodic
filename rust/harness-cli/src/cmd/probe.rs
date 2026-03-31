@@ -87,10 +87,8 @@ impl ProbeCmd {
                             .ok();
 
                         // Generate expansion proposal
-                        let expanded =
-                            expand_pattern(&rule.condition_value, &variant.input);
-                        let backtest =
-                            backtest_expansion(&expanded, &rule.condition_type);
+                        let expanded = expand_pattern(&rule.condition_value, &variant.input);
+                        let backtest = backtest_expansion(&expanded, &rule.condition_type);
 
                         proposals.push((
                             rule.id.clone(),

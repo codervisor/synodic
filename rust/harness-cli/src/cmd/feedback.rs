@@ -66,7 +66,10 @@ impl FeedbackCmd {
             }
             None => {
                 // Record feedback (flat args mode)
-                let rule = self.rule.clone().ok_or_else(|| anyhow::anyhow!("--rule is required"))?;
+                let rule = self
+                    .rule
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("--rule is required"))?;
                 let signal = self
                     .signal
                     .clone()
@@ -77,12 +80,7 @@ impl FeedbackCmd {
     }
 }
 
-async fn record_feedback(
-    db_url: &str,
-    rule: &str,
-    signal: &str,
-    cmd: &FeedbackCmd,
-) -> Result<()> {
+async fn record_feedback(db_url: &str, rule: &str, signal: &str, cmd: &FeedbackCmd) -> Result<()> {
     match signal {
         "override" | "confirmed" | "ci_failure" | "incident" => {}
         other => anyhow::bail!(
@@ -205,7 +203,10 @@ async fn analyze_overrides(store: &dyn storage::Storage, rule_id: &str) -> Resul
 
     let fp_rate = rule.beta as f64 / (rule.alpha + rule.beta) as f64;
     if fp_rate > 0.4 {
-        println!("  WARNING: False positive rate {:.0}% exceeds 40% threshold", fp_rate * 100.0);
+        println!(
+            "  WARNING: False positive rate {:.0}% exceeds 40% threshold",
+            fp_rate * 100.0
+        );
     }
     println!();
 
