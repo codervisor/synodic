@@ -1,5 +1,5 @@
 {
-  "name": "@synodic/cli-darwin-arm64",
+  "name": "@codervisor/synodic-darwin-arm64",
   "version": "0.1.0",
   "description": "Synodic CLI binary for macOS ARM64 (Apple Silicon)",
   "license": "MIT",

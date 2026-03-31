@@ -152,7 +152,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "Publishing @synodic/cli..."
+          echo "Publishing @codervisor/synodic..."
           npm publish packages/cli --access public || echo "Skipped (may already exist)"
 
   release:

@@ -1,5 +1,5 @@
 {
-  "name": "@synodic/cli-linux-x64",
+  "name": "@codervisor/synodic-linux-x64",
   "version": "0.1.0",
   "description": "Synodic CLI binary for Linux x64",
   "license": "MIT",

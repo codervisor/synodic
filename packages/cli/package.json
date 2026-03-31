@@ -1,5 +1,5 @@
 {
-  "name": "@synodic/cli",
+  "name": "@codervisor/synodic",
   "version": "0.1.0",
   "description": "Synodic — AI agent governance via hooks. Enforce rules on AI coding agent sessions.",
   "license": "MIT",
@@ -30,9 +30,9 @@
     "scripts/"
   ],
   "optionalDependencies": {
-    "@synodic/cli-darwin-arm64": "0.1.0",
-    "@synodic/cli-darwin-x64": "0.1.0",
-    "@synodic/cli-linux-x64": "0.1.0",
-    "@synodic/cli-linux-arm64": "0.1.0"
+    "@codervisor/synodic-darwin-arm64": "0.1.0",
+    "@codervisor/synodic-darwin-x64": "0.1.0",
+    "@codervisor/synodic-linux-x64": "0.1.0",
+    "@codervisor/synodic-linux-arm64": "0.1.0"
   }
 }
