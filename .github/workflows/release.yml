@@ -28,13 +28,30 @@ jobs:
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
+            RAW_VERSION="${{ inputs.version }}"
+            # Strip optional leading "v" (so "v0.1.0" doesn't become "vv0.1.0")
+            RAW_VERSION="${RAW_VERSION#v}"
           else
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            RAW_VERSION="${GITHUB_REF#refs/tags/v}"
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: $VERSION (tag: v$VERSION)"
+
+          # Reject whitespace
+          case "$RAW_VERSION" in
+            *[[:space:]]*)
+              echo "Error: version must not contain whitespace: '$RAW_VERSION'" >&2
+              exit 1
+              ;;
+          esac
+
+          # Validate semver: MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
+          if ! printf '%s' "$RAW_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "Error: '$RAW_VERSION' is not valid semver (e.g. 0.1.0, 1.2.3-beta.1)" >&2
+            exit 1
+          fi
+
+          echo "version=$RAW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$RAW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $RAW_VERSION (tag: v$RAW_VERSION)"
 
       - name: Bump versions and commit
         if: github.event_name == 'workflow_dispatch'
