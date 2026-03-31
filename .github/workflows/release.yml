@@ -15,11 +15,12 @@ permissions:
 
 jobs:
   prepare:
-    name: Resolve version & create tag
+    name: Resolve version
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.resolve-sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,24 +36,21 @@ jobs:
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION (tag: v$VERSION)"
 
-      - name: Bump versions in package.json files
-        if: github.event_name == 'workflow_dispatch'
-        run: bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
-
-      - name: Commit version bump and create tag
+      - name: Bump versions and commit
         if: github.event_name == 'workflow_dispatch'
         run: |
+          bash scripts/set-npm-version.sh ${{ steps.version.outputs.version }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add packages/cli/package.json npm/*/package.json
-          if git diff --cached --quiet; then
-            echo "No version changes needed"
-          else
+          if ! git diff --cached --quiet; then
             git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
             git push origin HEAD:main
           fi
-          git tag ${{ steps.version.outputs.tag }}
-          git push origin ${{ steps.version.outputs.tag }}
+
+      - name: Resolve build SHA
+        id: resolve-sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build (${{ matrix.target }})
@@ -76,7 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -118,7 +116,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -151,7 +149,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -226,5 +224,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ needs.prepare.outputs.sha }}
           generate_release_notes: true
           files: artifacts/**/*.tar.gz
