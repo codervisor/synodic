@@ -59,7 +59,7 @@ impl LifecycleCmd {
 /// - Backtest precision > 0.9
 /// - ≥5 observations
 /// - Passes constitutional constraints
-async fn promote(store: &dyn storage::Storage, id: &str) -> Result<()> {
+pub async fn promote(store: &dyn storage::Storage, id: &str) -> Result<()> {
     let rule = store
         .get_rule(id)
         .await?
@@ -133,7 +133,7 @@ async fn promote(store: &dyn storage::Storage, id: &str) -> Result<()> {
 /// - CI < 0.1
 /// - Cross-project validated
 /// - 30+ days as tuned
-async fn crystallize(store: &dyn storage::Storage, id: &str) -> Result<()> {
+pub async fn crystallize(store: &dyn storage::Storage, id: &str) -> Result<()> {
     let rule = store
         .get_rule(id)
         .await?
@@ -216,7 +216,7 @@ async fn crystallize(store: &dyn storage::Storage, id: &str) -> Result<()> {
 }
 
 /// Deprecate a rule.
-async fn deprecate(store: &dyn storage::Storage, id: &str) -> Result<()> {
+pub async fn deprecate(store: &dyn storage::Storage, id: &str) -> Result<()> {
     let rule = store
         .get_rule(id)
         .await?
@@ -268,7 +268,7 @@ async fn deprecate(store: &dyn storage::Storage, id: &str) -> Result<()> {
 }
 
 /// Check all active rules for automatic lifecycle transitions.
-async fn check_transitions(store: &dyn storage::Storage) -> Result<()> {
+pub async fn check_transitions(store: &dyn storage::Storage) -> Result<()> {
     let rules = store.get_rules(false).await?;
     let mut transitions = 0;
 

@@ -114,53 +114,45 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 
 ## CLI commands
 
+Three user-facing commands:
+
 ```bash
-# Init (governance + orchestration)
-synodic init                    # Setup L1 git hooks + L2 Claude Code hooks + pipeline workflow
-synodic init --no-orchestration # Governance only (hooks, no pipeline)
-synodic init --no-git-hooks --no-claude-hooks  # Orchestration only
-synodic init --lang rust        # Force language (auto-detected by default)
+# Setup — one command for governance + orchestration
+synodic init                    # Governance hooks + pipeline workflow (auto-detects language)
+synodic init --no-orchestration # Governance only
+synodic init --lang node        # Force language (rust, node, python, go)
 
-# Orchestration (standalone)
-synodic orchestrate init              # Scaffold Build→Inspect→PR pipeline
-synodic orchestrate init --lang node  # Force language
-synodic orchestrate init --max-rework 5  # Custom rework limit
+# Monitor — health dashboard
+synodic status [--json]         # Safety, friction, coverage scores + convergence
 
-# Governance: intercept
-synodic intercept --tool <name> --input '<json>'  # Evaluate tool call (called by hooks)
-
-# Feedback loop (spec 073)
-synodic feedback --rule <id> --signal <type> [--reason <text>]  # Record override/confirmed
-synodic feedback analyze <rule-id>   # Cluster override reasons
-
-# Rules & status (spec 072, 074)
-synodic rules list [--all]      # List rules with precision stats
-synodic rules show <id>         # Show rule details + recent feedback
-synodic status [--json]         # S/F/C scores, coverage gaps, convergence
-
-# Adversarial probing (spec 075)
-synodic probe [--rule <id>] [--auto-apply]  # Test rules against evasion variants
-
-# Lifecycle management (spec 076)
-synodic lifecycle promote <id>      # Candidate → active (clear and convincing)
-synodic lifecycle crystallize <id>  # Tuned → L1 git hook (beyond reasonable doubt)
-synodic lifecycle deprecate <id>    # Disable rule
-synodic lifecycle check             # Auto-transition active rules (tuned/deprecated)
-synodic optimize [--dry-run]        # Propose rule candidates from patterns
+# Manage — all rule operations in one place
+synodic rules list [--all]           # List rules with precision stats
+synodic rules show <id>              # Rule details + recent feedback
+synodic rules promote <id>           # Candidate → active
+synodic rules crystallize <id>       # Tuned → L1 git hook
+synodic rules deprecate <id>         # Disable rule
+synodic rules check                  # Auto-transition active rules
+synodic rules probe [--rule <id>]    # Test rules against evasion variants
+synodic rules optimize [--dry-run]   # Propose rule candidates from patterns
 ```
 
-**Environment**: Set `DATABASE_URL` for storage (default: `sqlite://~/.synodic/synodic.db`).
-All commands accept `--db-url` to override.
+Internal commands (called by hooks, hidden from `--help`): `intercept`, `feedback`.
 
-### Orchestration: what `synodic orchestrate init` generates
+**Environment**: Set `DATABASE_URL` for storage (default: `sqlite://~/.synodic/synodic.db`).
+
+### What `synodic init` generates
 
 | File | Purpose |
 |---|---|
-| `.github/workflows/synodic-pipeline.yml` | GitHub Actions Build→Inspect→PR workflow |
+| `.githooks/pre-commit` | L1: cargo fmt check (fast, pre-commit) |
+| `.githooks/pre-push` | L1: fmt + clippy + test (full gate) |
+| `.claude/settings.json` | L2: PreToolUse → intercept hook |
+| `.claude/hooks/intercept.sh` | L2: Evaluates tool calls against rules |
+| `.github/workflows/synodic-pipeline.yml` | Build→Inspect→PR pipeline workflow |
 | `.harness/pipeline.yml` | Pipeline config (language, checks, max_rework) |
-| `.harness/scripts/static_gate.sh` | Custom quality gate hook (optional, user-editable) |
+| `.harness/scripts/static_gate.sh` | Custom quality gate hook (user-editable) |
 
-**Supported languages** (auto-detected): Rust, Node (npm/pnpm/yarn/bun), Python, Go, Generic fallback.
+**Supported languages** (auto-detected): Rust, Node (npm/pnpm/yarn/bun), Python, Go, Generic.
 
 **Workflow requires**: `ANTHROPIC_API_KEY` secret in GitHub repo settings.
 

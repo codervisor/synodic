@@ -2,6 +2,8 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use harness_core::storage;
 
+use crate::cmd::{lifecycle, optimize, probe};
+
 /// Manage governance rules.
 #[derive(Args)]
 pub struct RulesCmd {
@@ -26,6 +28,53 @@ enum RulesAction {
         /// Rule ID
         id: String,
     },
+
+    // ── Lifecycle management ────────────────────────────────
+    /// Promote a candidate rule to active
+    Promote {
+        /// Rule ID to promote
+        id: String,
+    },
+    /// Crystallize a tuned rule to L1 git hook
+    Crystallize {
+        /// Rule ID to crystallize
+        id: String,
+    },
+    /// Deprecate a rule (disable it)
+    Deprecate {
+        /// Rule ID to deprecate
+        id: String,
+    },
+    /// Check all active rules for auto-transitions
+    Check,
+
+    // ── Adversarial probing ─────────────────────────────────
+    /// Test rules against evasion variants
+    Probe {
+        /// Probe a specific rule (default: all active)
+        #[arg(long)]
+        rule: Option<String>,
+
+        /// Use a specific strategy
+        #[arg(long)]
+        strategy: Option<String>,
+
+        /// Auto-apply safe pattern expansions
+        #[arg(long)]
+        auto_apply: bool,
+    },
+
+    // ── Optimization ────────────────────────────────────────
+    /// Scan feedback and propose rule candidates from patterns
+    Optimize {
+        /// Only show proposals, don't create candidates
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Lookback period in days
+        #[arg(long, default_value = "90")]
+        days: i64,
+    },
 }
 
 impl RulesCmd {
@@ -38,6 +87,26 @@ impl RulesCmd {
         match self.action {
             RulesAction::List { all } => list_rules(&*store, !all).await,
             RulesAction::Show { id } => show_rule(&*store, &id).await,
+
+            // Lifecycle
+            RulesAction::Promote { id } => lifecycle::promote(&*store, &id).await,
+            RulesAction::Crystallize { id } => lifecycle::crystallize(&*store, &id).await,
+            RulesAction::Deprecate { id } => lifecycle::deprecate(&*store, &id).await,
+            RulesAction::Check => lifecycle::check_transitions(&*store).await,
+
+            // Probe
+            RulesAction::Probe {
+                rule,
+                strategy,
+                auto_apply,
+            } => {
+                probe::run_probes(&*store, rule.as_deref(), strategy.as_deref(), auto_apply).await
+            }
+
+            // Optimize
+            RulesAction::Optimize { dry_run, days } => {
+                optimize::run_optimize(&*store, dry_run, days).await
+            }
         }
     }
 }
