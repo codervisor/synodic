@@ -3,6 +3,7 @@ use clap::Args;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::cmd::orchestrate;
 use crate::util;
 
 #[derive(Args)]
@@ -18,6 +19,14 @@ pub struct InitCmd {
     /// Skip git hooksPath configuration
     #[arg(long)]
     no_git_hooks: bool,
+
+    /// Skip orchestration pipeline setup
+    #[arg(long)]
+    no_orchestration: bool,
+
+    /// Language/stack for orchestration: rust, node, python, go (auto-detected if omitted)
+    #[arg(long)]
+    lang: Option<String>,
 }
 
 impl InitCmd {
@@ -35,6 +44,15 @@ impl InitCmd {
         // --- L2: Claude Code hooks ---
         if !self.no_claude_hooks {
             setup_claude_hooks(&root)?;
+        }
+
+        // --- Orchestration: pipeline workflow + config ---
+        if !self.no_orchestration {
+            let lang = match &self.lang {
+                Some(name) => orchestrate::parse_lang(name)?,
+                None => orchestrate::detect_language(&root),
+            };
+            orchestrate::setup_orchestration(&root, &lang, 3)?;
         }
 
         Ok(())

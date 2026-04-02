@@ -2,7 +2,7 @@
 
 ## Project: Synodic
 
-Open-source AI agent governance via hooks — enforce rules on AI coding agent sessions.
+Open-source AI agent governance and orchestration — enforce rules on AI coding agent sessions and automate Build→Inspect→PR pipelines.
 
 **Core identity:** The tool that watches the AI agents.
 
@@ -34,13 +34,14 @@ synodic/
 │   │   └── migrations/
 │   │       ├── 001_initial_schema.sql # Tables: rules, threat_categories, feedback_events, etc.
 │   │       └── 002_seed_data.sql      # 10 threat categories + 5 default rules
-│   └── harness-cli/                   # CLI: init, intercept, feedback, rules, status
+│   └── harness-cli/                   # CLI: init, intercept, feedback, rules, status, orchestrate
 │       └── src/
 │           ├── main.rs                # CLI entry (async via tokio)
 │           ├── cmd/
-│           │   ├── init.rs            # Setup L1 git hooks + L2 Claude Code hooks
+│           │   ├── init.rs            # Setup governance + orchestration (hooks + pipeline)
 │           │   ├── intercept.rs       # PreToolUse hook backend
 │           │   ├── feedback.rs        # Record override/confirmed/ci_failure/incident
+│           │   ├── orchestrate.rs     # Scaffold Build→Inspect→PR pipeline (workflow + config)
 │           │   ├── rules.rs           # List/show rules with Beta stats
 │           │   └── status.rs          # Coverage scores, gaps, recommendations
 │           └── util.rs                # find_repo_root()
@@ -65,7 +66,6 @@ synodic/
 ### Extracted repositories
 
 - **[codervisor/eval](https://github.com/codervisor/eval)** — Standalone eval framework (SWE-bench, FeatureBench, DevBench)
-- **[codervisor/orchestra](https://github.com/codervisor/orchestra)** — Pipeline engine, fractal/swarm algorithms, coordination skills
 
 ### Two-layer governance
 
@@ -80,14 +80,16 @@ synodic/
 
 **Storage**: PostgreSQL for production, SQLite for local/demo. Rules, feedback events, and telemetry are persisted in DB. The intercept engine itself is stateless (reads rules from cache, <100ms).
 
-### Pipeline topologies (concept reference)
+### Orchestration
 
-Four coordination patterns documented in `docs/orchestration-patterns/`:
+Synodic provides both governance and orchestration. `synodic orchestrate init` scaffolds a Build→Inspect→PR pipeline for any project, with language-specific quality gates and the governance harness enabled.
 
-- **Factory**: Linear BUILD -> INSPECT -> route -> PR. Best for clear, spec-driven tasks.
+Four coordination topologies documented in `docs/orchestration-patterns/`:
+
+- **Factory** (implemented): Linear BUILD → INSPECT → route → PR. Best for clear, spec-driven tasks.
 - **Adversarial**: Generate-attack loop with escalating critic modes. Best for security hardening.
-- **Fractal**: Recursive decompose -> parallel solve -> reunify. Best for large, complex tasks.
-- **Swarm**: Speculative parallel exploration -> checkpoint -> prune -> merge. Best for ambiguous tasks.
+- **Fractal**: Recursive decompose → parallel solve → reunify. Best for large, complex tasks.
+- **Swarm**: Speculative parallel exploration → checkpoint → prune → merge. Best for ambiguous tasks.
 
 ## Claude Code Cloud Environment
 
@@ -113,8 +115,18 @@ The cloud container (Ubuntu 24.04, root, 16GB RAM, 4 CPU, 250GB disk) comes pre-
 ## CLI commands
 
 ```bash
-# Core
-synodic init                    # Setup L1 git hooks + L2 Claude Code hooks
+# Init (governance + orchestration)
+synodic init                    # Setup L1 git hooks + L2 Claude Code hooks + pipeline workflow
+synodic init --no-orchestration # Governance only (hooks, no pipeline)
+synodic init --no-git-hooks --no-claude-hooks  # Orchestration only
+synodic init --lang rust        # Force language (auto-detected by default)
+
+# Orchestration (standalone)
+synodic orchestrate init              # Scaffold Build→Inspect→PR pipeline
+synodic orchestrate init --lang node  # Force language
+synodic orchestrate init --max-rework 5  # Custom rework limit
+
+# Governance: intercept
 synodic intercept --tool <name> --input '<json>'  # Evaluate tool call (called by hooks)
 
 # Feedback loop (spec 073)
@@ -139,6 +151,18 @@ synodic optimize [--dry-run]        # Propose rule candidates from patterns
 
 **Environment**: Set `DATABASE_URL` for storage (default: `sqlite://~/.synodic/synodic.db`).
 All commands accept `--db-url` to override.
+
+### Orchestration: what `synodic orchestrate init` generates
+
+| File | Purpose |
+|---|---|
+| `.github/workflows/synodic-pipeline.yml` | GitHub Actions Build→Inspect→PR workflow |
+| `.harness/pipeline.yml` | Pipeline config (language, checks, max_rework) |
+| `.harness/scripts/static_gate.sh` | Custom quality gate hook (optional, user-editable) |
+
+**Supported languages** (auto-detected): Rust, Node (npm/pnpm/yarn/bun), Python, Go, Generic fallback.
+
+**Workflow requires**: `ANTHROPIC_API_KEY` secret in GitHub repo settings.
 
 ### Skill installation
 

@@ -3,7 +3,7 @@ mod util;
 
 use clap::Parser;
 
-/// Synodic — AI agent governance via git hooks (L1) and Claude Code hooks (L2)
+/// Synodic — AI agent governance and orchestration
 #[derive(Parser)]
 #[command(
     name = "synodic",
@@ -11,7 +11,7 @@ use clap::Parser;
     about = "The tool that watches the AI agents."
 )]
 enum Cli {
-    /// Initialize governance: git hooksPath (L1) + Claude Code hooks (L2)
+    /// Initialize governance + orchestration (hooks, pipeline workflow)
     Init(cmd::init::InitCmd),
 
     /// Evaluate agent tool call against interception rules (L2 intercept)
@@ -34,6 +34,9 @@ enum Cli {
 
     /// Scan feedback and propose rule optimizations
     Optimize(cmd::optimize::OptimizeCmd),
+
+    /// Manage orchestration pipeline (scaffold, configure)
+    Orchestrate(cmd::orchestrate::OrchestrationCmd),
 }
 
 #[tokio::main]
@@ -48,5 +51,6 @@ async fn main() -> anyhow::Result<()> {
         Cli::Probe(cmd) => cmd.run().await,
         Cli::Lifecycle(cmd) => cmd.run().await,
         Cli::Optimize(cmd) => cmd.run().await,
+        Cli::Orchestrate(cmd) => cmd.run(),
     }
 }
