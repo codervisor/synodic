@@ -82,7 +82,7 @@ synodic/
 
 ### Orchestration
 
-Synodic provides both governance and orchestration. `synodic orchestrate init` scaffolds a Build→Inspect→PR pipeline for any project, with language-specific quality gates and the governance harness enabled.
+Synodic provides both governance and orchestration. `synodic init` sets up a Build→Inspect→PR pipeline alongside governance hooks, with language-specific quality gates.
 
 Four coordination topologies documented in `docs/orchestration-patterns/`:
 
@@ -140,17 +140,17 @@ Internal commands (called by hooks, hidden from `--help`): `intercept`, `feedbac
 
 **Environment**: Set `DATABASE_URL` for storage (default: `sqlite://~/.synodic/synodic.db`).
 
-### What `synodic init` generates
+### What `synodic init` configures and generates
 
-| File | Purpose |
-|---|---|
-| `.githooks/pre-commit` | L1: cargo fmt check (fast, pre-commit) |
-| `.githooks/pre-push` | L1: fmt + clippy + test (full gate) |
-| `.claude/settings.json` | L2: PreToolUse → intercept hook |
-| `.claude/hooks/intercept.sh` | L2: Evaluates tool calls against rules |
-| `.github/workflows/synodic-pipeline.yml` | Build→Inspect→PR pipeline workflow |
-| `.harness/pipeline.yml` | Pipeline config (language, checks, max_rework) |
-| `.harness/scripts/static_gate.sh` | Custom quality gate hook (user-editable) |
+| File | Action | Purpose |
+|---|---|---|
+| `.githooks/pre-commit` | configures `core.hooksPath` | L1: cargo fmt check (must already exist) |
+| `.githooks/pre-push` | configures `core.hooksPath` | L1: fmt + clippy + test (must already exist) |
+| `.claude/settings.json` | generates | L2: PreToolUse → intercept hook |
+| `.claude/hooks/intercept.sh` | generates | L2: Evaluates tool calls against rules |
+| `.github/workflows/synodic-pipeline.yml` | generates | Build→Inspect→PR pipeline workflow |
+| `.harness/pipeline.yml` | generates | Pipeline config (language, checks, max_rework) |
+| `.harness/scripts/static_gate.sh` | generates | Custom quality gate hook (user-editable) |
 
 **Supported languages** (auto-detected): Rust, Node (npm/pnpm/yarn/bun), Python, Go, Generic.
 

@@ -121,21 +121,21 @@ pub fn detect_language(root: &Path) -> ProjectLang {
 // ── Profile: language-specific snippets for templates ──────────────
 
 struct LangProfile {
-    language: &'static str,
+    language: String,
     /// GitHub Actions setup steps (YAML, indented 6 spaces)
-    gha_setup: &'static str,
+    gha_setup: String,
     /// Bash snippet for INSPECT phase checks
-    inspect_checks: &'static str,
+    inspect_checks: String,
     /// Instruction for the agent to fix formatting before commit
-    format_fix: &'static str,
+    format_fix: String,
     /// .harness/pipeline.yml checks section
-    pipeline_checks: &'static str,
+    pipeline_checks: String,
 }
 
 fn profile_for(lang: &ProjectLang) -> LangProfile {
     match lang {
         ProjectLang::Rust => LangProfile {
-            language: "rust",
+            language: "rust".into(),
             gha_setup: r#"      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -148,7 +148,7 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}"#,
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}"#.into(),
             inspect_checks: r#"            echo "  ▸ cargo fmt --check"
             if ! FMT_OUT=$(cargo fmt --all -- --check 2>&1); then
               QA_PASSED=false
@@ -187,8 +187,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    FAIL"
             else
               echo "    PASS"
-            fi"#,
-            format_fix: r"Run `cargo fmt --all` before finishing",
+            fi"#.into(),
+            format_fix: r"Run `cargo fmt --all` before finishing".into(),
             pipeline_checks: r#"checks:
   - name: format
     run: "cargo fmt --all -- --check"
@@ -196,24 +196,47 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
   - name: lint
     run: "cargo clippy --all-targets -- -D warnings"
   - name: test
-    run: "cargo test""#,
+    run: "cargo test""#.into(),
         },
         ProjectLang::Node { pm } => {
-            let pm_str = pm.as_str();
-            // We use 'npm' in the static templates; users can edit for their pm
-            let _ = pm_str;
+            let install = match pm.as_str() {
+                "pnpm" => "pnpm install --frozen-lockfile",
+                "yarn" => "yarn install --frozen-lockfile",
+                "bun" => "bun install --frozen-lockfile",
+                _ => "npm ci",
+            };
+            let run_cmd = match pm.as_str() {
+                "pnpm" => "pnpm run",
+                "yarn" => "yarn run",
+                "bun" => "bun run",
+                _ => "npm run",
+            };
+            let test_cmd = match pm.as_str() {
+                "pnpm" => "pnpm test",
+                "yarn" => "yarn test",
+                "bun" => "bun test",
+                _ => "npm test",
+            };
+            let setup_action = match pm.as_str() {
+                "pnpm" => "\n      - uses: pnpm/action-setup@v4\n",
+                "bun" => "\n      - uses: oven-sh/setup-bun@v2\n",
+                _ => "",
+            };
             LangProfile {
-                language: "node",
-                gha_setup: r#"      - uses: actions/setup-node@v4
+                language: "node".into(),
+                gha_setup: format!(
+                    r#"      - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
+{setup_action}
       - name: Install dependencies
-        run: npm ci"#,
-                inspect_checks: r#"            echo "  ▸ npm run lint"
-            if ! LINT_OUT=$(npm run lint 2>&1); then
+        run: {install}"#
+                ),
+                inspect_checks: format!(
+                    r#"            echo "  ▸ {run_cmd} lint"
+            if ! LINT_OUT=$({run_cmd} lint 2>&1); then
               QA_PASSED=false
-              FEEDBACK="${FEEDBACK}
+              FEEDBACK="${{FEEDBACK}}
             ### Lint
             \`\`\`
             $(echo "$LINT_OUT" | tail -40)
@@ -223,10 +246,10 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    PASS"
             fi
 
-            echo "  ▸ npm test"
-            if ! TEST_OUT=$(npm test 2>&1); then
+            echo "  ▸ {test_cmd}"
+            if ! TEST_OUT=$({test_cmd} 2>&1); then
               QA_PASSED=false
-              FEEDBACK="${FEEDBACK}
+              FEEDBACK="${{FEEDBACK}}
             ### Tests
             \`\`\`
             $(echo "$TEST_OUT" | tail -40)
@@ -236,10 +259,10 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    PASS"
             fi
 
-            echo "  ▸ npm run build"
-            if ! BUILD_OUT=$(npm run build 2>&1); then
+            echo "  ▸ {run_cmd} build"
+            if ! BUILD_OUT=$({run_cmd} build 2>&1); then
               QA_PASSED=false
-              FEEDBACK="${FEEDBACK}
+              FEEDBACK="${{FEEDBACK}}
             ### Build
             \`\`\`
             $(echo "$BUILD_OUT" | tail -20)
@@ -247,20 +270,23 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    FAIL"
             else
               echo "    PASS"
-            fi"#,
-                format_fix: r"Run `npm run lint -- --fix` before finishing",
-                pipeline_checks: r#"checks:
+            fi"#
+                ),
+                format_fix: format!("Run `{run_cmd} lint -- --fix` before finishing"),
+                pipeline_checks: format!(
+                    r#"checks:
   - name: lint
-    run: "npm run lint"
-    fix: "npm run lint -- --fix"
+    run: "{run_cmd} lint"
+    fix: "{run_cmd} lint -- --fix"
   - name: test
-    run: "npm test"
+    run: "{test_cmd}"
   - name: build
-    run: "npm run build""#,
+    run: "{run_cmd} build""#
+                ),
             }
         }
         ProjectLang::Python => LangProfile {
-            language: "python",
+            language: "python".into(),
             gha_setup: r#"      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -268,7 +294,7 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
       - name: Install dependencies
         run: |
           pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true
-          pip install ruff pytest 2>/dev/null || true"#,
+          pip install ruff pytest 2>/dev/null || true"#.into(),
             inspect_checks: r#"            echo "  ▸ ruff check"
             if ! LINT_OUT=$(ruff check . 2>&1); then
               QA_PASSED=false
@@ -308,8 +334,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    FAIL"
             else
               echo "    PASS"
-            fi"#,
-            format_fix: r"Run `ruff format . && ruff check --fix .` before finishing",
+            fi"#.into(),
+            format_fix: r"Run `ruff format . && ruff check --fix .` before finishing".into(),
             pipeline_checks: r#"checks:
   - name: lint
     run: "ruff check ."
@@ -318,16 +344,16 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
     run: "ruff format --check ."
     fix: "ruff format ."
   - name: test
-    run: "pytest""#,
+    run: "pytest""#.into(),
         },
         ProjectLang::Go => LangProfile {
-            language: "go",
+            language: "go".into(),
             gha_setup: r#"      - uses: actions/setup-go@v5
         with:
           go-version: "stable"
 
       - name: Download modules
-        run: go mod download"#,
+        run: go mod download"#.into(),
             inspect_checks: r#"            echo "  ▸ go vet"
             if ! VET_OUT=$(go vet ./... 2>&1); then
               QA_PASSED=false
@@ -352,19 +378,19 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    FAIL"
             else
               echo "    PASS"
-            fi"#,
-            format_fix: r"Run `gofmt -w .` before finishing",
+            fi"#.into(),
+            format_fix: r"Run `gofmt -w .` before finishing".into(),
             pipeline_checks: r#"checks:
   - name: vet
     run: "go vet ./..."
   - name: test
-    run: "go test ./...""#,
+    run: "go test ./...""#.into(),
         },
         ProjectLang::Generic => LangProfile {
-            language: "generic",
+            language: "generic".into(),
             gha_setup: r#"      # TODO: Add setup steps for your project
       - name: Setup
-        run: echo "Add your toolchain setup here""#,
+        run: echo "Add your toolchain setup here""#.into(),
             inspect_checks: r#"            # TODO: Add your project's quality checks
             echo "  ▸ custom checks"
             if [ -x .harness/scripts/static_gate.sh ]; then
@@ -381,12 +407,12 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               fi
             else
               echo "    SKIP (no .harness/scripts/static_gate.sh)"
-            fi"#,
-            format_fix: r"Run your project's formatter before finishing",
+            fi"#.into(),
+            format_fix: r"Run your project's formatter before finishing".into(),
             pipeline_checks: r#"# TODO: Define your project's quality checks
 checks:
   - name: custom
-    run: ".harness/scripts/static_gate.sh""#,
+    run: ".harness/scripts/static_gate.sh""#.into(),
         },
     }
 }
