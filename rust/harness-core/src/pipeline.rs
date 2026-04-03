@@ -567,7 +567,8 @@ async fn run_semantic_check_ui(
          Return ONLY a JSON object with exactly two fields:\n\
          \"passed\" (boolean) and \"findings\" (array of strings).\n\
          If everything looks good, return {\"passed\": true, \"findings\": []}.\n\
-         Only return the JSON, nothing else.".to_string();
+         Only return the JSON, nothing else."
+        .to_string();
 
     let user_message = format!(
         "Context:\n{task_info}Check: {name}\nCriteria: {check_prompt}\n\nDiff:\n```\n{diff_str}\n```"
