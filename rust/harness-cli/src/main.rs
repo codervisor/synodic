@@ -21,7 +21,6 @@ enum Cli {
     Rules(cmd::rules::RulesCmd),
 
     // ── Internal (called by hooks/automation, hidden from help) ──
-
     /// Evaluate tool call against rules (called by L2 hooks)
     #[command(hide = true)]
     Intercept(cmd::intercept::InterceptCmd),
@@ -31,7 +30,6 @@ enum Cli {
     Feedback(cmd::feedback::FeedbackCmd),
 
     // ── Deprecated aliases (subsumed by init/rules, kept for compat) ──
-
     /// Use `synodic init` instead
     #[command(hide = true)]
     Orchestrate(cmd::orchestrate::OrchestrationCmd),

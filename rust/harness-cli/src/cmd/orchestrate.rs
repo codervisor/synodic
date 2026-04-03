@@ -148,7 +148,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}"#.into(),
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}"#
+                .into(),
             inspect_checks: r#"            echo "  ▸ cargo fmt --check"
             if ! FMT_OUT=$(cargo fmt --all -- --check 2>&1); then
               QA_PASSED=false
@@ -187,7 +188,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    FAIL"
             else
               echo "    PASS"
-            fi"#.into(),
+            fi"#
+            .into(),
             format_fix: r"Run `cargo fmt --all` before finishing".into(),
             pipeline_checks: r#"checks:
   - name: format
@@ -196,7 +198,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
   - name: lint
     run: "cargo clippy --all-targets -- -D warnings"
   - name: test
-    run: "cargo test""#.into(),
+    run: "cargo test""#
+                .into(),
         },
         ProjectLang::Node { pm } => {
             let install = match pm.as_str() {
@@ -294,7 +297,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
       - name: Install dependencies
         run: |
           pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true
-          pip install ruff pytest 2>/dev/null || true"#.into(),
+          pip install ruff pytest 2>/dev/null || true"#
+                .into(),
             inspect_checks: r#"            echo "  ▸ ruff check"
             if ! LINT_OUT=$(ruff check . 2>&1); then
               QA_PASSED=false
@@ -334,7 +338,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    FAIL"
             else
               echo "    PASS"
-            fi"#.into(),
+            fi"#
+            .into(),
             format_fix: r"Run `ruff format . && ruff check --fix .` before finishing".into(),
             pipeline_checks: r#"checks:
   - name: lint
@@ -344,7 +349,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
     run: "ruff format --check ."
     fix: "ruff format ."
   - name: test
-    run: "pytest""#.into(),
+    run: "pytest""#
+                .into(),
         },
         ProjectLang::Go => LangProfile {
             language: "go".into(),
@@ -353,7 +359,8 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
           go-version: "stable"
 
       - name: Download modules
-        run: go mod download"#.into(),
+        run: go mod download"#
+                .into(),
             inspect_checks: r#"            echo "  ▸ go vet"
             if ! VET_OUT=$(go vet ./... 2>&1); then
               QA_PASSED=false
@@ -378,19 +385,22 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               echo "    FAIL"
             else
               echo "    PASS"
-            fi"#.into(),
+            fi"#
+            .into(),
             format_fix: r"Run `gofmt -w .` before finishing".into(),
             pipeline_checks: r#"checks:
   - name: vet
     run: "go vet ./..."
   - name: test
-    run: "go test ./...""#.into(),
+    run: "go test ./...""#
+                .into(),
         },
         ProjectLang::Generic => LangProfile {
             language: "generic".into(),
             gha_setup: r#"      # TODO: Add setup steps for your project
       - name: Setup
-        run: echo "Add your toolchain setup here""#.into(),
+        run: echo "Add your toolchain setup here""#
+                .into(),
             inspect_checks: r#"            # TODO: Add your project's quality checks
             echo "  ▸ custom checks"
             if [ -x .harness/scripts/static_gate.sh ]; then
@@ -407,12 +417,14 @@ fn profile_for(lang: &ProjectLang) -> LangProfile {
               fi
             else
               echo "    SKIP (no .harness/scripts/static_gate.sh)"
-            fi"#.into(),
+            fi"#
+            .into(),
             format_fix: r"Run your project's formatter before finishing".into(),
             pipeline_checks: r#"# TODO: Define your project's quality checks
 checks:
   - name: custom
-    run: ".harness/scripts/static_gate.sh""#.into(),
+    run: ".harness/scripts/static_gate.sh""#
+                .into(),
         },
     }
 }
@@ -445,10 +457,7 @@ fn write_workflow(root: &Path, profile: &LangProfile, max_rework: u32) -> Result
 
     let path = workflows_dir.join("synodic-pipeline.yml");
     if path.exists() {
-        eprintln!(
-            "Orchestration: {} already exists, skipping",
-            path.display()
-        );
+        eprintln!("Orchestration: {} already exists, skipping", path.display());
         return Ok(());
     }
 
@@ -465,10 +474,7 @@ fn write_pipeline_config(root: &Path, profile: &LangProfile, max_rework: u32) ->
 
     let path = harness_dir.join("pipeline.yml");
     if path.exists() {
-        eprintln!(
-            "Orchestration: {} already exists, skipping",
-            path.display()
-        );
+        eprintln!("Orchestration: {} already exists, skipping", path.display());
         return Ok(());
     }
 
