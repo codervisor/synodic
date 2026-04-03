@@ -44,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_rules_enabled ON rules(enabled);
 
 CREATE TABLE IF NOT EXISTS feedback_events (
     id TEXT PRIMARY KEY,       -- UUID as text
-    signal_type TEXT NOT NULL CHECK (signal_type IN ('override', 'confirmed', 'ci_failure', 'incident')),
+    signal_type TEXT NOT NULL CHECK (signal_type IN ('override', 'confirmed', 'ci_pass', 'ci_failure', 'incident')),
     rule_id TEXT NOT NULL REFERENCES rules(id),
     session_id TEXT,
     tool_name TEXT NOT NULL,

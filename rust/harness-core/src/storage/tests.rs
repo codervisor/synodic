@@ -359,6 +359,77 @@ mod tests {
         assert!(probes[0].proposed_expansion.is_some());
     }
 
+    // -- Pipeline runs -------------------------------------------------------
+
+    #[tokio::test]
+    async fn record_and_query_pipeline_runs() {
+        let store = test_store().await;
+
+        let run = PipelineRun {
+            id: Uuid::new_v4().to_string(),
+            prompt: "add rate limiting".to_string(),
+            branch: Some("synodic/20260403".to_string()),
+            outcome: "passed".to_string(),
+            attempts: 2,
+            model: Some("sonnet".to_string()),
+            build_duration_ms: Some(5000),
+            build_cost_usd: Some(0.15),
+            inspect_duration_ms: Some(1200),
+            total_duration_ms: 7500,
+            project_id: None,
+            created_at: Utc::now(),
+        };
+
+        store.record_pipeline_run(run).await.unwrap();
+
+        let runs = store.get_pipeline_runs(None, None).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].prompt, "add rate limiting");
+        assert_eq!(runs[0].outcome, "passed");
+        assert_eq!(runs[0].attempts, 2);
+        assert_eq!(runs[0].build_duration_ms, Some(5000));
+        assert!((runs[0].build_cost_usd.unwrap() - 0.15).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn pipeline_runs_with_no_db_returns_empty() {
+        let store = test_store().await;
+        let runs = store.get_pipeline_runs(None, Some(10)).await.unwrap();
+        assert!(runs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn record_ci_pass_feedback() {
+        let store = test_store().await;
+
+        // ci_pass is now a valid signal type
+        store
+            .record_feedback(FeedbackEvent {
+                id: Uuid::new_v4(),
+                signal_type: "ci_pass".to_string(),
+                rule_id: "destructive-git".to_string(),
+                session_id: None,
+                tool_name: "synodic-run".to_string(),
+                tool_input: serde_json::json!({"check": "format", "exit_code": 0}),
+                override_reason: None,
+                failure_type: None,
+                evidence_url: None,
+                project_id: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .unwrap();
+
+        let events = store
+            .get_feedback(FeedbackFilters {
+                signal_type: Some("ci_pass".to_string()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 1);
+    }
+
     // -- Storage Rule → InterceptRule conversion ----------------------------
 
     #[tokio::test]

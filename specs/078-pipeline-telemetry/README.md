@@ -1,5 +1,5 @@
 ---
-status: draft
+status: complete
 created: 2026-04-03
 priority: high
 tags:
