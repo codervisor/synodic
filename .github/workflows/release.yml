@@ -240,13 +240,13 @@ jobs:
             pkg_name=$(node -p "require('./$dir/package.json').name")
             pkg_version=$(node -p "require('./$dir/package.json').version")
             echo "Validating $pkg_name@$pkg_version..."
-            npm pack "$dir" --dry-run
+            npm pack "./$dir" --dry-run
           done
           echo ""
           pkg_name=$(node -p "require('./packages/cli/package.json').name")
           pkg_version=$(node -p "require('./packages/cli/package.json').version")
           echo "Validating $pkg_name@$pkg_version..."
-          npm pack packages/cli --dry-run
+          npm pack ./packages/cli --dry-run
 
       - name: Publish platform packages
         if: needs.prepare.outputs.dry_run != 'true'
@@ -261,7 +261,7 @@ jobs:
               continue
             fi
             echo "Publishing $pkg_name@$pkg_version..."
-            npm publish "$dir" --access public
+            npm publish "./$dir" --access public
           done
 
       - name: Publish wrapper package
@@ -275,7 +275,7 @@ jobs:
             echo "Skipping $pkg_name@$pkg_version (already exists)"
           else
             echo "Publishing $pkg_name@$pkg_version..."
-            npm publish packages/cli --access public
+            npm publish ./packages/cli --access public
           fi
 
   release:
