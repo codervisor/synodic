@@ -59,14 +59,10 @@ impl LlmProvider {
     /// Get the API base URL.
     pub fn base_url(&self) -> String {
         match self {
-            LlmProvider::Anthropic => {
-                std::env::var("ANTHROPIC_API_BASE")
-                    .unwrap_or_else(|_| "https://api.anthropic.com/v1".to_string())
-            }
-            LlmProvider::OpenAi => {
-                std::env::var("OPENAI_API_BASE")
-                    .unwrap_or_else(|_| "https://api.openai.com/v1".to_string())
-            }
+            LlmProvider::Anthropic => std::env::var("ANTHROPIC_API_BASE")
+                .unwrap_or_else(|_| "https://api.anthropic.com/v1".to_string()),
+            LlmProvider::OpenAi => std::env::var("OPENAI_API_BASE")
+                .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
         }
     }
 }
