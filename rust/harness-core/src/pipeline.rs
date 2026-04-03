@@ -486,15 +486,15 @@ async fn run_l1_check_inner(
     })
 }
 
-/// Default model for L2 semantic checks.
-const DEFAULT_SEMANTIC_MODEL: &str = "claude-sonnet-4-20250514";
-
-#[allow(clippy::too_many_arguments)]
-/// Run an L2 semantic check via Claude Code CLI (`claude --print`).
+/// Run an L2 semantic check via direct LLM API call (reqwest).
 ///
-/// Uses the same invocation method as the BUILD phase for consistency.
+/// Uses the `llm` module for lightweight, direct API calls to Anthropic or
+/// OpenAI-compatible endpoints. This is intentionally NOT a Claude Code session
+/// — semantic checks ARE the governance layer and must not trigger L2 hooks.
+///
 /// `base_commit` — if set, diffs `base..HEAD` to review only pipeline changes.
 /// `model` — override the default semantic model.
+#[allow(clippy::too_many_arguments)]
 async fn run_semantic_check_ui(
     name: &str,
     check_prompt: &str,
@@ -505,6 +505,8 @@ async fn run_semantic_check_ui(
     base_commit: Option<&str>,
     model: Option<&str>,
 ) -> Result<CheckResult> {
+    use crate::llm::{default_model_for_provider, LlmClient, LlmRequest};
+
     let start = Instant::now();
     let pb = ui.check_spinner(name);
 
@@ -533,6 +535,23 @@ async fn run_semantic_check_ui(
         });
     }
 
+    // Build the LLM client from environment
+    let llm = match LlmClient::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            // No credentials — skip gracefully
+            ui.check_done(pb, name, true, start.elapsed().as_millis() as u64);
+            return Ok(CheckResult {
+                name: name.to_string(),
+                passed: true,
+                exit_code: 0,
+                stdout: format!("Skipped: {e}"),
+                stderr: String::new(),
+                duration_ms: start.elapsed().as_millis() as u64,
+            });
+        }
+    };
+
     let task_info = task_prompt
         .map(|p| format!("Task prompt: {p}\n"))
         .unwrap_or_default();
@@ -544,44 +563,36 @@ async fn run_semantic_check_ui(
         diff.to_string()
     };
 
-    let prompt = format!(
-        "You are a QA reviewer. Review the diff below against the given criteria.\n\
+    let system = "You are a QA reviewer. Review the diff below against the given criteria.\n\
          Return ONLY a JSON object with exactly two fields:\n\
          \"passed\" (boolean) and \"findings\" (array of strings).\n\
-         If everything looks good, return {{\"passed\": true, \"findings\": []}}.\n\
-         Only return the JSON, nothing else.\n\n\
-         Context:\n{task_info}Check: {name}\nCriteria: {check_prompt}\n\nDiff:\n```\n{diff_str}\n```"
+         If everything looks good, return {\"passed\": true, \"findings\": []}.\n\
+         Only return the JSON, nothing else.".to_string();
+
+    let user_message = format!(
+        "Context:\n{task_info}Check: {name}\nCriteria: {check_prompt}\n\nDiff:\n```\n{diff_str}\n```"
     );
 
-    // Invoke claude --print (same method as BUILD phase)
-    let model_str = model.unwrap_or(DEFAULT_SEMANTIC_MODEL).to_string();
-    let max_tokens_str = "1024".to_string();
-    let args = vec![
-        "--print",
-        "-p",
-        &prompt,
-        "--model",
-        &model_str,
-        "--output-format",
-        "text",
-        "--max-tokens",
-        &max_tokens_str,
-    ];
+    let resolved_model = model
+        .map(String::from)
+        .unwrap_or_else(|| default_model_for_provider(llm.provider()).to_string());
 
-    let output = Command::new("claude")
-        .args(&args)
-        .current_dir(cwd)
-        .output()
-        .await;
+    let req = LlmRequest {
+        system,
+        user_message,
+        model: resolved_model,
+        max_tokens: 1024,
+    };
 
+    let response = llm.complete(&req).await;
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    match output {
-        Ok(o) if o.status.success() => {
-            let text = String::from_utf8_lossy(&o.stdout);
+    match response {
+        Ok(resp) => {
+            let text = &resp.text;
 
-            // Extract JSON from response (Claude may wrap it in markdown fences)
-            let json_str = extract_json_from_text(&text);
+            // Extract JSON from response (LLM may wrap it in markdown fences)
+            let json_str = extract_json_from_text(text);
 
             // Parse the JSON verdict
             let verdict: serde_json::Value = serde_json::from_str(json_str)
@@ -638,21 +649,8 @@ async fn run_semantic_check_ui(
                 duration_ms,
             })
         }
-        Ok(o) => {
-            // claude command failed — skip rather than block pipeline
-            let stderr = String::from_utf8_lossy(&o.stderr);
-            ui.check_done(pb, name, true, duration_ms);
-            Ok(CheckResult {
-                name: name.to_string(),
-                passed: true,
-                exit_code: o.status.code().unwrap_or(-1),
-                stdout: format!("Skipped: claude exited with {}", o.status),
-                stderr: stderr.into_owned(),
-                duration_ms,
-            })
-        }
         Err(e) => {
-            // claude not found — skip gracefully
+            // API error — skip rather than block pipeline
             ui.check_done(pb, name, true, duration_ms);
             Ok(CheckResult {
                 name: name.to_string(),
