@@ -67,12 +67,3 @@ jobs:
 
       - name: Build UI
         run: cd packages/ui && pnpm run build
-
-  publish-dry-run:
-    name: Publish (dry run)
-    if: github.event_name == 'pull_request'
-    needs: [rust]
-    uses: ./.github/workflows/release.yml
-    with:
-      dry_run: true
-    secrets: inherit

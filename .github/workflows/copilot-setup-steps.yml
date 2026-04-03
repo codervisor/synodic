@@ -1,8 +1,6 @@
 name: "Copilot Setup Steps"
 
-on:
-  repository_dispatch:
-    types: [copilot-setup]
+on: pull_request
 
 jobs:
   copilot-setup-steps:
