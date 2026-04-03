@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pipeline_runs_with_no_db_returns_empty() {
+    async fn pipeline_runs_with_no_runs_recorded_returns_empty() {
         let store = test_store().await;
         let runs = store.get_pipeline_runs(None, Some(10)).await.unwrap();
         assert!(runs.is_empty());
