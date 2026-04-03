@@ -2,6 +2,9 @@ name: "Copilot Setup Steps"
 
 on: pull_request
 
+permissions:
+  contents: read
+
 jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
