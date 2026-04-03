@@ -1,6 +1,7 @@
 ---
-status: draft
+status: complete
 created: 2026-03-30
+completed: 2026-04-03
 priority: medium
 tags:
 - governance
@@ -16,7 +17,7 @@ updated_at: 2026-03-30T00:00:00Z
 
 # Adversarial Probing
 
-> **Status**: draft · **Priority**: medium · **Created**: 2026-03-30
+> **Status**: complete · **Priority**: medium · **Created**: 2026-03-30
 
 ## Overview
 

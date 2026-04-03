@@ -8,11 +8,14 @@ use clap::Parser;
 #[command(
     name = "synodic",
     version,
-    about = "The tool that watches the AI agents.\n\nSetup:   synodic init\nMonitor: synodic status\nManage:  synodic rules <list|show|promote|probe|optimize|...>"
+    about = "The tool that watches the AI agents.\n\nSetup:   synodic init\nRun:     synodic run --prompt \"...\"\nMonitor: synodic status\nManage:  synodic rules <list|show|promote|probe|optimize|...>"
 )]
 enum Cli {
     /// Setup governance + orchestration (hooks, pipeline, config)
     Init(cmd::init::InitCmd),
+
+    /// Run the Build→Inspect→PR pipeline
+    Run(cmd::run::RunCmd),
 
     /// Show governance health (safety, friction, coverage scores)
     Status(cmd::status::StatusCmd),
@@ -52,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli {
         Cli::Init(cmd) => cmd.run(),
+        Cli::Run(cmd) => cmd.run().await,
         Cli::Status(cmd) => cmd.run().await,
         Cli::Rules(cmd) => cmd.run().await,
         Cli::Intercept(cmd) => cmd.run(),

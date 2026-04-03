@@ -1,6 +1,7 @@
 ---
-status: draft
+status: complete
 created: 2026-03-30
+completed: 2026-04-03
 priority: high
 tags:
 - governance
@@ -16,7 +17,7 @@ updated_at: 2026-03-30T00:00:00Z
 
 # Governance Scoring Engine
 
-> **Status**: draft · **Priority**: high · **Created**: 2026-03-30
+> **Status**: complete · **Priority**: high · **Created**: 2026-03-30
 
 ## Overview
 

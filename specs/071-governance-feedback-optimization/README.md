@@ -1,5 +1,5 @@
 ---
-status: split
+status: planned
 created: 2026-03-30
 priority: critical
 tags:

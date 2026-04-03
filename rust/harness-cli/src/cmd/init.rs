@@ -3,6 +3,8 @@ use clap::Args;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use harness_core::pipeline::{self, Stage};
+
 use crate::cmd::orchestrate;
 use crate::util;
 
@@ -36,37 +38,59 @@ impl InitCmd {
             None => util::find_repo_root()?,
         };
 
-        // --- L1: Git hooks ---
-        if !self.no_git_hooks {
-            setup_git_hooks(&root)?;
-        }
-
         // --- L2: Claude Code hooks ---
         if !self.no_claude_hooks {
             setup_claude_hooks(&root)?;
         }
 
-        // --- Orchestration: pipeline workflow + config ---
+        // --- Orchestration: pipeline.yml + GHA workflow ---
         if !self.no_orchestration {
             let lang = match &self.lang {
                 Some(name) => orchestrate::parse_lang(name)?,
                 None => orchestrate::detect_language(&root),
             };
+            // Generate pipeline.yml (reuse existing logic)
             orchestrate::setup_orchestration(&root, &lang, 3)?;
+
+            // Generate simplified GHA workflow (replaces the 340-line bash version)
+            write_simplified_workflow(&root)?;
+        }
+
+        // --- L1: Git hooks derived from pipeline.yml ---
+        if !self.no_git_hooks {
+            setup_git_hooks(&root)?;
         }
 
         Ok(())
     }
 }
 
-/// Configure git to use .githooks/ for L1 governance (fmt, clippy, test).
+/// Generate git hooks from pipeline.yml stage fields and configure hooksPath.
+///
+/// If `.harness/pipeline.yml` exists, generates `.githooks/pre-commit` and
+/// `.githooks/pre-push` from checks with `stage: commit` and `stage: push`.
+/// Falls back to just setting hooksPath if pipeline.yml doesn't exist.
 fn setup_git_hooks(root: &Path) -> Result<()> {
     let githooks_dir = root.join(".githooks");
-    if !githooks_dir.exists() {
-        eprintln!("No .githooks/ directory found, skipping git hooks setup");
-        return Ok(());
+    std::fs::create_dir_all(&githooks_dir)?;
+
+    // Try to derive hooks from pipeline.yml
+    let config_path = root.join(".harness/pipeline.yml");
+    if let Ok(config) = pipeline::load_config(&config_path) {
+        for (stage, filename) in [(Stage::Commit, "pre-commit"), (Stage::Push, "pre-push")] {
+            if let Some(script) = pipeline::generate_hook_script(&config.checks, stage) {
+                let hook_path = githooks_dir.join(filename);
+                std::fs::write(&hook_path, &script)?;
+                #[cfg(unix)]
+                set_executable(&hook_path)?;
+                eprintln!("L1: generated .githooks/{filename} from pipeline.yml");
+            }
+        }
+    } else {
+        eprintln!("L1: no .harness/pipeline.yml, skipping hook generation");
     }
 
+    // Set hooksPath
     let status = Command::new("git")
         .args(["config", "core.hooksPath", ".githooks"])
         .current_dir(root)
@@ -78,6 +102,20 @@ fn setup_git_hooks(root: &Path) -> Result<()> {
     } else {
         eprintln!("Warning: failed to set git core.hooksPath");
     }
+
+    Ok(())
+}
+
+/// Write the simplified GHA workflow that delegates to `synodic run`.
+fn write_simplified_workflow(root: &Path) -> Result<()> {
+    let workflows_dir = root.join(".github/workflows");
+    std::fs::create_dir_all(&workflows_dir)?;
+
+    let path = workflows_dir.join("synodic-pipeline.yml");
+    // Overwrite the old 340-line version with the simplified one
+    let workflow = pipeline::generate_workflow();
+    std::fs::write(&path, workflow)?;
+    eprintln!("Orchestration: wrote simplified {}", path.display());
 
     Ok(())
 }

@@ -1,5 +1,7 @@
 pub mod clustering;
 pub mod intercept;
+pub mod pipeline;
 pub mod probing;
 pub mod scoring;
 pub mod storage;
+pub mod ui;

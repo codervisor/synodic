@@ -19,3 +19,6 @@ Thumbs.db
 
 # Rust
 rust/target/
+
+# Synodic pipeline worktrees
+.synodic/
