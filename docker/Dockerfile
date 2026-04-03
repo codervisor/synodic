@@ -1,5 +1,5 @@
 # Stage 1: Build Rust binaries
-FROM rust:1.85-bookworm AS rust-builder
+FROM rust:1.88-bookworm AS rust-builder
 WORKDIR /build
 COPY rust/ rust/
 RUN cd rust && cargo build --release --features harness-core/postgres
