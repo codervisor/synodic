@@ -32,11 +32,7 @@ impl OptimizeCmd {
     }
 }
 
-pub async fn run_optimize(
-    store: &dyn storage::Storage,
-    dry_run: bool,
-    days: i64,
-) -> Result<()> {
+pub async fn run_optimize(store: &dyn storage::Storage, dry_run: bool, days: i64) -> Result<()> {
     let since = chrono::Utc::now() - chrono::Duration::days(days);
 
     println!("Scanning feedback events (last {} days)...\n", days);
@@ -138,10 +134,7 @@ pub async fn run_optimize(
                     store
                         .create_rule(CreateRule {
                             id: rule_id.clone(),
-                            description: format!(
-                                "Auto-generated candidate for {} threats",
-                                cat.id
-                            ),
+                            description: format!("Auto-generated candidate for {} threats", cat.id),
                             category_id: cat.id.clone(),
                             tools: vec!["Bash".to_string()],
                             condition_type: "command".to_string(),

@@ -99,9 +99,7 @@ impl RulesCmd {
                 rule,
                 strategy,
                 auto_apply,
-            } => {
-                probe::run_probes(&*store, rule.as_deref(), strategy.as_deref(), auto_apply).await
-            }
+            } => probe::run_probes(&*store, rule.as_deref(), strategy.as_deref(), auto_apply).await,
 
             // Optimize
             RulesAction::Optimize { dry_run, days } => {

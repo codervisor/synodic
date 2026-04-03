@@ -104,12 +104,7 @@ pub async fn run_probes(
                     let expanded = expand_pattern(&rule.condition_value, &variant.input);
                     let backtest = backtest_expansion(&expanded, &rule.condition_type);
 
-                    proposals.push((
-                        rule.id.clone(),
-                        variant.input.clone(),
-                        expanded,
-                        backtest,
-                    ));
+                    proposals.push((rule.id.clone(), variant.input.clone(), expanded, backtest));
                 } else {
                     println!("    caught: {}", variant.input);
                 }
