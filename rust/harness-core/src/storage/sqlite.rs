@@ -70,7 +70,15 @@ impl Storage for SqliteStorage {
         for statement in telemetry.split(';') {
             let stmt = statement.trim();
             if !stmt.is_empty() {
-                sqlx::query(stmt).execute(&self.pool).await.ok();
+                sqlx::query(stmt)
+                    .execute(&self.pool)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "pipeline telemetry migration statement failed: {}",
+                            &stmt[..stmt.len().min(80)]
+                        )
+                    })?;
             }
         }
 

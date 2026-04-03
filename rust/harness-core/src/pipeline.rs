@@ -253,12 +253,17 @@ pub async fn run_checks(checks: &[Check], cwd: &Path) -> Result<Vec<CheckResult>
 ///
 /// Runs L1 (run) checks first. If all L1 pass and `skip_semantic` is false,
 /// runs L2 (semantic) checks. L1 checks with `fix` are auto-fixed on failure.
+///
+/// `base_commit` is the commit SHA at pipeline start — semantic checks diff
+/// `base_commit..HEAD` to review only the pipeline's changes.
 pub async fn run_checks_ui(
     checks: &[Check],
     cwd: &Path,
     ui: &crate::ui::PipelineUi,
     task_prompt: Option<&str>,
     skip_semantic: bool,
+    base_commit: Option<&str>,
+    semantic_model: Option<&str>,
 ) -> Result<Vec<CheckResult>> {
     let l1_checks: Vec<_> = checks.iter().filter(|c| !c.is_semantic()).collect();
     let l2_checks: Vec<_> = checks.iter().filter(|c| c.is_semantic()).collect();
@@ -282,8 +287,17 @@ pub async fn run_checks_ui(
                 severity,
             } = check
             {
-                let result =
-                    run_semantic_check_ui(name, prompt, severity, cwd, task_prompt, ui).await?;
+                let result = run_semantic_check_ui(
+                    name,
+                    prompt,
+                    severity,
+                    cwd,
+                    task_prompt,
+                    ui,
+                    base_commit,
+                    semantic_model,
+                )
+                .await?;
                 results.push(result);
             }
         }
@@ -319,17 +333,41 @@ async fn run_l1_check_ui(
 
             if let Ok(output) = fix_status {
                 if output.status.success() {
-                    // Stage and commit the fix
-                    let _ = Command::new("git")
+                    // Stage the fix
+                    let add_status = Command::new("git")
                         .args(["add", "-A"])
                         .current_dir(cwd)
                         .status()
-                        .await;
-                    let _ = Command::new("git")
-                        .args(["commit", "-m", &format!("fix: auto-fix {name}")])
+                        .await
+                        .context("failed to run `git add -A` after auto-fix")?;
+                    if !add_status.success() {
+                        return Err(anyhow::anyhow!(
+                            "`git add -A` failed after auto-fix for check {name}"
+                        ));
+                    }
+
+                    // Only commit if there are staged changes
+                    let staged = Command::new("git")
+                        .args(["diff", "--cached", "--quiet"])
                         .current_dir(cwd)
                         .status()
-                        .await;
+                        .await
+                        .context("failed to check staged auto-fix changes")?;
+
+                    if staged.code() == Some(1) {
+                        // There are staged changes — commit them
+                        let commit_status = Command::new("git")
+                            .args(["commit", "-m", &format!("fix: auto-fix {name}")])
+                            .current_dir(cwd)
+                            .status()
+                            .await
+                            .context("failed to run `git commit` after auto-fix")?;
+                        if !commit_status.success() {
+                            return Err(anyhow::anyhow!(
+                                "`git commit` failed after auto-fix for check {name}"
+                            ));
+                        }
+                    }
 
                     // Re-run the check
                     let retry = run_l1_check_inner(&name, &cmd, cwd, ui).await?;
@@ -448,7 +486,17 @@ async fn run_l1_check_inner(
     })
 }
 
+/// Default model for L2 semantic checks.
+const DEFAULT_SEMANTIC_MODEL: &str = "claude-sonnet-4-20250514";
+
+/// Request timeout for L2 semantic API calls (2 minutes).
+const SEMANTIC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+#[allow(clippy::too_many_arguments)]
 /// Run an L2 semantic check via Anthropic API.
+///
+/// `base_commit` — if set, diffs `base..HEAD` to review only pipeline changes.
+/// `model` — override the default semantic model.
 async fn run_semantic_check_ui(
     name: &str,
     check_prompt: &str,
@@ -456,13 +504,19 @@ async fn run_semantic_check_ui(
     cwd: &Path,
     task_prompt: Option<&str>,
     ui: &crate::ui::PipelineUi,
+    base_commit: Option<&str>,
+    model: Option<&str>,
 ) -> Result<CheckResult> {
     let start = Instant::now();
     let pb = ui.check_spinner(name);
 
-    // Get the diff to review
+    // Get the diff to review — use base_commit..HEAD if available
+    let diff_args = match base_commit {
+        Some(base) => vec!["diff", base, "HEAD"],
+        None => vec!["diff", "HEAD~1"],
+    };
     let diff_output = Command::new("git")
-        .args(["diff", "HEAD~1"])
+        .args(&diff_args)
         .current_dir(cwd)
         .output()
         .await
@@ -517,14 +571,19 @@ async fn run_semantic_check_ui(
         user_msg
     };
 
+    let api_model = model.unwrap_or(DEFAULT_SEMANTIC_MODEL);
+
     let body = serde_json::json!({
-        "model": "claude-sonnet-4-20250514",
+        "model": api_model,
         "max_tokens": 1024,
         "system": system,
         "messages": [{"role": "user", "content": user_msg}]
     });
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(SEMANTIC_TIMEOUT)
+        .build()
+        .unwrap_or_default();
     let response = client
         .post("https://api.anthropic.com/v1/messages")
         .header("x-api-key", &api_key)
@@ -566,9 +625,10 @@ async fn run_semantic_check_ui(
                 .unwrap_or_default();
 
             // severity: warn findings don't block
-            let passed = match severity {
-                Severity::Block => passed_raw,
-                Severity::Warn => true,
+            let passed = if *severity == Severity::Warn {
+                true
+            } else {
+                passed_raw
             };
 
             let stdout = if findings.is_empty() {
@@ -587,8 +647,11 @@ async fn run_semantic_check_ui(
 
             ui.check_done(pb, name, passed, duration_ms);
 
-            // Show findings in UI
-            if !findings.is_empty() && !passed {
+            // severity: warn findings don't block but are still shown
+            let is_warn = *severity == Severity::Warn;
+
+            // Show findings in UI — for both block failures AND warn with findings
+            if !findings.is_empty() && (!passed || is_warn) {
                 for finding in &findings {
                     ui.check_line(&ProgressBar::hidden(), &format!("    {finding}"));
                 }
@@ -804,7 +867,29 @@ pub async fn run_pipeline(
         (run_cfg.project_dir.clone(), None, None)
     };
 
+    let pipeline_start = Instant::now();
     let outcome = run_pipeline_loop(config, run_cfg, &work_dir, branch.as_deref(), ui, store).await;
+
+    // Record error outcomes in telemetry
+    if let Ok(RunOutcome::Error(_)) = &outcome {
+        if let Some(s) = store {
+            let run_record = crate::storage::PipelineRun {
+                id: uuid::Uuid::new_v4().to_string(),
+                prompt: run_cfg.prompt.clone(),
+                branch: branch.as_ref().map(|b| b.to_string()),
+                outcome: "error".to_string(),
+                attempts: 0,
+                model: run_cfg.model.clone(),
+                build_duration_ms: None,
+                build_cost_usd: None,
+                inspect_duration_ms: None,
+                total_duration_ms: pipeline_start.elapsed().as_millis() as i64,
+                project_id: None,
+                created_at: chrono::Utc::now(),
+            };
+            let _ = s.record_pipeline_run(run_record).await;
+        }
+    }
 
     // --- CLEANUP: remove worktree ---
     if let Some(wt) = &worktree_path {
@@ -836,6 +921,21 @@ async fn run_pipeline_loop(
     let mut last_failures: Vec<CheckResult> = Vec::new();
     let mut build_duration_ms: Option<i64> = None;
     let mut build_cost: Option<f64> = None;
+
+    // Capture base commit for semantic diff (before BUILD creates commits)
+    let base_commit = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .await
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        });
 
     let max_attempts = if run_cfg.dry_run {
         1
@@ -871,6 +971,8 @@ async fn run_pipeline_loop(
             ui,
             Some(&run_cfg.prompt),
             run_cfg.skip_semantic,
+            base_commit.as_deref(),
+            run_cfg.model.as_deref(),
         )
         .await?;
         let inspect_ms = inspect_start.elapsed().as_millis() as i64;
