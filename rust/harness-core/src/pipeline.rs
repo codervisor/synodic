@@ -489,12 +489,10 @@ async fn run_l1_check_inner(
 /// Default model for L2 semantic checks.
 const DEFAULT_SEMANTIC_MODEL: &str = "claude-sonnet-4-20250514";
 
-/// Request timeout for L2 semantic API calls (2 minutes).
-const SEMANTIC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
-
 #[allow(clippy::too_many_arguments)]
-/// Run an L2 semantic check via Anthropic API.
+/// Run an L2 semantic check via Claude Code CLI (`claude --print`).
 ///
+/// Uses the same invocation method as the BUILD phase for consistency.
 /// `base_commit` — if set, diffs `base..HEAD` to review only pipeline changes.
 /// `model` — override the default semantic model.
 async fn run_semantic_check_ui(
@@ -535,78 +533,58 @@ async fn run_semantic_check_ui(
         });
     }
 
-    // Get API key
-    let api_key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
-    if api_key.is_empty() {
-        let duration_ms = start.elapsed().as_millis() as u64;
-        ui.check_done(pb, name, true, duration_ms);
-        return Ok(CheckResult {
-            name: name.to_string(),
-            passed: true,
-            exit_code: 0,
-            stdout: "Skipped: ANTHROPIC_API_KEY not set".to_string(),
-            stderr: String::new(),
-            duration_ms,
-        });
-    }
-
     let task_info = task_prompt
         .map(|p| format!("Task prompt: {p}\n"))
         .unwrap_or_default();
 
-    let system = "You are a QA reviewer. Review the diff below against the given criteria. \
-                  Return a JSON object with exactly two fields: \
-                  \"passed\" (boolean) and \"findings\" (array of strings). \
-                  If everything looks good, return {\"passed\": true, \"findings\": []}. \
-                  Only return the JSON, nothing else.";
-
-    let user_msg = format!(
-        "Context:\n{task_info}Check: {name}\nCriteria: {check_prompt}\n\nDiff:\n```\n{diff}\n```"
-    );
-
     // Truncate diff to avoid token limits
-    let user_msg = if user_msg.len() > 100_000 {
-        format!("{}...(truncated)", &user_msg[..100_000])
+    let diff_str = if diff.len() > 80_000 {
+        format!("{}...\n(truncated)", &diff[..80_000])
     } else {
-        user_msg
+        diff.to_string()
     };
 
-    let api_model = model.unwrap_or(DEFAULT_SEMANTIC_MODEL);
+    let prompt = format!(
+        "You are a QA reviewer. Review the diff below against the given criteria.\n\
+         Return ONLY a JSON object with exactly two fields:\n\
+         \"passed\" (boolean) and \"findings\" (array of strings).\n\
+         If everything looks good, return {{\"passed\": true, \"findings\": []}}.\n\
+         Only return the JSON, nothing else.\n\n\
+         Context:\n{task_info}Check: {name}\nCriteria: {check_prompt}\n\nDiff:\n```\n{diff_str}\n```"
+    );
 
-    let body = serde_json::json!({
-        "model": api_model,
-        "max_tokens": 1024,
-        "system": system,
-        "messages": [{"role": "user", "content": user_msg}]
-    });
+    // Invoke claude --print (same method as BUILD phase)
+    let model_str = model.unwrap_or(DEFAULT_SEMANTIC_MODEL).to_string();
+    let max_tokens_str = "1024".to_string();
+    let args = vec![
+        "--print",
+        "-p",
+        &prompt,
+        "--model",
+        &model_str,
+        "--output-format",
+        "text",
+        "--max-tokens",
+        &max_tokens_str,
+    ];
 
-    let client = reqwest::Client::builder()
-        .timeout(SEMANTIC_TIMEOUT)
-        .build()
-        .unwrap_or_default();
-    let response = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", &api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&body)
-        .send()
+    let output = Command::new("claude")
+        .args(&args)
+        .current_dir(cwd)
+        .output()
         .await;
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    match response {
-        Ok(resp) if resp.status().is_success() => {
-            let json: serde_json::Value = resp.json().await.unwrap_or_default();
+    match output {
+        Ok(o) if o.status.success() => {
+            let text = String::from_utf8_lossy(&o.stdout);
 
-            // Extract text from response content
-            let text = json
-                .pointer("/content/0/text")
-                .and_then(|t| t.as_str())
-                .unwrap_or("{}");
+            // Extract JSON from response (Claude may wrap it in markdown fences)
+            let json_str = extract_json_from_text(&text);
 
             // Parse the JSON verdict
-            let verdict: serde_json::Value = serde_json::from_str(text)
+            let verdict: serde_json::Value = serde_json::from_str(json_str)
                 .unwrap_or(serde_json::json!({"passed": true, "findings": []}));
 
             let passed_raw = verdict
@@ -625,11 +603,8 @@ async fn run_semantic_check_ui(
                 .unwrap_or_default();
 
             // severity: warn findings don't block
-            let passed = if *severity == Severity::Warn {
-                true
-            } else {
-                passed_raw
-            };
+            let is_warn = *severity == Severity::Warn;
+            let passed = if is_warn { true } else { passed_raw };
 
             let stdout = if findings.is_empty() {
                 "No issues found".to_string()
@@ -647,9 +622,6 @@ async fn run_semantic_check_ui(
 
             ui.check_done(pb, name, passed, duration_ms);
 
-            // severity: warn findings don't block but are still shown
-            let is_warn = *severity == Severity::Warn;
-
             // Show findings in UI — for both block failures AND warn with findings
             if !findings.is_empty() && (!passed || is_warn) {
                 for finding in &findings {
@@ -666,20 +638,21 @@ async fn run_semantic_check_ui(
                 duration_ms,
             })
         }
-        Ok(resp) => {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+        Ok(o) => {
+            // claude command failed — skip rather than block pipeline
+            let stderr = String::from_utf8_lossy(&o.stderr);
             ui.check_done(pb, name, true, duration_ms);
             Ok(CheckResult {
                 name: name.to_string(),
                 passed: true,
-                exit_code: 0,
-                stdout: format!("Skipped: API error {status}"),
-                stderr: body,
+                exit_code: o.status.code().unwrap_or(-1),
+                stdout: format!("Skipped: claude exited with {}", o.status),
+                stderr: stderr.into_owned(),
                 duration_ms,
             })
         }
         Err(e) => {
+            // claude not found — skip gracefully
             ui.check_done(pb, name, true, duration_ms);
             Ok(CheckResult {
                 name: name.to_string(),
@@ -691,6 +664,31 @@ async fn run_semantic_check_ui(
             })
         }
     }
+}
+
+/// Extract the first JSON object from text that may contain markdown fences.
+fn extract_json_from_text(text: &str) -> &str {
+    let trimmed = text.trim();
+    // Try to find JSON between code fences
+    if let Some(start) = trimmed.find("```json") {
+        let after = &trimmed[start + 7..];
+        if let Some(end) = after.find("```") {
+            return after[..end].trim();
+        }
+    }
+    if let Some(start) = trimmed.find("```") {
+        let after = &trimmed[start + 3..];
+        if let Some(end) = after.find("```") {
+            return after[..end].trim();
+        }
+    }
+    // Try to find raw JSON object
+    if let Some(start) = trimmed.find('{') {
+        if let Some(end) = trimmed.rfind('}') {
+            return &trimmed[start..=end];
+        }
+    }
+    trimmed
 }
 
 // ---------------------------------------------------------------------------
