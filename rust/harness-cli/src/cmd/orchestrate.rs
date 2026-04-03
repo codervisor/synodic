@@ -478,6 +478,19 @@ fn write_pipeline_config(root: &Path, profile: &LangProfile, max_rework: u32) ->
         return Ok(());
     }
 
+    let semantic_checks = r#"
+
+  # L2 semantic checks (require ANTHROPIC_API_KEY, skip with --no-semantic)
+  - name: security-review
+    type: semantic
+    prompt: "Review the diff for security vulnerabilities: hardcoded secrets, injection vectors, unsafe patterns, credential exposure. Flag anything that could be exploited."
+    severity: block
+
+  - name: goal-alignment
+    type: semantic
+    prompt: "Does the diff match the task? Flag scope creep (changes unrelated to the task), goal drift (implementation doesn't match intent), unrelated TODO/FIXME additions, and hallucinated API references."
+    severity: warn"#;
+
     let config = format!(
         r#"# Synodic pipeline configuration
 # Describes the quality gates for the Build→Inspect→PR loop.
@@ -488,7 +501,7 @@ fn write_pipeline_config(root: &Path, profile: &LangProfile, max_rework: u32) ->
 
 language: {lang}
 
-{checks}
+{checks}{semantic}
 
 pipeline:
   max_rework: {max_rework}
@@ -496,6 +509,7 @@ pipeline:
 "#,
         lang = profile.language,
         checks = profile.pipeline_checks,
+        semantic = semantic_checks,
         max_rework = max_rework,
     );
 

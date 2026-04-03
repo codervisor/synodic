@@ -3,6 +3,7 @@ use clap::Args;
 use std::path::PathBuf;
 
 use harness_core::pipeline::{self, RunConfig, RunOutcome};
+use harness_core::storage;
 use harness_core::ui::PipelineUi;
 
 use crate::util;
@@ -45,6 +46,10 @@ pub struct RunCmd {
     #[arg(long)]
     local: bool,
 
+    /// Skip L2 semantic checks (faster, no API cost)
+    #[arg(long)]
+    no_semantic: bool,
+
     /// Project directory (default: repo root)
     #[arg(long)]
     dir: Option<String>,
@@ -77,10 +82,15 @@ impl RunCmd {
             model,
             effort,
             project_dir: root,
+            skip_semantic: self.no_semantic,
         };
 
+        // Open storage for telemetry (best-effort — runs fine without DB)
+        let db_url = storage::pool::resolve_database_url();
+        let store = storage::pool::create_storage(&db_url).await.ok();
+
         let ui = PipelineUi::new();
-        let outcome = pipeline::run_pipeline(&config, &run_cfg, &ui).await?;
+        let outcome = pipeline::run_pipeline(&config, &run_cfg, &ui, store.as_deref()).await?;
 
         match &outcome {
             RunOutcome::Passed { pr_url, .. } => {

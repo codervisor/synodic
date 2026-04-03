@@ -174,6 +174,23 @@ pub struct GovernanceScores {
     pub created_at: DateTime<Utc>,
 }
 
+/// A pipeline run record for telemetry tracking.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineRun {
+    pub id: String,
+    pub prompt: String,
+    pub branch: Option<String>,
+    pub outcome: String,
+    pub attempts: i32,
+    pub model: Option<String>,
+    pub build_duration_ms: Option<i64>,
+    pub build_cost_usd: Option<f64>,
+    pub inspect_duration_ms: Option<i64>,
+    pub total_duration_ms: i64,
+    pub project_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 /// Result of an adversarial probe against a rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProbeResult {
@@ -241,6 +258,18 @@ pub trait Storage: Send + Sync {
         project_id: Option<&str>,
         since: DateTime<Utc>,
     ) -> Result<Vec<GovernanceScores>>;
+
+    // -- Pipeline runs -------------------------------------------------------
+
+    /// Record a pipeline run for telemetry.
+    async fn record_pipeline_run(&self, run: PipelineRun) -> Result<()>;
+
+    /// Get pipeline runs, optionally filtered by project.
+    async fn get_pipeline_runs(
+        &self,
+        project_id: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<PipelineRun>>;
 
     // -- Probe results ------------------------------------------------------
 

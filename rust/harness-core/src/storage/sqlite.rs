@@ -65,6 +65,15 @@ impl Storage for SqliteStorage {
             }
         }
 
+        // Run pipeline telemetry migration
+        let telemetry = include_str!("../../migrations/003_pipeline_runs.sql");
+        for statement in telemetry.split(';') {
+            let stmt = statement.trim();
+            if !stmt.is_empty() {
+                sqlx::query(stmt).execute(&self.pool).await.ok();
+            }
+        }
+
         // Run seed data
         let seed = include_str!("../../migrations/002_seed_data.sql");
         for statement in seed.split(';') {
@@ -370,6 +379,61 @@ impl Storage for SqliteStorage {
         rows.into_iter().map(|r| r.into_scores()).collect()
     }
 
+    // -- Pipeline runs -------------------------------------------------------
+
+    async fn record_pipeline_run(&self, run: PipelineRun) -> Result<()> {
+        let created_at = run.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+        sqlx::query(
+            "INSERT INTO pipeline_runs (id, prompt, branch, outcome, attempts, model, build_duration_ms, build_cost_usd, inspect_duration_ms, total_duration_ms, project_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&run.id)
+        .bind(&run.prompt)
+        .bind(&run.branch)
+        .bind(&run.outcome)
+        .bind(run.attempts)
+        .bind(&run.model)
+        .bind(run.build_duration_ms)
+        .bind(run.build_cost_usd)
+        .bind(run.inspect_duration_ms)
+        .bind(run.total_duration_ms)
+        .bind(&run.project_id)
+        .bind(&created_at)
+        .execute(&self.pool)
+        .await
+        .context("inserting pipeline run")?;
+
+        Ok(())
+    }
+
+    async fn get_pipeline_runs(
+        &self,
+        project_id: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<PipelineRun>> {
+        let limit_val = limit.unwrap_or(50);
+
+        let rows = if let Some(pid) = project_id {
+            sqlx::query_as::<_, PipelineRunRow>(
+                "SELECT * FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC LIMIT ?",
+            )
+            .bind(pid)
+            .bind(limit_val)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, PipelineRunRow>(
+                "SELECT * FROM pipeline_runs ORDER BY created_at DESC LIMIT ?",
+            )
+            .bind(limit_val)
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        rows.into_iter().map(|r| r.into_pipeline_run()).collect()
+    }
+
     // -- Probe results ------------------------------------------------------
 
     async fn record_probe(&self, result: ProbeResult) -> Result<()> {
@@ -583,6 +647,41 @@ impl ProbeRow {
             proposed_expansion: self.proposed_expansion,
             expansion_precision_drop: self.expansion_precision_drop,
             expansion_approved: self.expansion_approved,
+            created_at: parse_datetime(&self.created_at)?,
+        })
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PipelineRunRow {
+    id: String,
+    prompt: String,
+    branch: Option<String>,
+    outcome: String,
+    attempts: i32,
+    model: Option<String>,
+    build_duration_ms: Option<i64>,
+    build_cost_usd: Option<f64>,
+    inspect_duration_ms: Option<i64>,
+    total_duration_ms: i64,
+    project_id: Option<String>,
+    created_at: String,
+}
+
+impl PipelineRunRow {
+    fn into_pipeline_run(self) -> Result<PipelineRun> {
+        Ok(PipelineRun {
+            id: self.id,
+            prompt: self.prompt,
+            branch: self.branch,
+            outcome: self.outcome,
+            attempts: self.attempts,
+            model: self.model,
+            build_duration_ms: self.build_duration_ms,
+            build_cost_usd: self.build_cost_usd,
+            inspect_duration_ms: self.inspect_duration_ms,
+            total_duration_ms: self.total_duration_ms,
+            project_id: self.project_id,
             created_at: parse_datetime(&self.created_at)?,
         })
     }

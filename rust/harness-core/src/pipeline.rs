@@ -7,8 +7,11 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
+use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
+
+use crate::storage::Storage;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,19 +29,108 @@ pub enum Stage {
     Push,
 }
 
-/// A single quality check (format, lint, test, etc.).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Check {
-    /// Human-readable name (e.g., "format", "lint", "test").
-    pub name: String,
-    /// Shell command to run the check.
-    pub run: String,
-    /// Optional shell command to auto-fix failures.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fix: Option<String>,
-    /// Optional git-hook stage.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stage: Option<Stage>,
+/// Severity for semantic (L2) checks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    /// Failure triggers rework (same as L1 check failure).
+    Block,
+    /// Findings reported in UI but don't block the pipeline.
+    Warn,
+}
+
+/// Default severity for semantic checks.
+pub fn default_severity() -> Severity {
+    Severity::Block
+}
+
+/// A quality check — either L1 deterministic (run) or L2 semantic (LLM review).
+///
+/// Backward compatible: checks without a `type` field default to L1 run checks.
+#[derive(Debug, Clone, Serialize)]
+pub enum Check {
+    /// L1 deterministic check (default when `type` is omitted).
+    Run {
+        name: String,
+        run: String,
+        fix: Option<String>,
+        stage: Option<Stage>,
+    },
+    /// L2 semantic review via LLM.
+    Semantic {
+        name: String,
+        prompt: String,
+        severity: Severity,
+    },
+}
+
+/// Raw helper struct for deserializing checks with backward compatibility.
+#[derive(Deserialize)]
+struct CheckRaw {
+    name: String,
+    #[serde(rename = "type")]
+    check_type: Option<String>,
+    // L1 fields
+    run: Option<String>,
+    fix: Option<String>,
+    stage: Option<Stage>,
+    // L2 fields
+    prompt: Option<String>,
+    severity: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for Check {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = CheckRaw::deserialize(deserializer)?;
+
+        let check_type = raw.check_type.as_deref().unwrap_or("run");
+
+        match check_type {
+            "semantic" => {
+                let prompt = raw
+                    .prompt
+                    .ok_or_else(|| serde::de::Error::missing_field("prompt"))?;
+                let severity = match raw.severity.as_deref() {
+                    Some("warn") => Severity::Warn,
+                    _ => Severity::Block,
+                };
+                Ok(Check::Semantic {
+                    name: raw.name,
+                    prompt,
+                    severity,
+                })
+            }
+            _ => {
+                let run = raw
+                    .run
+                    .ok_or_else(|| serde::de::Error::missing_field("run"))?;
+                Ok(Check::Run {
+                    name: raw.name,
+                    run,
+                    fix: raw.fix,
+                    stage: raw.stage,
+                })
+            }
+        }
+    }
+}
+
+impl Check {
+    /// Get the check name regardless of variant.
+    pub fn name(&self) -> &str {
+        match self {
+            Check::Run { name, .. } => name,
+            Check::Semantic { name, .. } => name,
+        }
+    }
+
+    /// Whether this is a semantic (L2) check.
+    pub fn is_semantic(&self) -> bool {
+        matches!(self, Check::Semantic { .. })
+    }
 }
 
 /// Pipeline execution settings.
@@ -119,28 +211,33 @@ pub fn load_config(path: &Path) -> Result<PipelineConfig> {
 // Check runner
 // ---------------------------------------------------------------------------
 
-/// Execute checks as subprocesses and collect results (output captured, silent).
+/// Execute L1 (run) checks as subprocesses and collect results (output captured, silent).
 ///
 /// Runs each check sequentially in the given working directory.
-/// Does not short-circuit on failure — all checks run regardless.
+/// Skips semantic checks. Does not short-circuit on failure — all checks run regardless.
 pub async fn run_checks(checks: &[Check], cwd: &Path) -> Result<Vec<CheckResult>> {
     let mut results = Vec::with_capacity(checks.len());
 
     for check in checks {
+        let (name, cmd) = match check {
+            Check::Run { name, run, .. } => (name.clone(), run.clone()),
+            Check::Semantic { .. } => continue,
+        };
+
         let start = Instant::now();
 
         let output = Command::new("sh")
             .arg("-c")
-            .arg(&check.run)
+            .arg(&cmd)
             .current_dir(cwd)
             .output()
             .await
-            .with_context(|| format!("failed to execute check '{}'", check.name))?;
+            .with_context(|| format!("failed to execute check '{name}'"))?;
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
         results.push(CheckResult {
-            name: check.name.clone(),
+            name,
             passed: output.status.success(),
             exit_code: output.status.code().unwrap_or(-1),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -152,131 +249,401 @@ pub async fn run_checks(checks: &[Check], cwd: &Path) -> Result<Vec<CheckResult>
     Ok(results)
 }
 
-/// Execute checks with styled UI output (spinners + streaming lines).
+/// Execute L1 checks with styled UI output (spinners + streaming lines).
+///
+/// Runs L1 (run) checks first. If all L1 pass and `skip_semantic` is false,
+/// runs L2 (semantic) checks. L1 checks with `fix` are auto-fixed on failure.
 pub async fn run_checks_ui(
     checks: &[Check],
     cwd: &Path,
     ui: &crate::ui::PipelineUi,
+    task_prompt: Option<&str>,
+    skip_semantic: bool,
 ) -> Result<Vec<CheckResult>> {
-    use tokio::io::{AsyncBufReadExt, BufReader};
+    let l1_checks: Vec<_> = checks.iter().filter(|c| !c.is_semantic()).collect();
+    let l2_checks: Vec<_> = checks.iter().filter(|c| c.is_semantic()).collect();
 
     let mut results = Vec::with_capacity(checks.len());
 
-    for check in checks {
-        let start = Instant::now();
-        let pb = ui.check_spinner(&check.name);
+    // Phase 1: L1 deterministic checks
+    for check in &l1_checks {
+        let result = run_l1_check_ui(check, cwd, ui).await?;
+        results.push(result);
+    }
 
-        let mut child = Command::new("sh")
-            .arg("-c")
-            .arg(&check.run)
-            .current_dir(cwd)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .with_context(|| format!("failed to execute check '{}'", check.name))?;
+    let l1_all_passed = results.iter().all(|r| r.passed);
 
-        let mut stdout_buf = Vec::new();
-        let mut stderr_buf = Vec::new();
+    // Phase 2: L2 semantic checks (only if L1 all passed and not skipped)
+    if l1_all_passed && !skip_semantic && !l2_checks.is_empty() {
+        for check in &l2_checks {
+            if let Check::Semantic {
+                name,
+                prompt,
+                severity,
+            } = check
+            {
+                let result =
+                    run_semantic_check_ui(name, prompt, severity, cwd, task_prompt, ui).await?;
+                results.push(result);
+            }
+        }
+    }
 
-        // Read stdout and stderr concurrently (prevents pipe-buffer deadlock)
-        let stdout = child.stdout.take().map(BufReader::new);
-        let stderr = child.stderr.take().map(BufReader::new);
+    Ok(results)
+}
 
-        let mut stdout_lines = stdout.map(|r| r.lines());
-        let mut stderr_lines = stderr.map(|r| r.lines());
-        let mut stdout_done = stdout_lines.is_none();
-        let mut stderr_done = stderr_lines.is_none();
+/// Run a single L1 check with UI. If it fails and has a `fix` command, auto-fix and retry.
+async fn run_l1_check_ui(
+    check: &Check,
+    cwd: &Path,
+    ui: &crate::ui::PipelineUi,
+) -> Result<CheckResult> {
+    let (name, cmd, fix) = match check {
+        Check::Run { name, run, fix, .. } => (name.clone(), run.clone(), fix.clone()),
+        Check::Semantic { .. } => unreachable!(),
+    };
 
-        // Show first N and last N lines, suppress the middle
-        const HEAD_LINES: usize = 10;
-        const TAIL_LINES: usize = 10;
-        let mut displayed = 0usize;
-        let mut suppressed = 0usize;
-        let mut tail_buf: Vec<String> = Vec::new();
+    let result = run_l1_check_inner(&name, &cmd, cwd, ui).await?;
 
-        while !stdout_done || !stderr_done {
-            tokio::select! {
-                line = async { stdout_lines.as_mut().unwrap().next_line().await },
-                    if !stdout_done => {
-                    match line? {
-                        Some(l) => {
-                            if displayed < HEAD_LINES {
-                                ui.check_line(&pb, &l);
-                                displayed += 1;
-                            } else {
-                                suppressed += 1;
-                                tail_buf.push(l.clone());
-                                if tail_buf.len() > TAIL_LINES {
-                                    tail_buf.remove(0);
-                                }
-                            }
-                            stdout_buf.push(l);
-                        }
-                        None => stdout_done = true,
-                    }
-                }
-                line = async { stderr_lines.as_mut().unwrap().next_line().await },
-                    if !stderr_done => {
-                    match line? {
-                        Some(l) => {
-                            if displayed < HEAD_LINES {
-                                ui.check_line(&pb, &l);
-                                displayed += 1;
-                            } else {
-                                suppressed += 1;
-                                tail_buf.push(l.clone());
-                                if tail_buf.len() > TAIL_LINES {
-                                    tail_buf.remove(0);
-                                }
-                            }
-                            stderr_buf.push(l);
-                        }
-                        None => stderr_done = true,
-                    }
+    // If failed and has fix command, try auto-fix
+    if !result.passed {
+        if let Some(fix_cmd) = &fix {
+            ui.check_line(&ui.check_spinner(""), &format!("auto-fixing {name}..."));
+            // Run fix command silently
+            let fix_status = Command::new("sh")
+                .arg("-c")
+                .arg(fix_cmd)
+                .current_dir(cwd)
+                .output()
+                .await;
+
+            if let Ok(output) = fix_status {
+                if output.status.success() {
+                    // Stage and commit the fix
+                    let _ = Command::new("git")
+                        .args(["add", "-A"])
+                        .current_dir(cwd)
+                        .status()
+                        .await;
+                    let _ = Command::new("git")
+                        .args(["commit", "-m", &format!("fix: auto-fix {name}")])
+                        .current_dir(cwd)
+                        .status()
+                        .await;
+
+                    // Re-run the check
+                    let retry = run_l1_check_inner(&name, &cmd, cwd, ui).await?;
+                    return Ok(retry);
                 }
             }
         }
+    }
 
-        // Show suppressed indicator + tail
-        if suppressed > 0 {
-            let hidden = suppressed.saturating_sub(tail_buf.len());
-            if hidden > 0 {
-                ui.check_line(&pb, &format!("...{hidden} lines hidden..."));
+    Ok(result)
+}
+
+/// Inner L1 check execution with streaming UI.
+async fn run_l1_check_inner(
+    name: &str,
+    cmd: &str,
+    cwd: &Path,
+    ui: &crate::ui::PipelineUi,
+) -> Result<CheckResult> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let start = Instant::now();
+    let pb = ui.check_spinner(name);
+
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .current_dir(cwd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to execute check '{name}'"))?;
+
+    let mut stdout_buf = Vec::new();
+    let mut stderr_buf = Vec::new();
+
+    let stdout = child.stdout.take().map(BufReader::new);
+    let stderr = child.stderr.take().map(BufReader::new);
+
+    let mut stdout_lines = stdout.map(|r| r.lines());
+    let mut stderr_lines = stderr.map(|r| r.lines());
+    let mut stdout_done = stdout_lines.is_none();
+    let mut stderr_done = stderr_lines.is_none();
+
+    const HEAD_LINES: usize = 10;
+    const TAIL_LINES: usize = 10;
+    let mut displayed = 0usize;
+    let mut suppressed = 0usize;
+    let mut tail_buf: Vec<String> = Vec::new();
+
+    while !stdout_done || !stderr_done {
+        tokio::select! {
+            line = async { stdout_lines.as_mut().unwrap().next_line().await },
+                if !stdout_done => {
+                match line? {
+                    Some(l) => {
+                        if displayed < HEAD_LINES {
+                            ui.check_line(&pb, &l);
+                            displayed += 1;
+                        } else {
+                            suppressed += 1;
+                            tail_buf.push(l.clone());
+                            if tail_buf.len() > TAIL_LINES {
+                                tail_buf.remove(0);
+                            }
+                        }
+                        stdout_buf.push(l);
+                    }
+                    None => stdout_done = true,
+                }
             }
-            for line in &tail_buf {
-                ui.check_line(&pb, line);
+            line = async { stderr_lines.as_mut().unwrap().next_line().await },
+                if !stderr_done => {
+                match line? {
+                    Some(l) => {
+                        if displayed < HEAD_LINES {
+                            ui.check_line(&pb, &l);
+                            displayed += 1;
+                        } else {
+                            suppressed += 1;
+                            tail_buf.push(l.clone());
+                            if tail_buf.len() > TAIL_LINES {
+                                tail_buf.remove(0);
+                            }
+                        }
+                        stderr_buf.push(l);
+                    }
+                    None => stderr_done = true,
+                }
             }
         }
+    }
 
-        let status = child.wait().await?;
+    if suppressed > 0 {
+        let hidden = suppressed.saturating_sub(tail_buf.len());
+        if hidden > 0 {
+            ui.check_line(&pb, &format!("...{hidden} lines hidden..."));
+        }
+        for line in &tail_buf {
+            ui.check_line(&pb, line);
+        }
+    }
+
+    let status = child.wait().await?;
+    let duration_ms = start.elapsed().as_millis() as u64;
+
+    ui.check_done(pb, name, status.success(), duration_ms);
+
+    Ok(CheckResult {
+        name: name.to_string(),
+        passed: status.success(),
+        exit_code: status.code().unwrap_or(-1),
+        stdout: stdout_buf.join("\n"),
+        stderr: stderr_buf.join("\n"),
+        duration_ms,
+    })
+}
+
+/// Run an L2 semantic check via Anthropic API.
+async fn run_semantic_check_ui(
+    name: &str,
+    check_prompt: &str,
+    severity: &Severity,
+    cwd: &Path,
+    task_prompt: Option<&str>,
+    ui: &crate::ui::PipelineUi,
+) -> Result<CheckResult> {
+    let start = Instant::now();
+    let pb = ui.check_spinner(name);
+
+    // Get the diff to review
+    let diff_output = Command::new("git")
+        .args(["diff", "HEAD~1"])
+        .current_dir(cwd)
+        .output()
+        .await
+        .context("failed to get git diff for semantic review")?;
+
+    let diff = String::from_utf8_lossy(&diff_output.stdout);
+    if diff.trim().is_empty() {
+        ui.check_done(pb, name, true, start.elapsed().as_millis() as u64);
+        return Ok(CheckResult {
+            name: name.to_string(),
+            passed: true,
+            exit_code: 0,
+            stdout: "No changes to review".to_string(),
+            stderr: String::new(),
+            duration_ms: start.elapsed().as_millis() as u64,
+        });
+    }
+
+    // Get API key
+    let api_key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
         let duration_ms = start.elapsed().as_millis() as u64;
-
-        ui.check_done(pb, &check.name, status.success(), duration_ms);
-
-        results.push(CheckResult {
-            name: check.name.clone(),
-            passed: status.success(),
-            exit_code: status.code().unwrap_or(-1),
-            stdout: stdout_buf.join("\n"),
-            stderr: stderr_buf.join("\n"),
+        ui.check_done(pb, name, true, duration_ms);
+        return Ok(CheckResult {
+            name: name.to_string(),
+            passed: true,
+            exit_code: 0,
+            stdout: "Skipped: ANTHROPIC_API_KEY not set".to_string(),
+            stderr: String::new(),
             duration_ms,
         });
     }
 
-    Ok(results)
+    let task_info = task_prompt
+        .map(|p| format!("Task prompt: {p}\n"))
+        .unwrap_or_default();
+
+    let system = "You are a QA reviewer. Review the diff below against the given criteria. \
+                  Return a JSON object with exactly two fields: \
+                  \"passed\" (boolean) and \"findings\" (array of strings). \
+                  If everything looks good, return {\"passed\": true, \"findings\": []}. \
+                  Only return the JSON, nothing else.";
+
+    let user_msg = format!(
+        "Context:\n{task_info}Check: {name}\nCriteria: {check_prompt}\n\nDiff:\n```\n{diff}\n```"
+    );
+
+    // Truncate diff to avoid token limits
+    let user_msg = if user_msg.len() > 100_000 {
+        format!("{}...(truncated)", &user_msg[..100_000])
+    } else {
+        user_msg
+    };
+
+    let body = serde_json::json!({
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 1024,
+        "system": system,
+        "messages": [{"role": "user", "content": user_msg}]
+    });
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await;
+
+    let duration_ms = start.elapsed().as_millis() as u64;
+
+    match response {
+        Ok(resp) if resp.status().is_success() => {
+            let json: serde_json::Value = resp.json().await.unwrap_or_default();
+
+            // Extract text from response content
+            let text = json
+                .pointer("/content/0/text")
+                .and_then(|t| t.as_str())
+                .unwrap_or("{}");
+
+            // Parse the JSON verdict
+            let verdict: serde_json::Value = serde_json::from_str(text)
+                .unwrap_or(serde_json::json!({"passed": true, "findings": []}));
+
+            let passed_raw = verdict
+                .get("passed")
+                .and_then(|p| p.as_bool())
+                .unwrap_or(true);
+
+            let findings: Vec<String> = verdict
+                .get("findings")
+                .and_then(|f| f.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            // severity: warn findings don't block
+            let passed = match severity {
+                Severity::Block => passed_raw,
+                Severity::Warn => true,
+            };
+
+            let stdout = if findings.is_empty() {
+                "No issues found".to_string()
+            } else {
+                format!(
+                    "Found {} issue(s):\n{}",
+                    findings.len(),
+                    findings
+                        .iter()
+                        .map(|f| format!("  - {f}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            };
+
+            ui.check_done(pb, name, passed, duration_ms);
+
+            // Show findings in UI
+            if !findings.is_empty() && !passed {
+                for finding in &findings {
+                    ui.check_line(&ProgressBar::hidden(), &format!("    {finding}"));
+                }
+            }
+
+            Ok(CheckResult {
+                name: name.to_string(),
+                passed,
+                exit_code: 0,
+                stdout,
+                stderr: String::new(),
+                duration_ms,
+            })
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            ui.check_done(pb, name, true, duration_ms);
+            Ok(CheckResult {
+                name: name.to_string(),
+                passed: true,
+                exit_code: 0,
+                stdout: format!("Skipped: API error {status}"),
+                stderr: body,
+                duration_ms,
+            })
+        }
+        Err(e) => {
+            ui.check_done(pb, name, true, duration_ms);
+            Ok(CheckResult {
+                name: name.to_string(),
+                passed: true,
+                exit_code: 0,
+                stdout: format!("Skipped: {e}"),
+                stderr: String::new(),
+                duration_ms,
+            })
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Filter checks to those matching a given stage.
+/// Filter L1 checks to those matching a given stage.
 ///
-/// Checks with no stage are excluded (they only run in `synodic run`).
+/// Semantic checks and checks with no stage are excluded.
 pub fn filter_checks_by_stage(checks: &[Check], stage: Stage) -> Vec<&Check> {
     checks
         .iter()
-        .filter(|c| c.stage.as_ref() == Some(&stage))
+        .filter(|c| match c {
+            Check::Run { stage: Some(s), .. } => *s == stage,
+            _ => false,
+        })
         .collect()
 }
 
@@ -302,6 +669,8 @@ pub struct RunConfig {
     pub effort: Option<String>,
     /// Project directory.
     pub project_dir: PathBuf,
+    /// Skip L2 semantic checks.
+    pub skip_semantic: bool,
 }
 
 /// Outcome of a pipeline run.
@@ -373,10 +742,14 @@ pub fn build_prompt(task: &str, attempt: u32, failures: &[CheckResult]) -> Strin
 ///
 /// For non-dry-run: creates a git worktree so Claude works in an isolated
 /// copy of the repo, leaving the user's working tree untouched.
+///
+/// When `store` is `Some`, pipeline telemetry (check results, run outcome)
+/// is recorded to the governance database.
 pub async fn run_pipeline(
     config: &PipelineConfig,
     run_cfg: &RunConfig,
     ui: &crate::ui::PipelineUi,
+    store: Option<&dyn Storage>,
 ) -> Result<RunOutcome> {
     ui.header(&run_cfg.prompt, run_cfg.dry_run);
 
@@ -431,7 +804,7 @@ pub async fn run_pipeline(
         (run_cfg.project_dir.clone(), None, None)
     };
 
-    let outcome = run_pipeline_loop(config, run_cfg, &work_dir, branch.as_deref(), ui).await;
+    let outcome = run_pipeline_loop(config, run_cfg, &work_dir, branch.as_deref(), ui, store).await;
 
     // --- CLEANUP: remove worktree ---
     if let Some(wt) = &worktree_path {
@@ -455,8 +828,14 @@ async fn run_pipeline_loop(
     cwd: &Path,
     branch: Option<&str>,
     ui: &crate::ui::PipelineUi,
+    store: Option<&dyn Storage>,
 ) -> Result<RunOutcome> {
+    use crate::storage::{FeedbackEvent, PipelineRun};
+
+    let pipeline_start = Instant::now();
     let mut last_failures: Vec<CheckResult> = Vec::new();
+    let mut build_duration_ms: Option<i64> = None;
+    let mut build_cost: Option<f64> = None;
 
     let max_attempts = if run_cfg.dry_run {
         1
@@ -470,7 +849,8 @@ async fn run_pipeline_loop(
         // BUILD: invoke claude with stream-json for real-time visibility
         if !run_cfg.dry_run {
             let prompt = build_prompt(&run_cfg.prompt, attempt, &last_failures);
-            run_build(
+            let build_start = Instant::now();
+            let cost = run_build(
                 &prompt,
                 cwd,
                 run_cfg.model.as_deref(),
@@ -478,11 +858,22 @@ async fn run_pipeline_loop(
                 ui,
             )
             .await?;
+            build_duration_ms = Some(build_start.elapsed().as_millis() as i64);
+            build_cost = cost;
         }
 
         // INSPECT
         ui.section("INSPECT");
-        let results = run_checks_ui(&config.checks, cwd, ui).await?;
+        let inspect_start = Instant::now();
+        let results = run_checks_ui(
+            &config.checks,
+            cwd,
+            ui,
+            Some(&run_cfg.prompt),
+            run_cfg.skip_semantic,
+        )
+        .await?;
+        let inspect_ms = inspect_start.elapsed().as_millis() as i64;
 
         let mut all_passed = true;
         last_failures.clear();
@@ -491,6 +882,34 @@ async fn run_pipeline_loop(
             if !r.passed {
                 all_passed = false;
                 last_failures.push(r.clone());
+            }
+
+            // Record check result as feedback event for telemetry
+            if let Some(s) = store {
+                let signal = if r.passed { "ci_pass" } else { "ci_failure" };
+                let event = FeedbackEvent {
+                    id: uuid::Uuid::new_v4(),
+                    signal_type: signal.to_string(),
+                    rule_id: format!("ci-{}", r.name),
+                    session_id: None,
+                    tool_name: "synodic-run".to_string(),
+                    tool_input: serde_json::json!({
+                        "check": r.name,
+                        "exit_code": r.exit_code,
+                        "duration_ms": r.duration_ms,
+                    }),
+                    override_reason: None,
+                    failure_type: if r.passed {
+                        None
+                    } else {
+                        Some("check_failure".to_string())
+                    },
+                    evidence_url: None,
+                    project_id: None,
+                    created_at: chrono::Utc::now(),
+                };
+                // Best-effort — don't fail the pipeline on telemetry errors
+                let _ = s.record_feedback(event).await;
             }
         }
 
@@ -504,6 +923,25 @@ async fn run_pipeline_loop(
                 None
             };
 
+            // Record pipeline run
+            if let Some(s) = store {
+                let run_record = PipelineRun {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    prompt: run_cfg.prompt.clone(),
+                    branch: branch.map(String::from),
+                    outcome: "passed".to_string(),
+                    attempts: attempt as i32,
+                    model: run_cfg.model.clone(),
+                    build_duration_ms,
+                    build_cost_usd: build_cost,
+                    inspect_duration_ms: Some(inspect_ms),
+                    total_duration_ms: pipeline_start.elapsed().as_millis() as i64,
+                    project_id: None,
+                    created_at: chrono::Utc::now(),
+                };
+                let _ = s.record_pipeline_run(run_record).await;
+            }
+
             return Ok(RunOutcome::Passed {
                 attempts: attempt,
                 pr_url,
@@ -515,6 +953,25 @@ async fn run_pipeline_loop(
         }
     }
 
+    // Record failed pipeline run
+    if let Some(s) = store {
+        let run_record = PipelineRun {
+            id: uuid::Uuid::new_v4().to_string(),
+            prompt: run_cfg.prompt.clone(),
+            branch: branch.map(String::from),
+            outcome: "failed".to_string(),
+            attempts: max_attempts as i32,
+            model: run_cfg.model.clone(),
+            build_duration_ms,
+            build_cost_usd: build_cost,
+            inspect_duration_ms: None,
+            total_duration_ms: pipeline_start.elapsed().as_millis() as i64,
+            project_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        let _ = s.record_pipeline_run(run_record).await;
+    }
+
     Ok(RunOutcome::Failed {
         attempts: max_attempts,
         last_failures,
@@ -522,13 +979,14 @@ async fn run_pipeline_loop(
 }
 
 /// Run the BUILD phase — invoke Claude with stream-json for real-time visibility.
+/// Returns the build cost in USD if available.
 async fn run_build(
     prompt: &str,
     cwd: &Path,
     model: Option<&str>,
     effort: Option<&str>,
     ui: &crate::ui::PipelineUi,
-) -> Result<()> {
+) -> Result<Option<f64>> {
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     ui.section("BUILD");
@@ -631,7 +1089,7 @@ async fn run_build(
     let duration_ms = start.elapsed().as_millis() as u64;
     ui.build_done(pb, status.success(), duration_ms, cost);
 
-    Ok(())
+    Ok(cost)
 }
 
 /// Extract a short summary from a tool_use JSON content block.
@@ -743,7 +1201,7 @@ fn truncate(s: &str, max: usize) -> String {
 // Generators — derive git hooks and GHA workflow from pipeline.yml
 // ---------------------------------------------------------------------------
 
-/// Generate a git hook script from checks matching a stage.
+/// Generate a git hook script from L1 checks matching a stage.
 pub fn generate_hook_script(checks: &[Check], stage: Stage) -> Option<String> {
     let stage_checks = filter_checks_by_stage(checks, stage.clone());
     if stage_checks.is_empty() {
@@ -763,12 +1221,12 @@ pub fn generate_hook_script(checks: &[Check], stage: Stage) -> Option<String> {
     );
 
     for check in &stage_checks {
-        script.push_str(&format!(
-            "echo \"  {name}\"\n\
-             {cmd} || {{ echo \"FAILED: {name}\"; exit 1; }}\n\n",
-            name = check.name,
-            cmd = check.run,
-        ));
+        if let Check::Run { name, run, .. } = check {
+            script.push_str(&format!(
+                "echo \"  {name}\"\n\
+                 {run} || {{ echo \"FAILED: {name}\"; exit 1; }}\n\n",
+            ));
+        }
     }
 
     script.push_str("echo \"All checks passed.\"\n");
@@ -821,6 +1279,25 @@ jobs:
 mod tests {
     use super::*;
 
+    /// Helper to construct L1 run checks for tests.
+    fn run_check(name: &str, cmd: &str) -> Check {
+        Check::Run {
+            name: name.into(),
+            run: cmd.into(),
+            fix: None,
+            stage: None,
+        }
+    }
+
+    fn run_check_staged(name: &str, cmd: &str, stage: Stage) -> Check {
+        Check::Run {
+            name: name.into(),
+            run: cmd.into(),
+            fix: None,
+            stage: Some(stage),
+        }
+    }
+
     // -- Parsing ----------------------------------------------------------
 
     #[test]
@@ -844,12 +1321,15 @@ pipeline:
         let config: PipelineConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(config.language, "rust");
         assert_eq!(config.checks.len(), 3);
-        assert_eq!(config.checks[0].name, "format");
-        assert_eq!(config.checks[0].run, "cargo fmt --all -- --check");
-        assert_eq!(config.checks[0].fix.as_deref(), Some("cargo fmt --all"));
-        assert!(config.checks[0].stage.is_none());
-        assert_eq!(config.checks[1].name, "lint");
-        assert!(config.checks[1].fix.is_none());
+        assert_eq!(config.checks[0].name(), "format");
+        match &config.checks[0] {
+            Check::Run { run, fix, .. } => {
+                assert_eq!(run, "cargo fmt --all -- --check");
+                assert_eq!(fix.as_deref(), Some("cargo fmt --all"));
+            }
+            _ => panic!("expected Run check"),
+        }
+        assert_eq!(config.checks[1].name(), "lint");
         assert_eq!(config.pipeline.max_rework, 3);
         assert!(!config.pipeline.auto_merge);
     }
@@ -884,9 +1364,87 @@ checks:
     run: "cargo test"
 "#;
         let config: PipelineConfig = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(config.checks[0].stage, Some(Stage::Commit));
-        assert_eq!(config.checks[1].stage, Some(Stage::Push));
-        assert!(config.checks[2].stage.is_none());
+        match &config.checks[0] {
+            Check::Run { stage, .. } => assert_eq!(stage, &Some(Stage::Commit)),
+            _ => panic!("expected Run check"),
+        }
+        match &config.checks[1] {
+            Check::Run { stage, .. } => assert_eq!(stage, &Some(Stage::Push)),
+            _ => panic!("expected Run check"),
+        }
+        match &config.checks[2] {
+            Check::Run { stage, .. } => assert!(stage.is_none()),
+            _ => panic!("expected Run check"),
+        }
+    }
+
+    #[test]
+    fn parse_semantic_check() {
+        let yaml = r#"
+language: rust
+checks:
+  - name: test
+    run: "cargo test"
+  - name: security-review
+    type: semantic
+    prompt: "Review for security vulnerabilities"
+    severity: block
+  - name: goal-alignment
+    type: semantic
+    prompt: "Does the diff match the task?"
+    severity: warn
+"#;
+        let config: PipelineConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.checks.len(), 3);
+
+        assert!(!config.checks[0].is_semantic());
+
+        match &config.checks[1] {
+            Check::Semantic {
+                name,
+                prompt,
+                severity,
+            } => {
+                assert_eq!(name, "security-review");
+                assert_eq!(prompt, "Review for security vulnerabilities");
+                assert_eq!(severity, &Severity::Block);
+            }
+            _ => panic!("expected Semantic check"),
+        }
+
+        match &config.checks[2] {
+            Check::Semantic { name, severity, .. } => {
+                assert_eq!(name, "goal-alignment");
+                assert_eq!(severity, &Severity::Warn);
+            }
+            _ => panic!("expected Semantic check"),
+        }
+    }
+
+    #[test]
+    fn parse_config_without_type_defaults_to_run() {
+        let yaml = r#"
+language: rust
+checks:
+  - name: format
+    run: "cargo fmt -- --check"
+"#;
+        let config: PipelineConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(!config.checks[0].is_semantic());
+        assert_eq!(config.checks[0].name(), "format");
+    }
+
+    #[test]
+    fn parse_config_with_explicit_run_type() {
+        let yaml = r#"
+language: rust
+checks:
+  - name: format
+    type: run
+    run: "cargo fmt -- --check"
+"#;
+        let config: PipelineConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(!config.checks[0].is_semantic());
     }
 
     #[test]
@@ -916,45 +1474,40 @@ checks:
     #[test]
     fn filter_by_stage() {
         let checks = vec![
-            Check {
-                name: "format".into(),
-                run: "cargo fmt -- --check".into(),
-                fix: None,
-                stage: Some(Stage::Commit),
-            },
-            Check {
-                name: "lint".into(),
-                run: "cargo clippy".into(),
-                fix: None,
-                stage: Some(Stage::Push),
-            },
-            Check {
-                name: "test".into(),
-                run: "cargo test".into(),
-                fix: None,
-                stage: None,
+            run_check_staged("format", "cargo fmt -- --check", Stage::Commit),
+            run_check_staged("lint", "cargo clippy", Stage::Push),
+            run_check("test", "cargo test"),
+        ];
+
+        let commit = filter_checks_by_stage(&checks, Stage::Commit);
+        assert_eq!(commit.len(), 1);
+        assert_eq!(commit[0].name(), "format");
+
+        let push = filter_checks_by_stage(&checks, Stage::Push);
+        assert_eq!(push.len(), 1);
+        assert_eq!(push[0].name(), "lint");
+    }
+
+    #[test]
+    fn filter_by_stage_excludes_semantic() {
+        let checks = vec![
+            run_check_staged("format", "cargo fmt -- --check", Stage::Commit),
+            Check::Semantic {
+                name: "review".into(),
+                prompt: "review".into(),
+                severity: Severity::Block,
             },
         ];
 
         let commit = filter_checks_by_stage(&checks, Stage::Commit);
         assert_eq!(commit.len(), 1);
-        assert_eq!(commit[0].name, "format");
-
-        let push = filter_checks_by_stage(&checks, Stage::Push);
-        assert_eq!(push.len(), 1);
-        assert_eq!(push[0].name, "lint");
     }
 
     // -- Check execution --------------------------------------------------
 
     #[tokio::test]
     async fn run_passing_check() {
-        let checks = vec![Check {
-            name: "pass".into(),
-            run: "true".into(),
-            fix: None,
-            stage: None,
-        }];
+        let checks = vec![run_check("pass", "true")];
 
         let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -965,12 +1518,7 @@ checks:
 
     #[tokio::test]
     async fn run_failing_check() {
-        let checks = vec![Check {
-            name: "fail".into(),
-            run: "false".into(),
-            fix: None,
-            stage: None,
-        }];
+        let checks = vec![run_check("fail", "false")];
 
         let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -980,12 +1528,7 @@ checks:
 
     #[tokio::test]
     async fn run_captures_stdout() {
-        let checks = vec![Check {
-            name: "echo".into(),
-            run: "echo hello".into(),
-            fix: None,
-            stage: None,
-        }];
+        let checks = vec![run_check("echo", "echo hello")];
 
         let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
         assert_eq!(results[0].stdout.trim(), "hello");
@@ -993,12 +1536,7 @@ checks:
 
     #[tokio::test]
     async fn run_captures_stderr() {
-        let checks = vec![Check {
-            name: "stderr".into(),
-            run: "echo error >&2".into(),
-            fix: None,
-            stage: None,
-        }];
+        let checks = vec![run_check("stderr", "echo error >&2")];
 
         let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
         assert_eq!(results[0].stderr.trim(), "error");
@@ -1007,24 +1545,9 @@ checks:
     #[tokio::test]
     async fn run_multiple_no_shortcircuit() {
         let checks = vec![
-            Check {
-                name: "first".into(),
-                run: "true".into(),
-                fix: None,
-                stage: None,
-            },
-            Check {
-                name: "second".into(),
-                run: "false".into(),
-                fix: None,
-                stage: None,
-            },
-            Check {
-                name: "third".into(),
-                run: "true".into(),
-                fix: None,
-                stage: None,
-            },
+            run_check("first", "true"),
+            run_check("second", "false"),
+            run_check("third", "true"),
         ];
 
         let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
@@ -1036,12 +1559,7 @@ checks:
 
     #[tokio::test]
     async fn run_measures_duration() {
-        let checks = vec![Check {
-            name: "sleep".into(),
-            run: "sleep 0.1".into(),
-            fix: None,
-            stage: None,
-        }];
+        let checks = vec![run_check("sleep", "sleep 0.1")];
 
         let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
         assert!(results[0].duration_ms >= 50);
@@ -1049,15 +1567,26 @@ checks:
 
     #[tokio::test]
     async fn run_uses_cwd() {
-        let checks = vec![Check {
-            name: "pwd".into(),
-            run: "pwd".into(),
-            fix: None,
-            stage: None,
-        }];
+        let checks = vec![run_check("pwd", "pwd")];
 
         let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
         assert!(results[0].stdout.trim().starts_with("/tmp"));
+    }
+
+    #[tokio::test]
+    async fn run_skips_semantic_checks() {
+        let checks = vec![
+            run_check("pass", "true"),
+            Check::Semantic {
+                name: "review".into(),
+                prompt: "review".into(),
+                severity: Severity::Block,
+            },
+        ];
+
+        let results = run_checks(&checks, Path::new("/tmp")).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "pass");
     }
 
     // -- Prompt construction ----------------------------------------------
@@ -1090,7 +1619,6 @@ checks:
     #[test]
     fn build_prompt_rework_ignores_empty_failures() {
         let prompt = build_prompt("task", 2, &[]);
-        // No failures = treat as first attempt style
         assert!(!prompt.contains("Rework"));
     }
 
@@ -1099,18 +1627,8 @@ checks:
     #[test]
     fn generate_pre_commit_hook() {
         let checks = vec![
-            Check {
-                name: "format".into(),
-                run: "cargo fmt -- --check".into(),
-                fix: None,
-                stage: Some(Stage::Commit),
-            },
-            Check {
-                name: "test".into(),
-                run: "cargo test".into(),
-                fix: None,
-                stage: Some(Stage::Push),
-            },
+            run_check_staged("format", "cargo fmt -- --check", Stage::Commit),
+            run_check_staged("test", "cargo test", Stage::Push),
         ];
 
         let script = generate_hook_script(&checks, Stage::Commit).unwrap();
@@ -1122,13 +1640,7 @@ checks:
 
     #[test]
     fn generate_hook_empty_stage_returns_none() {
-        let checks = vec![Check {
-            name: "test".into(),
-            run: "cargo test".into(),
-            fix: None,
-            stage: None,
-        }];
-
+        let checks = vec![run_check("test", "cargo test")];
         assert!(generate_hook_script(&checks, Stage::Commit).is_none());
     }
 
@@ -1140,5 +1652,12 @@ checks:
         assert!(wf.contains("synodic run"));
         assert!(wf.contains("ANTHROPIC_API_KEY"));
         assert!(wf.contains("workflow_dispatch"));
+    }
+
+    // -- Severity ---------------------------------------------------------
+
+    #[test]
+    fn severity_default_is_block() {
+        assert_eq!(default_severity(), Severity::Block);
     }
 }
