@@ -27,8 +27,11 @@ pub async fn create_storage(database_url: &str) -> Result<Box<dyn Storage>> {
     } else if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
         #[cfg(feature = "postgres")]
         {
-            let _ = database_url;
-            todo!("PostgreSQL storage not yet implemented");
+            let store = super::postgres::PostgresStorage::connect(database_url)
+                .await
+                .context("connecting to PostgreSQL")?;
+            store.migrate().await.context("running PostgreSQL migrations")?;
+            Ok(Box::new(store))
         }
         #[cfg(not(feature = "postgres"))]
         {

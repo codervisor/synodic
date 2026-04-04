@@ -8,6 +8,8 @@
 //! - **SQLite** for local development and demos
 
 pub mod pool;
+#[cfg(feature = "postgres")]
+pub mod postgres;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 #[cfg(test)]
