@@ -30,7 +30,10 @@ pub async fn create_storage(database_url: &str) -> Result<Box<dyn Storage>> {
             let store = super::postgres::PostgresStorage::connect(database_url)
                 .await
                 .context("connecting to PostgreSQL")?;
-            store.migrate().await.context("running PostgreSQL migrations")?;
+            store
+                .migrate()
+                .await
+                .context("running PostgreSQL migrations")?;
             Ok(Box::new(store))
         }
         #[cfg(not(feature = "postgres"))]

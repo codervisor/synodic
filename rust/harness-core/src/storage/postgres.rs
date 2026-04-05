@@ -83,11 +83,9 @@ impl Storage for PostgresStorage {
 
     async fn get_rules(&self, active_only: bool) -> Result<Vec<Rule>> {
         let rows = if active_only {
-            sqlx::query_as::<_, PgRuleRow>(
-                "SELECT * FROM rules WHERE enabled = TRUE ORDER BY id",
-            )
-            .fetch_all(&self.pool)
-            .await?
+            sqlx::query_as::<_, PgRuleRow>("SELECT * FROM rules WHERE enabled = TRUE ORDER BY id")
+                .fetch_all(&self.pool)
+                .await?
         } else {
             sqlx::query_as::<_, PgRuleRow>("SELECT * FROM rules ORDER BY id")
                 .fetch_all(&self.pool)
@@ -239,12 +237,11 @@ impl Storage for PostgresStorage {
     }
 
     async fn get_threat_category(&self, id: &str) -> Result<Option<ThreatCategory>> {
-        let row = sqlx::query_as::<_, PgCategoryRow>(
-            "SELECT * FROM threat_categories WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row =
+            sqlx::query_as::<_, PgCategoryRow>("SELECT * FROM threat_categories WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         row.map(|r| r.into_category()).transpose()
     }
