@@ -72,7 +72,15 @@ impl Storage for PostgresStorage {
         for statement in seed.split(';') {
             let stmt = statement.trim();
             if !stmt.is_empty() {
-                sqlx::query(stmt).execute(&self.pool).await.ok(); // OK to fail (ON CONFLICT DO NOTHING)
+                sqlx::query(stmt)
+                    .execute(&self.pool)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "seed data statement failed: {}",
+                            &stmt[..stmt.len().min(80)]
+                        )
+                    })?;
             }
         }
 

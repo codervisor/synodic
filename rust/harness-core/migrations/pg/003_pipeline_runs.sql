@@ -18,3 +18,4 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
 
 CREATE INDEX IF NOT EXISTS idx_pipeline_runs_created ON pipeline_runs(created_at);
 CREATE INDEX IF NOT EXISTS idx_pipeline_runs_outcome ON pipeline_runs(outcome);
+CREATE INDEX IF NOT EXISTS idx_pipeline_runs_project_created ON pipeline_runs(project_id, created_at);
