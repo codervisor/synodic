@@ -15,11 +15,11 @@ use axum::routing::{get, patch};
 use axum::{Json, Router};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 use harness_core::storage::pool::{create_storage, resolve_database_url};
 use harness_core::storage::{
-    CreateGovernanceEvent, GovernanceEvent, GovernanceEventFilters, Rule, Storage,
+    CreateGovernanceEvent, GovernanceEvent, GovernanceEventFilters, Storage,
 };
 
 /// Run the Synodic web server (dashboard + API)
@@ -53,12 +53,15 @@ impl ServeCmd {
 
         let mut app = Router::new().nest("/api", api).with_state(state);
 
-        // Serve dashboard static files if directory is configured and exists
+        // Serve dashboard static files if directory is configured and exists.
+        // Use index.html as the SPA fallback so client-side routing works.
         if let Some(ref dir) = self.dashboard_dir {
             let path = std::path::Path::new(dir);
             if path.is_dir() {
                 eprintln!("Serving dashboard from {dir}");
-                app = app.fallback_service(ServeDir::new(dir));
+                let index = path.join("index.html");
+                let spa = ServeDir::new(dir).not_found_service(ServeFile::new(index));
+                app = app.fallback_service(spa);
             } else {
                 eprintln!("Dashboard directory {dir} not found, skipping static files");
             }
@@ -73,6 +76,12 @@ impl ServeCmd {
         Ok(())
     }
 }
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+const VALID_SEVERITIES: &[&str] = &["critical", "high", "medium", "low"];
 
 // ---------------------------------------------------------------------------
 // API handlers
@@ -108,6 +117,14 @@ async fn create_event(
     State(store): State<AppState>,
     Json(body): Json<CreateGovernanceEvent>,
 ) -> Result<(StatusCode, Json<GovernanceEvent>), AppError> {
+    if let Some(ref sev) = body.severity {
+        if !VALID_SEVERITIES.contains(&sev.as_str()) {
+            return Err(AppError::BadRequest(format!(
+                "invalid severity '{sev}', must be one of: {}",
+                VALID_SEVERITIES.join(", ")
+            )));
+        }
+    }
     let event = store.create_governance_event(body).await?;
     Ok((StatusCode::CREATED, Json(event)))
 }
@@ -122,6 +139,10 @@ async fn resolve_event(
     Path(id): Path<String>,
     Json(body): Json<ResolveBody>,
 ) -> Result<StatusCode, AppError> {
+    store
+        .get_governance_event(&id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("event not found".into()))?;
     store.resolve_governance_event(&id, body.notes).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -165,25 +186,37 @@ struct ApiRule {
     pattern: String,
     event_type: String,
     severity: String,
+    category_id: String,
     enabled: bool,
-}
-
-impl From<Rule> for ApiRule {
-    fn from(r: Rule) -> Self {
-        Self {
-            name: r.id,
-            description: r.description,
-            pattern: r.condition_value,
-            event_type: r.condition_type,
-            severity: r.category_id,
-            enabled: r.enabled,
-        }
-    }
 }
 
 async fn list_rules(State(store): State<AppState>) -> Result<Json<Vec<ApiRule>>, AppError> {
     let rules = store.get_rules(false).await?;
-    let api_rules: Vec<ApiRule> = rules.into_iter().map(ApiRule::from).collect();
+    let categories = store.get_threat_categories().await?;
+
+    // Build a lookup from category_id → severity
+    let severity_map: HashMap<String, String> =
+        categories.into_iter().map(|c| (c.id, c.severity)).collect();
+
+    let api_rules: Vec<ApiRule> = rules
+        .into_iter()
+        .map(|r| {
+            let severity = severity_map
+                .get(&r.category_id)
+                .cloned()
+                .unwrap_or_else(|| "medium".to_string());
+            ApiRule {
+                name: r.id,
+                description: r.description,
+                pattern: r.condition_value,
+                event_type: r.condition_type,
+                severity,
+                category_id: r.category_id,
+                enabled: r.enabled,
+            }
+        })
+        .collect();
+
     Ok(Json(api_rules))
 }
 
@@ -194,6 +227,7 @@ async fn list_rules(State(store): State<AppState>) -> Result<Json<Vec<ApiRule>>,
 enum AppError {
     Internal(anyhow::Error),
     NotFound(String),
+    BadRequest(String),
 }
 
 impl From<anyhow::Error> for AppError {
@@ -215,6 +249,11 @@ impl IntoResponse for AppError {
             }
             Self::NotFound(msg) => (
                 StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": msg })),
+            )
+                .into_response(),
+            Self::BadRequest(msg) => (
+                StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({ "error": msg })),
             )
                 .into_response(),
