@@ -213,6 +213,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: synodic-*
 
       - name: Prepare platform packages
         run: |
@@ -290,6 +291,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: synodic-*
 
       - name: Create release
         uses: softprops/action-gh-release@v2
