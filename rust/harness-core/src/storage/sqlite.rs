@@ -82,6 +82,23 @@ impl Storage for SqliteStorage {
             }
         }
 
+        // Run governance events migration
+        let gov_events = include_str!("../../migrations/004_governance_events.sql");
+        for statement in gov_events.split(';') {
+            let stmt = statement.trim();
+            if !stmt.is_empty() {
+                sqlx::query(stmt)
+                    .execute(&self.pool)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "governance events migration statement failed: {}",
+                            &stmt[..stmt.len().min(80)]
+                        )
+                    })?;
+            }
+        }
+
         // Run seed data
         let seed = include_str!("../../migrations/002_seed_data.sql");
         for statement in seed.split(';') {
@@ -479,6 +496,83 @@ impl Storage for SqliteStorage {
 
         rows.into_iter().map(|r| r.into_probe()).collect()
     }
+
+    // -- Governance events (dashboard) --------------------------------------
+
+    async fn get_governance_events(
+        &self,
+        filters: GovernanceEventFilters,
+    ) -> Result<Vec<GovernanceEvent>> {
+        let rows = if let Some(ref event_type) = filters.event_type {
+            sqlx::query_as::<_, GovEventRow>(
+                "SELECT * FROM governance_events WHERE event_type = ? ORDER BY created_at DESC",
+            )
+            .bind(event_type)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, GovEventRow>(
+                "SELECT * FROM governance_events ORDER BY created_at DESC",
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        rows.into_iter().map(|r| r.into_event()).collect()
+    }
+
+    async fn get_governance_event(&self, id: &str) -> Result<Option<GovernanceEvent>> {
+        let row =
+            sqlx::query_as::<_, GovEventRow>("SELECT * FROM governance_events WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        row.map(|r| r.into_event()).transpose()
+    }
+
+    async fn create_governance_event(
+        &self,
+        event: CreateGovernanceEvent,
+    ) -> Result<GovernanceEvent> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let severity = event.severity.unwrap_or_else(|| "medium".to_string());
+        let source = event.source.unwrap_or_else(|| "api".to_string());
+
+        sqlx::query(
+            "INSERT INTO governance_events (id, event_type, title, severity, source, metadata, resolved, created_at)
+             VALUES (?, ?, ?, ?, ?, '{}', 0, ?)",
+        )
+        .bind(&id)
+        .bind(&event.event_type)
+        .bind(&event.title)
+        .bind(&severity)
+        .bind(&source)
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .context("inserting governance event")?;
+
+        self.get_governance_event(&id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("governance event not found after insert"))
+    }
+
+    async fn resolve_governance_event(&self, id: &str, notes: Option<String>) -> Result<()> {
+        let now = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+        sqlx::query(
+            "UPDATE governance_events SET resolved = 1, resolution_notes = ?, resolved_at = ? WHERE id = ?",
+        )
+        .bind(&notes)
+        .bind(&now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -691,6 +785,41 @@ impl PipelineRunRow {
             total_duration_ms: self.total_duration_ms,
             project_id: self.project_id,
             created_at: parse_datetime(&self.created_at)?,
+        })
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct GovEventRow {
+    id: String,
+    event_type: String,
+    title: String,
+    severity: String,
+    source: String,
+    metadata: String,
+    resolved: bool,
+    resolution_notes: Option<String>,
+    created_at: String,
+    resolved_at: Option<String>,
+}
+
+impl GovEventRow {
+    fn into_event(self) -> Result<GovernanceEvent> {
+        Ok(GovernanceEvent {
+            id: self.id,
+            event_type: self.event_type,
+            title: self.title,
+            severity: self.severity,
+            source: self.source,
+            metadata: serde_json::from_str(&self.metadata).unwrap_or_default(),
+            resolved: self.resolved,
+            resolution_notes: self.resolution_notes,
+            created_at: parse_datetime(&self.created_at)?,
+            resolved_at: self
+                .resolved_at
+                .as_deref()
+                .map(parse_datetime)
+                .transpose()?,
         })
     }
 }

@@ -23,4 +23,9 @@ case "${DATABASE_URL:-}" in
         ;;
 esac
 
-exec synodic "$@"
+# Default to serve mode when no arguments provided
+if [ $# -eq 0 ]; then
+    exec synodic serve
+else
+    exec synodic "$@"
+fi
