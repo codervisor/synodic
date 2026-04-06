@@ -1,3 +1,5 @@
+# Drop this file as .github/workflows/ci.yml in your TypeScript repo.
+# It calls the shared CI workflow from codervisor/codervisor.
 name: CI
 
 on:
@@ -6,75 +8,6 @@ on:
   pull_request:
     branches: [main]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  rust:
-    name: Rust (build, test, lint)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Build
-        run: cargo build --all-targets
-
-      - name: Test
-        run: cargo test
-
-  ui:
-    name: UI (build)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install root dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install UI dependencies
-        run: cd packages/ui && pnpm install --frozen-lockfile
-
-      - name: Build UI
-        run: cd packages/ui && pnpm run build
-
-  publish-dry-run:
-    name: Publish (dry run)
-    if: github.event_name == 'pull_request'
-    needs: [rust, ui]
-    permissions:
-      contents: write
-      packages: write
-    uses: ./.github/workflows/release.yml
-    with:
-      dry_run: true
+  ci:
+    uses: codervisor/codervisor/.github/workflows/ci-typescript.yml@main
