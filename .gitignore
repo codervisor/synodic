@@ -20,5 +20,8 @@ Thumbs.db
 # Rust
 rust/target/
 
+# Platform binaries (populated by CI, not tracked)
+npm/*/synodic
+
 # Synodic pipeline worktrees
 .synodic/
