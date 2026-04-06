@@ -522,11 +522,10 @@ impl Storage for SqliteStorage {
     }
 
     async fn get_governance_event(&self, id: &str) -> Result<Option<GovernanceEvent>> {
-        let row =
-            sqlx::query_as::<_, GovEventRow>("SELECT * FROM governance_events WHERE id = ?")
-                .bind(id)
-                .fetch_optional(&self.pool)
-                .await?;
+        let row = sqlx::query_as::<_, GovEventRow>("SELECT * FROM governance_events WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
 
         row.map(|r| r.into_event()).transpose()
     }
