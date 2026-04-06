@@ -458,6 +458,139 @@ mod tests {
         assert_eq!(resp.decision, "allow");
     }
 
+    // -- Governance events --------------------------------------------------
+
+    #[tokio::test]
+    async fn create_and_list_governance_events() {
+        let store = test_store().await;
+
+        let event = store
+            .create_governance_event(CreateGovernanceEvent {
+                event_type: "tool_call_error".to_string(),
+                title: "Bash tool failed".to_string(),
+                severity: Some("high".to_string()),
+                source: Some("cli".to_string()),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(event.event_type, "tool_call_error");
+        assert_eq!(event.title, "Bash tool failed");
+        assert_eq!(event.severity, "high");
+        assert_eq!(event.source, "cli");
+        assert!(!event.resolved);
+        assert!(event.resolution_notes.is_none());
+        assert!(event.resolved_at.is_none());
+
+        let events = store
+            .get_governance_events(GovernanceEventFilters::default())
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_governance_event_by_id() {
+        let store = test_store().await;
+
+        let created = store
+            .create_governance_event(CreateGovernanceEvent {
+                event_type: "hallucination".to_string(),
+                title: "Model hallucinated a file path".to_string(),
+                severity: None,
+                source: None,
+            })
+            .await
+            .unwrap();
+
+        let fetched = store
+            .get_governance_event(&created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(fetched.title, "Model hallucinated a file path");
+        assert_eq!(fetched.severity, "medium"); // default
+        assert_eq!(fetched.source, "api"); // default
+    }
+
+    #[tokio::test]
+    async fn get_nonexistent_governance_event_returns_none() {
+        let store = test_store().await;
+        let event = store.get_governance_event("nonexistent").await.unwrap();
+        assert!(event.is_none());
+    }
+
+    #[tokio::test]
+    async fn filter_governance_events_by_type() {
+        let store = test_store().await;
+
+        store
+            .create_governance_event(CreateGovernanceEvent {
+                event_type: "tool_call_error".to_string(),
+                title: "Error 1".to_string(),
+                severity: None,
+                source: None,
+            })
+            .await
+            .unwrap();
+
+        store
+            .create_governance_event(CreateGovernanceEvent {
+                event_type: "hallucination".to_string(),
+                title: "Error 2".to_string(),
+                severity: None,
+                source: None,
+            })
+            .await
+            .unwrap();
+
+        let filtered = store
+            .get_governance_events(GovernanceEventFilters {
+                event_type: Some("tool_call_error".to_string()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].event_type, "tool_call_error");
+
+        let all = store
+            .get_governance_events(GovernanceEventFilters::default())
+            .await
+            .unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn resolve_governance_event() {
+        let store = test_store().await;
+
+        let event = store
+            .create_governance_event(CreateGovernanceEvent {
+                event_type: "misalignment".to_string(),
+                title: "Agent deviated from instructions".to_string(),
+                severity: Some("critical".to_string()),
+                source: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(!event.resolved);
+
+        store
+            .resolve_governance_event(&event.id, Some("False positive".to_string()))
+            .await
+            .unwrap();
+
+        let resolved = store
+            .get_governance_event(&event.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(resolved.resolved);
+        assert_eq!(resolved.resolution_notes.as_deref(), Some("False positive"));
+        assert!(resolved.resolved_at.is_some());
+    }
+
     // -- Threat categories --------------------------------------------------
 
     #[tokio::test]
