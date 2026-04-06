@@ -324,7 +324,10 @@ pub trait Storage: Send + Sync {
     async fn get_governance_event(&self, id: &str) -> Result<Option<GovernanceEvent>>;
 
     /// Create a new governance event.
-    async fn create_governance_event(&self, event: CreateGovernanceEvent) -> Result<GovernanceEvent>;
+    async fn create_governance_event(
+        &self,
+        event: CreateGovernanceEvent,
+    ) -> Result<GovernanceEvent>;
 
     /// Resolve a governance event.
     async fn resolve_governance_event(&self, id: &str, notes: Option<String>) -> Result<()>;
