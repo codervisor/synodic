@@ -7,4 +7,5 @@ pub mod orchestrate;
 pub mod probe;
 pub mod rules;
 pub mod run;
+pub mod serve;
 pub mod status;

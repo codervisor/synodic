@@ -23,6 +23,9 @@ enum Cli {
     /// Manage governance rules (list, show, promote, probe, optimize)
     Rules(cmd::rules::RulesCmd),
 
+    /// Run the web server (dashboard + API)
+    Serve(cmd::serve::ServeCmd),
+
     // ── Internal (called by hooks/automation, hidden from help) ──
     /// Evaluate tool call against rules (called by L2 hooks)
     #[command(hide = true)]
@@ -58,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
         Cli::Run(cmd) => cmd.run().await,
         Cli::Status(cmd) => cmd.run().await,
         Cli::Rules(cmd) => cmd.run().await,
+        Cli::Serve(cmd) => cmd.run().await,
         Cli::Intercept(cmd) => cmd.run(),
         Cli::Feedback(cmd) => cmd.run().await,
         Cli::Orchestrate(cmd) => cmd.run(),

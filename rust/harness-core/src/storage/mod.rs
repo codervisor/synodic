@@ -193,6 +193,37 @@ pub struct PipelineRun {
     pub created_at: DateTime<Utc>,
 }
 
+/// A governance event displayed on the web dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceEvent {
+    pub id: String,
+    pub event_type: String,
+    pub title: String,
+    pub severity: String,
+    pub source: String,
+    pub metadata: serde_json::Value,
+    pub resolved: bool,
+    pub resolution_notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub resolved_at: Option<DateTime<Utc>>,
+}
+
+/// Parameters for creating a new governance event.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateGovernanceEvent {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub title: String,
+    pub severity: Option<String>,
+    pub source: Option<String>,
+}
+
+/// Filters for querying governance events.
+#[derive(Debug, Default)]
+pub struct GovernanceEventFilters {
+    pub event_type: Option<String>,
+}
+
 /// Result of an adversarial probe against a rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProbeResult {
@@ -280,4 +311,21 @@ pub trait Storage: Send + Sync {
 
     /// Get probe results for a rule.
     async fn get_probes(&self, rule_id: &str) -> Result<Vec<ProbeResult>>;
+
+    // -- Governance events (dashboard) --------------------------------------
+
+    /// Get governance events, optionally filtered by type.
+    async fn get_governance_events(
+        &self,
+        filters: GovernanceEventFilters,
+    ) -> Result<Vec<GovernanceEvent>>;
+
+    /// Get a single governance event by ID.
+    async fn get_governance_event(&self, id: &str) -> Result<Option<GovernanceEvent>>;
+
+    /// Create a new governance event.
+    async fn create_governance_event(&self, event: CreateGovernanceEvent) -> Result<GovernanceEvent>;
+
+    /// Resolve a governance event.
+    async fn resolve_governance_event(&self, id: &str, notes: Option<String>) -> Result<()>;
 }
