@@ -7,6 +7,8 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "build": "cd rust && cargo build --release",
     "build:ui": "cd packages/ui && pnpm install && npx vite build",
+    "lint": "cd rust && cargo fmt --all -- --check && cargo clippy --all-targets -- -D warnings",
+    "typecheck": "true",
     "dev": "cd rust && cargo build",
     "dev:ui": "cd packages/ui && npx vite"
   },
