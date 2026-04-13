@@ -1,4 +1,5 @@
 pub mod clustering;
+pub mod gate_adapter;
 pub mod intercept;
 pub mod llm;
 pub mod pipeline;

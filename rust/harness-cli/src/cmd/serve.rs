@@ -11,12 +11,14 @@ use anyhow::Result;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, patch};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use tower_http::services::{ServeDir, ServeFile};
 
+use harness_core::gate_adapter;
+use harness_core::intercept::{InterceptEngine, InterceptRule};
 use harness_core::storage::pool::{create_storage, resolve_database_url};
 use harness_core::storage::{
     CreateGovernanceEvent, GovernanceEvent, GovernanceEventFilters, Storage,
@@ -49,7 +51,8 @@ impl ServeCmd {
             .route("/events/{id}", get(get_event))
             .route("/events/{id}/resolve", patch(resolve_event))
             .route("/stats", get(get_stats))
-            .route("/rules", get(list_rules));
+            .route("/rules", get(list_rules))
+            .route("/gate", post(gate_handler));
 
         let mut app = Router::new().nest("/api", api).with_state(state);
 
@@ -218,6 +221,26 @@ async fn list_rules(State(store): State<AppState>) -> Result<Json<Vec<ApiRule>>,
         .collect();
 
     Ok(Json(api_rules))
+}
+
+// ---------------------------------------------------------------------------
+// Gate handler (Onsager protocol)
+// ---------------------------------------------------------------------------
+
+async fn gate_handler(
+    State(store): State<AppState>,
+    Json(req): Json<onsager::protocol::GateRequest>,
+) -> Result<Json<onsager::protocol::GateVerdict>, AppError> {
+    // Load active rules from storage and convert to InterceptRules
+    let storage_rules = store.get_rules(true).await?;
+    let rules: Vec<InterceptRule> = storage_rules.iter().map(InterceptRule::from).collect();
+
+    let engine = InterceptEngine::new(rules);
+    let intercept_req = gate_adapter::gate_request_to_intercept(&req);
+    let resp = engine.evaluate(&intercept_req);
+    let verdict = gate_adapter::intercept_to_gate_verdict(&resp);
+
+    Ok(Json(verdict))
 }
 
 // ---------------------------------------------------------------------------

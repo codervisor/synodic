@@ -20,3 +20,4 @@ chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 axum = "0.8"
 tower-http = { version = "0.6", features = ["fs", "cors"] }
+onsager = { git = "https://github.com/onsager-ai/onsager.git", branch = "main" }
